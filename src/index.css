@@ -1,0 +1,39 @@
+@media print {
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  body, html, main {
+    background: white !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    overflow: visible !important;
+    height: auto !important;
+  }
+
+  #root, #root > div, #root > div > div {
+    height: auto !important;
+    overflow: visible !important;
+    display: block !important;
+  }
+
+  .no-print {
+    display: none !important;
+  }
+
+  .print-doc {
+    background: white !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+    padding: 16px !important;
+    width: 100% !important;
+    height: auto !important;
+    overflow: visible !important;
+  }
+
+  @page {
+    size: A4 portrait;
+    margin: 8mm 10mm;
+  }
+}
