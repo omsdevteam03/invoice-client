@@ -3,7 +3,7 @@ import CustomerList from "../components/customers/CustomerList.jsx";
 import CustomerForm from "../components/customers/CustomerForm.jsx";
 import CustomerDetail from "../components/customers/CustomerDetail.jsx";
 
-const API = 'http://localhost:3000/api/customers';
+const API = 'http://localhost:3000/api/customers' ;
 
 export default function CustomersPage() {
   const [customers, setCustomers] = useState([]);
@@ -24,13 +24,14 @@ export default function CustomersPage() {
   const handleEdit = (customer) => { setSelected(customer); setView("form"); };
   const handleView = (customer) => { setSelected(customer); setView("detail"); };
 
-  // Save to DB
+// Save to DB
 const handleSave = async (updated) => {
+    const isNew = !customers.find(c => c.id === updated.id);
     try {
       await fetch(API, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(updated),
+        body: JSON.stringify({ ...updated, isNew }),
       });
       const res = await fetch(API);
       const freshData = await res.json();

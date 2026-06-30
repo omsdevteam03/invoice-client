@@ -16,12 +16,12 @@ export default function App() {
           <Routes>
             <Route path="/login" element={<LoginPage />} />
             <Route element={<ProtectedRoute />}>
-  <Route path="/" element={<DashboardPage />} />
-  <Route path="/customers" element={<CustomersPage />} />
-  <Route path="/quotations" element={<QuotationsPage />} />
-  <Route path="/invoices" element={<InvoicesPage />} />
-  <Route path="/settings" element={<SettingsPage />} />
-</Route>
+              <Route path="/" element={<DashboardPage />} />
+              <Route path="/customers" element={<CustomersPage />} />
+              <Route path="/quotations" element={<QuotationsPage />} />
+              <Route path="/invoices" element={<InvoicesPage />} />
+              <Route path="/settings" element={<SettingsPage />} />
+            </Route>
 
           </Routes>
         </BrowserRouter>
