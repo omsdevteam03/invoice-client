@@ -3,8 +3,7 @@ import CustomerList from "../components/customers/CustomerList.jsx";
 import CustomerForm from "../components/customers/CustomerForm.jsx";
 import CustomerDetail from "../components/customers/CustomerDetail.jsx";
 
-const API = 'http://localhost:3000/api/customers' ;
-
+const API = `${import.meta.env.VITE_API_URL}/customers`;
 export default function CustomersPage() {
   const [customers, setCustomers] = useState([]);
   const [view, setView] = useState("list");

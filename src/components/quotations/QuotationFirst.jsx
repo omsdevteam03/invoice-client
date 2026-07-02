@@ -63,9 +63,9 @@ export default function QuotationFirst({ quotations, setQuotations, search, setS
   };
 
   const handleConfirm = async () => {
-    const res = await fetch(`http://localhost:3000/api/quotations/${deleteId}`, {
-      method: 'DELETE',
-    });
+  const res = await fetch(`${import.meta.env.VITE_API_URL}/quotations/${deleteId}`, {
+    method: 'DELETE',
+  });
     if (res.ok) {
       setQuotations(prev => prev.filter(item => item.id !== deleteId));
     }

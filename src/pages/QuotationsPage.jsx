@@ -4,8 +4,7 @@ import QuotationFirst from "../components/quotations/QuotationFirst";
 import QuotationTemplate from "../components/quotations/QuotationTemplate";
 import { templates } from "../components/quotations/QuotationTable";
 
-const API = 'http://localhost:3000/api/quotations';
-
+const API = `${import.meta.env.VITE_API_URL}/quotations`;
 export default function QuotationsPage() {
   const [quotations, setQuotations] = useState([]);
   const [selected, setSelected] = useState(null);

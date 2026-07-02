@@ -10,9 +10,9 @@ import {
   FaArrowRight, FaChartBar,
 } from "react-icons/fa";
 
-const CUSTOMERS_API = 'http://localhost:3000/api/customers';
-const QUOTATIONS_API = 'http://localhost:3000/api/quotations';
-const INVOICES_API = 'http://localhost:3000/api/invoices';
+const CUSTOMERS_API = `${import.meta.env.VITE_API_URL}/customers`;
+const QUOTATIONS_API = `${import.meta.env.VITE_API_URL}/quotations`;
+const INVOICES_API = `${import.meta.env.VITE_API_URL}/invoices`;
 
 const avatarGradients = [
   "linear-gradient(135deg,#f97316,#ea580c)",

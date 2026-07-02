@@ -3,8 +3,7 @@ import InvoiceList from "../components/invoices/InvoiceList";
 import InvoiceForm from "../components/invoices/InvoiceForm";
 import InvoiceDocument from "../components/invoices/InvoiceDocument";
 
-const API = 'http://localhost:3000/api/invoices';
-
+const API = `${import.meta.env.VITE_API_URL}/invoices`;
 export default function InvoicesPage() {
   const [invoices, setInvoices] = useState([]);
   const [view, setView] = useState("list");
