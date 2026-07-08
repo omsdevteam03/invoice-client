@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { FaFileAlt, FaPlus, FaRupeeSign, FaSearch, FaEye, FaCalendarAlt, FaUser, FaCheckCircle, FaClock, FaFileSignature, FaChevronRight, FaTrash } from "react-icons/fa";
+import { FaFileAlt, FaPlus, FaRupeeSign, FaSearch, FaEye, FaCalendarAlt, FaUser, FaCheckCircle, FaClock, FaFileSignature, FaChevronRight, FaTrash, FaEdit } from "react-icons/fa";
 
 const statusConfig = {
   Pending: { bg: "#fff7ed", color: "#ea580c", border: "#fed7aa", icon: <FaClock size={10} /> },
@@ -7,7 +7,7 @@ const statusConfig = {
   Draft: { bg: "#f8fafc", color: "#64748b", border: "#e2e8f0", icon: <FaFileSignature size={10} /> },
 };
 
-// ✅ ConfirmDialog Component
+// ConfirmDialog Component
 function ConfirmDialog({ show, onConfirm, onCancel }) {
   if (!show) return null;
   return (
@@ -41,7 +41,7 @@ function ConfirmDialog({ show, onConfirm, onCancel }) {
           </button>
           <button onClick={onConfirm}
             className="border-0 fw-semibold px-4 py-2"
-            style={{ backgroundColor: "#ef4444", color: "#fff", borderRadius: "10px", cursor: "pointer", fontSize: "0.9rem" }}>
+            style={{ background: "linear-gradient(135deg,#f87171,#ef4444)", color: "#fff", borderRadius: "10px", cursor: "pointer", fontSize: "0.9rem" }}>
             Delete
           </button>
         </div>
@@ -52,7 +52,7 @@ function ConfirmDialog({ show, onConfirm, onCancel }) {
 
 export default function QuotationFirst({ quotations, setQuotations, search, setSearch, setSelected, setEditMode, setShowTemplates }) {
 
-  // ✅ Confirm Dialog State
+  // Confirm Dialog State
   const [showConfirm, setShowConfirm] = useState(false);
   const [deleteId, setDeleteId] = useState(null);
 
@@ -63,9 +63,9 @@ export default function QuotationFirst({ quotations, setQuotations, search, setS
   };
 
   const handleConfirm = async () => {
-  const res = await fetch(`${import.meta.env.VITE_API_URL}/quotations/${deleteId}`, {
-    method: 'DELETE',
-  });
+    const res = await fetch(`${import.meta.env.VITE_API_URL}/quotations/${deleteId}`, {
+      method: 'DELETE',
+    });
     if (res.ok) {
       setQuotations(prev => prev.filter(item => item.id !== deleteId));
     }
@@ -90,7 +90,7 @@ export default function QuotationFirst({ quotations, setQuotations, search, setS
   return (
     <div style={{ maxWidth: "1200px" }}>
 
-      {/* ✅ Confirm Dialog */}
+      {/* Confirm Dialog */}
       <ConfirmDialog
         show={showConfirm}
         onConfirm={handleConfirm}
@@ -211,28 +211,44 @@ export default function QuotationFirst({ quotations, setQuotations, search, setS
                     </div>
                   </div>
 
-                  {/* View Button */}
-                  <button
-                    onClick={() => { setSelected(q); setEditMode(false); }}
-                    className="d-flex align-items-center justify-content-between w-100 border-0 rounded-3 fw-semibold px-3 py-2"
-                    style={{ backgroundColor: "#0f172a", color: "#fff", fontSize: "0.82rem", cursor: "pointer", transition: "all 0.15s" }}
-                    onMouseEnter={e => e.currentTarget.style.background = "linear-gradient(135deg,#f97316,#ea580c)"}
-                    onMouseLeave={e => e.currentTarget.style.background = "#0f172a"}
-                  >
-                    <span className="d-flex align-items-center gap-2"><FaEye size={12} /> View Quotation</span>
-                    <FaChevronRight size={10} />
-                  </button>
+                  {/* Action Buttons Row - View / Edit / Delete (small, gradient) */}
+                  <div className="d-flex gap-2">
+                    <button
+                      onClick={() => { setSelected(q); setEditMode(false); }}
+                      className="d-flex align-items-center justify-content-center gap-1 border-0 fw-semibold flex-fill"
+                      style={{
+                        background: "linear-gradient(135deg,#1e293b,#0f172a)", color: "#fff", fontSize: "0.72rem",
+                        cursor: "pointer", borderRadius: "8px", padding: "6px 8px",
+                        transition: "all 0.15s"
+                      }}
+                    >
+                      View
+                    </button>
 
-                  {/* ✅ Delete Button - now uses handleDeleteClick */}
-                  <button
-                    onClick={(e) => handleDeleteClick(e, q.id)}
-                    className="d-flex align-items-center justify-content-center w-100 border-0 rounded-3 fw-semibold px-3 py-2 mt-2"
-                    style={{ backgroundColor: "#fef2f2", color: "#ef4444", fontSize: "0.82rem", cursor: "pointer" }}
-                    onMouseEnter={e => { e.currentTarget.style.backgroundColor = "#ef4444"; e.currentTarget.style.color = "#fff"; }}
-                    onMouseLeave={e => { e.currentTarget.style.backgroundColor = "#fef2f2"; e.currentTarget.style.color = "#ef4444"; }}
-                  >
-                    <FaTrash size={12} className="me-2" /> Delete
-                  </button>
+                    <button
+                      onClick={() => { setSelected(q); setEditMode(true); }}
+                      className="d-flex align-items-center justify-content-center gap-1 border-0 fw-semibold flex-fill"
+                      style={{
+                        background: "linear-gradient(135deg,#f97316,#ea580c)", color: "#fff", fontSize: "0.72rem",
+                        cursor: "pointer", borderRadius: "8px", padding: "6px 8px",
+                        transition: "all 0.15s"
+                      }}
+                    >
+                      Edit
+                    </button>
+
+                    <button
+                      onClick={(e) => handleDeleteClick(e, q.id)}
+                      className="d-flex align-items-center justify-content-center gap-1 border-0 fw-semibold flex-fill"
+                      style={{
+                        background: "linear-gradient(135deg,#f87171,#ef4444)", color: "#fff", fontSize: "0.72rem",
+                        cursor: "pointer", borderRadius: "8px", padding: "6px 8px",
+                        transition: "all 0.15s"
+                      }}
+                    >
+                      Delete
+                    </button>
+                  </div>
 
                 </div>
               </div>

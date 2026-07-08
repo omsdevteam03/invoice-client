@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import QuotationDetail from "../components/quotations/QuotationDetail";
 import QuotationFirst from "../components/quotations/QuotationFirst";
 import QuotationTemplate from "../components/quotations/QuotationTemplate";
@@ -6,6 +7,9 @@ import { templates } from "../components/quotations/QuotationTable";
 
 const API = `${import.meta.env.VITE_API_URL}/quotations`;
 export default function QuotationsPage() {
+  const location = useLocation();
+  const navigate = useNavigate();
+
   const [quotations, setQuotations] = useState([]);
   const [selected, setSelected] = useState(null);
   const [editMode, setEditMode] = useState(false);
@@ -17,6 +21,14 @@ export default function QuotationsPage() {
       .then(res => res.json())
       .then(data => setQuotations(data))
       .catch(err => console.error('Failed to load:', err));
+  }, []);
+
+  useEffect(() => {
+    const prefillCustomer = location.state?.prefillCustomer;
+    if (prefillCustomer) {
+      createDirectQuotation(prefillCustomer);
+      navigate(location.pathname, { replace: true, state: {} });
+    }
   }, []);
 
   const handleSave = async (updated) => {
@@ -38,10 +50,53 @@ export default function QuotationsPage() {
     }
   };
 
+const createDirectQuotation = async (customer) => {
+    const defaultAmount = 15000;
+    const tax = Math.round(defaultAmount * 0.18);
+    const newQ = {
+      id: `QT-00${quotations.filter(q => !q.isTemplate).length + 1}`,
+      customerId: customer.id,
+      name: customer.name || "New Client",
+      company: customer.company || "",
+      email: customer.email || "",
+      phone: customer.phone || "",
+      date: new Date().toISOString().split("T")[0],
+      validUntil: "",
+      status: "Draft",
+      amount: defaultAmount,
+      timeline: "7–14 working days",
+      description: "",
+      scopeOfWork: "Responsive Website Design\n5 Website Pages\nContact Form Integration\nMobile Optimization\nBasic SEO Setup",
+      deliverables: "Fully responsive website\nSource code delivery\nAdmin panel access\nDocumentation\n30 days support",
+      technologyUsed: "React.js / Next.js (Frontend)\nNode.js & Express.js (Backend)\nMongoDB (Database)\nCloud Hosting (Deployment)",
+      timelineDesc: "Completed within 7–14 working days from project confirmation\nDevelopment carried out in phases\nRegular progress updates shared with client",
+      projectCost: `Service Cost: ₹${defaultAmount.toLocaleString()}\nDeployment & Setup: Included\nGST (18%): ₹${tax.toLocaleString()}\nTotal Project Cost: ₹${(defaultAmount + tax).toLocaleString()}`,
+      paymentTerms: "50% advance payment required before project commencement\nRemaining 50% after preview approval and before final delivery",
+      terms: "This quotation is valid for 30 days from the date of issue\nAny additional work outside the agreed scope will be charged separately\n50% advance payment is required before project commencement\nFinal deliverables handed over after full payment is received",
+     notes: "",
+      items: [{ description: "Service", qty: 1, rate: defaultAmount, total: defaultAmount }],
+      customSections: [],
+      isTemplate: false,
+    };
+    try {
+      await fetch(API, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newQ),
+      });
+    } catch (err) {
+      console.error('Failed to save quotation:', err);
+    }
+    setQuotations(prev => [...prev, newQ]);
+    setSelected(newQ);
+    setEditMode(true);
+  };
+
   const handleNewFromTemplate = (tpl) => {
     const tax = Math.round(tpl.amount * 0.18);
     const newQ = {
       id: `QT-00${quotations.filter(q => !q.isTemplate).length + 1}`,
+      customerId: null,
       name: "New Client",
       company: tpl.title,
       email: "client@example.com",
@@ -99,7 +154,7 @@ export default function QuotationsPage() {
         setEditMode={setEditMode}
         setShowTemplates={setShowTemplates}
       />
-      {showTemplates && (
+   {showTemplates && (
         <QuotationTemplate
           templates={templates}
           onClose={() => setShowTemplates(false)}

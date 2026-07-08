@@ -11,10 +11,12 @@ export default function InvoiceCard({ invoice, onView, onEdit, onDelete }) {
   const sc = statusConfig[invoice.status] || statusConfig.Draft;
  // InvoiceCard.jsx
 const subtotal = invoice.items.reduce((a, b) => a + b.amount, 0);
-const tax = Math.round(subtotal * 0.18);
-const total = subtotal + tax;
+const tax = invoice.gstType === "With GST" ? Math.round(subtotal * 0.18)
+  : invoice.gstType === "Without GST" ? Math.round(subtotal - subtotal / 1.18)
+  : 0;
+const total = invoice.gstType === "With GST" ? subtotal + tax : subtotal;
 
-// ✅ Status "Paid" ஆ இருந்தா due = 0
+// Status "Paid" ஆ இருந்தா due = 0
 const due = invoice.status === "Paid" ? 0 : total - (invoice.amountPaid || 0);
   return (
     <div
@@ -60,34 +62,42 @@ const due = invoice.status === "Paid" ? 0 : total - (invoice.amountPaid || 0);
           </div>
         </div>
 
-        {/* Actions */}
+        {/* Actions - View / Edit / Delete (small gradient buttons, no icons) */}
         <div className="d-flex gap-2">
           <button
             onClick={() => onView(invoice)}
-            className="d-flex align-items-center justify-content-center gap-1 flex-grow-1 border-0 rounded-3 fw-semibold py-2"
-            style={{ backgroundColor: "#0f172a", color: "#fff", fontSize: "0.78rem", cursor: "pointer", transition: "all 0.15s" }}
-            onMouseEnter={e => e.currentTarget.style.background = "linear-gradient(135deg,#f97316,#ea580c)"}
-            onMouseLeave={e => e.currentTarget.style.background = "#0f172a"}
+            className="d-flex align-items-center justify-content-center border-0 fw-semibold flex-fill"
+            style={{
+              background: "linear-gradient(135deg,#1e293b,#0f172a)", color: "#fff", fontSize: "0.72rem",
+              cursor: "pointer", borderRadius: "8px", padding: "6px 8px",
+              transition: "all 0.15s"
+            }}
           >
-            <FaEye size={11} /> View
+            View
           </button>
+
           <button
             onClick={() => onEdit(invoice)}
-            className="d-flex align-items-center justify-content-center gap-1 border-0 rounded-3 fw-semibold py-2 px-3"
-            style={{ backgroundColor: "#f1f5f9", color: "#475569", fontSize: "0.78rem", cursor: "pointer" }}
-            onMouseEnter={e => { e.currentTarget.style.backgroundColor = "#e2e8f0"; }}
-            onMouseLeave={e => { e.currentTarget.style.backgroundColor = "#f1f5f9"; }}
+            className="d-flex align-items-center justify-content-center border-0 fw-semibold flex-fill"
+            style={{
+              background: "linear-gradient(135deg,#f97316,#ea580c)", color: "#fff", fontSize: "0.72rem",
+              cursor: "pointer", borderRadius: "8px", padding: "6px 8px",
+              transition: "all 0.15s"
+            }}
           >
-            <FaEdit size={11} />
+            Edit
           </button>
+
           <button
             onClick={() => onDelete(invoice.id)}
-            className="d-flex align-items-center justify-content-center gap-1 border-0 rounded-3 fw-semibold py-2 px-3"
-            style={{ backgroundColor: "#fef2f2", color: "#ef4444", fontSize: "0.78rem", cursor: "pointer" }}
-            onMouseEnter={e => { e.currentTarget.style.backgroundColor = "#fee2e2"; }}
-            onMouseLeave={e => { e.currentTarget.style.backgroundColor = "#fef2f2"; }}
+            className="d-flex align-items-center justify-content-center border-0 fw-semibold flex-fill"
+            style={{
+              background: "linear-gradient(135deg,#f87171,#ef4444)", color: "#fff", fontSize: "0.72rem",
+              cursor: "pointer", borderRadius: "8px", padding: "6px 8px",
+              transition: "all 0.15s"
+            }}
           >
-            <FaTrash size={11} />
+            Delete
           </button>
         </div>
 

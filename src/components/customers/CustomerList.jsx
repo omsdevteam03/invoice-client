@@ -1,6 +1,5 @@
 import { useState } from "react";
-import { FaUsers, FaPlus, FaSearch, FaEdit, FaTrash, FaEye, FaCheckCircle, FaPauseCircle, FaDotCircle, FaRupeeSign } from "react-icons/fa";
-
+import { FaUsers, FaPlus, FaSearch, FaEdit, FaTrash, FaEye, FaCheckCircle, FaPauseCircle, FaDotCircle, FaRupeeSign, FaFileAlt } from "react-icons/fa";
 const statusConfig = {
   Active: { bg: "#ecfdf5", color: "#059669", border: "#a7f3d0" },
   Inactive: { bg: "#f8fafc", color: "#64748b", border: "#e2e8f0" },
@@ -15,6 +14,51 @@ const avatarGradients = [
   "linear-gradient(135deg,#ec4899,#db2777)",
   "linear-gradient(135deg,#f59e0b,#d97706)",
 ];
+
+// ✅ Action button styles: full color gradient fill + hover lift/glow animation
+const actionButtonStyles = `
+.action-btn {
+  font-size: 0.75rem;
+  color: #fff;
+  cursor: pointer;
+  transition: transform 0.18s cubic-bezier(.34,1.56,.64,1), box-shadow 0.18s ease, filter 0.18s ease;
+}
+.action-btn:hover {
+  transform: translateY(-2px) scale(1.06);
+  filter: brightness(1.1);
+}
+.action-btn:active {
+  transform: translateY(0) scale(0.95);
+}
+.action-btn-view {
+  background: linear-gradient(135deg,#64748b,#0f172a);
+  box-shadow: 0 3px 8px rgba(15,23,42,.35);
+}
+.action-btn-view:hover {
+  box-shadow: 0 6px 14px rgba(15,23,42,.5);
+}
+.action-btn-edit {
+  background: linear-gradient(135deg,#f59e0b,#b45309);
+  box-shadow: 0 3px 8px rgba(180,83,9,.35);
+}
+.action-btn-edit:hover {
+  box-shadow: 0 6px 14px rgba(180,83,9,.5);
+}
+.action-btn-delete {
+  background: linear-gradient(135deg,#ef4444,#991b1b);
+  box-shadow: 0 3px 8px rgba(153,27,27,.35);
+}
+.action-btn-delete:hover {
+  box-shadow: 0 6px 14px rgba(153,27,27,.5);
+}
+.action-btn-quote {
+  background: linear-gradient(135deg,#3b82f6,#1e3a8a);
+  box-shadow: 0 3px 8px rgba(30,58,138,.35);
+}
+.action-btn-quote:hover {
+  box-shadow: 0 6px 14px rgba(30,58,138,.5);
+}
+`;
 
 function Avatar({ name, size = 44 }) {
   const initials = name.split(" ").slice(0, 2).map(w => w[0]).join("").toUpperCase();
@@ -75,8 +119,8 @@ function ConfirmDialog({ show, onConfirm, onCancel }) {
   );
 }
 
-export default function CustomerList({ customers, search, setSearch, filterStatus, setFilterStatus, onNew, onView, onEdit, onDelete }) {
-  
+export default function CustomerList({ customers, search, setSearch, filterStatus, setFilterStatus, onNew, onView, onEdit, onDelete, onNewQuotation }) {
+
   // ✅ Confirm Dialog State
   const [showConfirm, setShowConfirm] = useState(false);
   const [deleteId, setDeleteId] = useState(null);
@@ -110,6 +154,7 @@ export default function CustomerList({ customers, search, setSearch, filterStatu
 
   return (
     <div style={{ maxWidth: "1100px" }}>
+      <style>{actionButtonStyles}</style>
 
       {/* ✅ Confirm Dialog */}
       <ConfirmDialog
@@ -284,27 +329,19 @@ export default function CustomerList({ customers, search, setSearch, filterStatu
                       <div style={{ color: "#94a3b8", fontSize: "0.68rem", marginBottom: 8 }}>Billed</div>
                       <div className="d-flex gap-2 justify-content-end" onClick={e => e.stopPropagation()}>
                         <button onClick={() => onView(c)}
-                          className="d-flex align-items-center gap-1 border-0 rounded-3 fw-semibold px-3 py-1"
-                          style={{ backgroundColor: "#0f172a", color: "#fff", fontSize: "0.75rem", cursor: "pointer" }}
-                          onMouseEnter={e => e.currentTarget.style.background = "linear-gradient(135deg,#f97316,#ea580c)"}
-                          onMouseLeave={e => e.currentTarget.style.background = "#0f172a"}>
-                          <FaEye size={11} /> View
+                          className="d-flex align-items-center gap-1 border-0 rounded-3 fw-semibold px-3 py-1 action-btn action-btn-view">
+                         View
                         </button>
                         <button onClick={() => onEdit(c)}
-                          className="d-flex align-items-center gap-1 border-0 rounded-3 fw-semibold px-2 py-1"
-                          style={{ backgroundColor: "#f1f5f9", color: "#475569", fontSize: "0.75rem", cursor: "pointer" }}
-                          onMouseEnter={e => { e.currentTarget.style.backgroundColor = "#e2e8f0"; }}
-                          onMouseLeave={e => { e.currentTarget.style.backgroundColor = "#f1f5f9"; }}>
-                          <FaEdit size={11} />
+                          className="d-flex align-items-center gap-1 border-0 rounded-3 fw-semibold px-2 py-1 action-btn action-btn-edit">
+                          Edit
                         </button>
                         {/* ✅ Changed onDelete to handleDeleteClick */}
                         <button onClick={() => handleDeleteClick(c.id)}
-                          className="d-flex align-items-center gap-1 border-0 rounded-3 fw-semibold px-2 py-1"
-                          style={{ backgroundColor: "#fef2f2", color: "#ef4444", fontSize: "0.75rem", cursor: "pointer" }}
-                          onMouseEnter={e => { e.currentTarget.style.backgroundColor = "#fee2e2"; }}
-                          onMouseLeave={e => { e.currentTarget.style.backgroundColor = "#fef2f2"; }}>
-                          <FaTrash size={11} />
+                          className="d-flex align-items-center gap-1 border-0 rounded-3 fw-semibold px-2 py-1 action-btn action-btn-delete">
+                         Delete
                         </button>
+                        
                       </div>
                     </div>
 

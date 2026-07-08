@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { FaArrowLeft, FaSave, FaPlus, FaTrash, FaEye } from "react-icons/fa";
 import { companyInfo } from "../../data/invoiceData";
 
@@ -24,8 +24,10 @@ const cell = (content, style = {}) => (
 // ── Live Preview (mini version of InvoiceDocument) ──────────────────────────
 function InvoicePreview({ form }) {
   const subtotal = form.items.reduce((a, b) => a + Number(b.amount || 0), 0);
-  const tax = Math.round(subtotal * 0.18);
-  const total = subtotal + tax;
+  const tax = form.gstType === "With GST" ? Math.round(subtotal * 0.18)
+    : form.gstType === "Without GST" ? Math.round(subtotal - subtotal / 1.18)
+    : 0;
+  const total = form.gstType === "With GST" ? subtotal + tax : subtotal;
   const due = total - Number(form.amountPaid || 0);
 
   return (
@@ -98,10 +100,12 @@ function InvoicePreview({ form }) {
                 {cell("")}{cell(<strong>Sub Total</strong>)}{cell("")}{cell("")}
                 {cell(<strong>{subtotal.toFixed(0)}</strong>, { textAlign: "right" })}
               </tr>
-              <tr>
-                {cell("")}{cell(<strong>GST @ 18%</strong>)}{cell("")}{cell("")}
-                {cell(<strong>{tax.toFixed(0)}</strong>, { textAlign: "right" })}
-              </tr>
+              {form.gstType !== "No GST" && (
+                <tr>
+                  {cell("")}{cell(<strong>{form.gstType === "With GST" ? "GST @ 18%" : "GST (included)"}</strong>)}{cell("")}{cell("")}
+                  {cell(<strong>{tax.toFixed(0)}</strong>, { textAlign: "right" })}
+                </tr>
+              )}
               <tr style={{ backgroundColor: "#fff7ed" }}>
                 {cell("")}{cell(<strong>Amount Due</strong>)}{cell("")}{cell("")}
                 {cell(<strong style={{ color: "#ea580c" }}>{due.toFixed(0)}</strong>, { textAlign: "right" })}
@@ -122,6 +126,7 @@ export default function InvoiceForm({ invoice, onSave, onBack }) {
     date: new Date().toISOString().split("T")[0],
     dueDate: "",
     status: "Draft",
+     gstType: "With GST",
     buyerName: "",
     buyerAddress: "",
     buyerMobile: "",
@@ -130,6 +135,16 @@ export default function InvoiceForm({ invoice, onSave, onBack }) {
     notes: "",
     items: [{ sl: 1, description: "", qty: 1, rate: 0, amount: 0 }],
   });
+
+  // ✅ Keep the form in sync with whatever invoice was passed in.
+  // Without this, if InvoiceForm's instance is reused (not remounted) between
+  // "Edit" clicks, useState's initial value is only applied once and the form
+  // can end up showing stale or blank data instead of the saved invoice.
+  useEffect(() => {
+    if (invoice) {
+      setForm(invoice);
+    }
+  }, [invoice]);
 
   const updateField = (field, value) =>
     setForm(prev => ({ ...prev, [field]: value }));
@@ -155,9 +170,11 @@ export default function InvoiceForm({ invoice, onSave, onBack }) {
     setForm(prev => ({ ...prev, items }));
   };
 
-  const subtotal = form.items.reduce((a, b) => a + Number(b.amount), 0);
-  const tax = Math.round(subtotal * 0.18);
-  const total = subtotal + tax;
+ const subtotal = form.items.reduce((a, b) => a + Number(b.amount), 0);
+  const tax = form.gstType === "With GST" ? Math.round(subtotal * 0.18)
+    : form.gstType === "Without GST" ? Math.round(subtotal - subtotal / 1.18)
+    : 0;
+  const total = form.gstType === "With GST" ? subtotal + tax : subtotal;
   const due = total - Number(form.amountPaid || 0);
 
   const handleSave = () => {
@@ -166,8 +183,10 @@ export default function InvoiceForm({ invoice, onSave, onBack }) {
       return;
     }
     const subtotal = form.items.reduce((a, b) => a + Number(b.amount), 0);
-    const tax = Math.round(subtotal * 0.18);
-    const total = subtotal + tax;
+    const tax = form.gstType === "With GST" ? Math.round(subtotal * 0.18)
+      : form.gstType === "Without GST" ? Math.round(subtotal - subtotal / 1.18)
+      : 0;
+    const total = form.gstType === "With GST" ? subtotal + tax : subtotal;
     const amountDue = total - Number(form.amountPaid || 0);
 
     onSave({
@@ -272,6 +291,14 @@ export default function InvoiceForm({ invoice, onSave, onBack }) {
                 </select>
               </div>
               <div className="col-12 col-md-4">
+                <label style={{ fontSize: "0.75rem", fontWeight: 600, color: "#64748b", display: "block", marginBottom: 4 }}>GST Type</label>
+                <select value={form.gstType} onChange={e => updateField("gstType", e.target.value)} style={inp}>
+                  <option>With GST</option>
+                  <option>Without GST</option>
+                  <option>No GST</option>
+                </select>
+              </div>
+              <div className="col-12 col-md-4">
                 <label style={{ fontSize: "0.75rem", fontWeight: 600, color: "#64748b", display: "block", marginBottom: 4 }}>Amount Paid (₹)</label>
                 <input type="number" value={form.amountPaid} onChange={e => updateField("amountPaid", e.target.value)} style={inp} placeholder="0" />
               </div>
@@ -353,7 +380,10 @@ export default function InvoiceForm({ invoice, onSave, onBack }) {
               <div style={{ minWidth: "280px" }}>
                 {[
                   { label: "Sub Total", value: `₹${subtotal.toLocaleString()}` },
-                  { label: "GST @ 18%", value: `₹${tax.toLocaleString()}` },
+                  ...(form.gstType !== "No GST" ? [{
+                    label: form.gstType === "With GST" ? "GST @ 18%" : "GST (included)",
+                    value: `₹${tax.toLocaleString()}`
+                  }] : []),
                   { label: "Total Invoice Value", value: `₹${total.toLocaleString()}`, bold: true },
                   { label: "Amount Paid", value: `₹${Number(form.amountPaid || 0).toLocaleString()}` },
                 ].map(({ label, value, bold }) => (

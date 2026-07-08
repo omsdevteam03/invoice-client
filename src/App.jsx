@@ -6,6 +6,7 @@ import DashboardPage from "./pages/DashboardPage";
 import CustomersPage from "./pages/CustomersPage";
 import QuotationsPage from "./pages/QuotationsPage";
 import InvoicesPage from "./pages/InvoicesPage";
+import ExpensesPage from "./pages/ExpensesPage";
 import SettingsPage from "./pages/SettingsPage";
 
 export default function App() {
@@ -20,6 +21,7 @@ export default function App() {
               <Route path="/customers" element={<CustomersPage />} />
               <Route path="/quotations" element={<QuotationsPage />} />
               <Route path="/invoices" element={<InvoicesPage />} />
+               <Route path="/expenses" element={<ExpensesPage />} />
               <Route path="/settings" element={<SettingsPage />} />
             </Route>
 

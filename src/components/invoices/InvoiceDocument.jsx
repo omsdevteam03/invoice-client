@@ -22,8 +22,10 @@ const cell = (content, style = {}) => (
 
 export default function InvoiceDocument({ invoice, onBack, onEdit }) {
   const subtotal = invoice.items.reduce((a, b) => a + Number(b.amount), 0);
-  const tax = Math.round(subtotal * 0.18);
-  const total = subtotal + tax;
+  const tax = invoice.gstType === "With GST" ? Math.round(subtotal * 0.18)
+    : invoice.gstType === "Without GST" ? Math.round(subtotal - subtotal / 1.18)
+    : 0;
+  const total = invoice.gstType === "With GST" ? subtotal + tax : subtotal;
   const amountPaid = Number(invoice.amountPaid || 0);
   const due = total - amountPaid;
   const words = `INR – Indian Rupees ${numberToWords(total)} Only`;
@@ -49,7 +51,7 @@ export default function InvoiceDocument({ invoice, onBack, onEdit }) {
           <FaArrowLeft size={12} /> Back
         </button>
         <div className="d-flex gap-2">
-          <button onClick={onEdit}
+          <button onClick={() => onEdit(invoice)}
             className="d-flex align-items-center gap-2 border-0 rounded-3 fw-semibold px-3 py-2"
             style={{ backgroundColor: "#f1f5f9", color: "#475569", cursor: "pointer", fontSize: "0.85rem" }}
             onMouseEnter={e => { e.currentTarget.style.backgroundColor = "#f97316"; e.currentTarget.style.color = "#fff"; }}
@@ -141,14 +143,16 @@ export default function InvoiceDocument({ invoice, onBack, onEdit }) {
               {cell(<strong>{subtotal.toFixed(2)}</strong>, { border: "1px solid #000", textAlign: "right" })}
             </tr>
 
-            {/* GST */}
-            <tr>
-              {cell("", { border: "1px solid #000" })}
-              {cell(<strong>GST @ 18%</strong>, { border: "1px solid #000" })}
-              {cell("", { border: "1px solid #000" })}
-              {cell("", { border: "1px solid #000" })}
-              {cell(<strong>{tax.toFixed(2)}</strong>, { border: "1px solid #000", textAlign: "right" })}
-            </tr>
+         {/* GST */}
+            {invoice.gstType !== "No GST" && (
+              <tr>
+                {cell("", { border: "1px solid #000" })}
+                {cell(<strong>{invoice.gstType === "With GST" ? "GST @ 18%" : "GST (included)"}</strong>, { border: "1px solid #000" })}
+                {cell("", { border: "1px solid #000" })}
+                {cell("", { border: "1px solid #000" })}
+                {cell(<strong>{tax.toFixed(2)}</strong>, { border: "1px solid #000", textAlign: "right" })}
+              </tr>
+            )}
 
             {/* Total Invoice Value */}
             <tr>

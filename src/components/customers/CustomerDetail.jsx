@@ -1,5 +1,12 @@
-import { FaArrowLeft, FaEdit, FaEnvelope, FaPhone, FaMapMarkerAlt, FaCalendarAlt, FaBuilding, FaWhatsapp, FaRupeeSign, FaClock } from "react-icons/fa";
+import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+import { FaArrowLeft, FaEdit, FaEnvelope, FaPhone, FaMapMarkerAlt, FaCalendarAlt, FaBuilding, FaWhatsapp, FaRupeeSign, FaClock, FaFileAlt, FaChevronRight } from "react-icons/fa";
 
+const statusColors = {
+  Pending: { bg: "#fff7ed", color: "#ea580c" },
+  Approved: { bg: "#ecfdf5", color: "#059669" },
+  Draft: { bg: "#f8fafc", color: "#64748b" },
+};
 const avatarGradients = [
   "linear-gradient(135deg,#f97316,#ea580c)",
   "linear-gradient(135deg,#8b5cf6,#6d28d9)",
@@ -33,6 +40,15 @@ function Avatar({ name, size = 72 }) {
 
 export default function CustomerDetail({ customer: c, onBack, onEdit }) {
   const sc = statusConfig[c.status];
+  const navigate = useNavigate();
+  const [customerQuotations, setCustomerQuotations] = useState([]);
+
+  useEffect(() => {
+    fetch(`${import.meta.env.VITE_API_URL}/quotations`)
+      .then(res => res.json())
+      .then(data => setCustomerQuotations(data.filter(q => q.customerId === c.id)))
+      .catch(err => console.error('Failed to load quotations:', err));
+  }, [c.id]);
   // ✅ Fix
 const monthsKnown = (c.since || c.createdAt)
   ? Math.max(0, Math.floor((Date.now() - new Date(c.since || c.createdAt)) / (1000 * 60 * 60 * 24 * 30)))
@@ -48,7 +64,6 @@ const monthsKnown = (c.since || c.createdAt)
         <button onClick={onBack}
           className="d-flex align-items-center gap-2 border-0 rounded-3 fw-semibold px-3 py-2"
           style={{ backgroundColor: "#f1f5f9", color: "#475569", cursor: "pointer", fontSize: "0.85rem" }}
-          onMouseEnter={e => e.currentTarget.style.backgroundColor = "#e2e8f0"}
           onMouseLeave={e => e.currentTarget.style.backgroundColor = "#f1f5f9"}>
           <FaArrowLeft size={12} /> Back
         </button>
@@ -138,6 +153,7 @@ const monthsKnown = (c.since || c.createdAt)
           ))}
         </div>
       </div>
+
 
       {/* Notes */}
       {c.notes && (

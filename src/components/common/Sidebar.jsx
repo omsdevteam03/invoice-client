@@ -3,15 +3,17 @@ import { NavLink, useNavigate } from "react-router-dom";
 import {
   FaTachometerAlt, FaUsers, FaFileAlt,
   FaFileInvoiceDollar, FaCog,
-  FaSignOutAlt
+  FaSignOutAlt,FaMoneyBillWave
 } from "react-icons/fa";
 import useAuth from "../../hooks/useAuth";
+
 
 const mainLinks = [
   { to: "/", icon: FaTachometerAlt, label: "Dashboard", accent: "#f97316", light: "#fff7ed" },
   { to: "/customers", icon: FaUsers, label: "Customers", accent: "#8b5cf6", light: "#f5f3ff" },
   { to: "/quotations", icon: FaFileAlt, label: "Quotations", accent: "#3b82f6", light: "#eff6ff" },
   { to: "/invoices", icon: FaFileInvoiceDollar, label: "Invoices", accent: "#10b981", light: "#ecfdf5" },
+  // { to: "/expenses", icon: FaMoneyBillWave, label: "Expenses", accent: "#ef4444", light: "#fef2f2" },
 ];
 
 const generalLinks = [

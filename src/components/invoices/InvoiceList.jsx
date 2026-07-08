@@ -77,15 +77,15 @@ export default function InvoiceList({ invoices, search, setSearch, onNew, onView
     return matchesSearch && matchesTab;
   });
 
-  const totalRevenue = invoices.reduce((a, b) => {
-    const sub = b.items.reduce((x, y) => x + Number(y.amount), 0);
-    return a + sub + Math.round(sub * 0.18);
-  }, 0);
+  const calcTotal = (inv) => {
+    const sub = inv.items.reduce((x, y) => x + Number(y.amount), 0);
+    return inv.gstType === "With GST" ? sub + Math.round(sub * 0.18) : sub;
+  };
+
+  const totalRevenue = invoices.reduce((a, b) => a + calcTotal(b), 0);
 
   const totalDue = invoices.reduce((a, b) => {
-    const sub = b.items.reduce((x, y) => x + Number(y.amount), 0);
-    const total = sub + Math.round(sub * 0.18);
-    return a + (total - Number(b.amountPaid || 0));
+    return a + (calcTotal(b) - Number(b.amountPaid || 0));
   }, 0);
 
   return (

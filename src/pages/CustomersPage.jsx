@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import CustomerList from "../components/customers/CustomerList.jsx";
 import CustomerForm from "../components/customers/CustomerForm.jsx";
 import CustomerDetail from "../components/customers/CustomerDetail.jsx";
@@ -19,8 +20,11 @@ export default function CustomersPage() {
       .catch(err => console.error('Failed to load customers:', err));
   }, []);
 
+const navigate = useNavigate();
   const handleNew = () => { setSelected(null); setView("form"); };
-  const handleEdit = (customer) => { setSelected(customer); setView("form"); };
+  const handleNewQuotation = (customer) => {
+    navigate("/quotations", { state: { prefillCustomer: customer } });
+  };  const handleEdit = (customer) => { setSelected(customer); setView("form"); };
   const handleView = (customer) => { setSelected(customer); setView("detail"); };
 
 // Save to DB
@@ -86,6 +90,7 @@ const handleSave = async (updated) => {
       onView={handleView}
       onEdit={handleEdit}
       onDelete={handleDelete}
+      onNewQuotation={handleNewQuotation}
     />
   );
 }
