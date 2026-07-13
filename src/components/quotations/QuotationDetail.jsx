@@ -1,47 +1,53 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { FaArrowLeft, FaPrint, FaEdit, FaSave, FaTimes, FaPlus, FaTrash, FaEye } from "react-icons/fa";
 
 // ── Mini Live Preview Panel ──────────────────────────────────────────────────
-function QuotationPreview({ form }) {
+function QuotationPreview({ form, isMobile }) {
+  const accent = form.accentColor || "#f97316";
+
   const sectionTitle = {
-    fontWeight: 700, fontSize: "0.78rem", color: "#0f172a", marginBottom: 4, fontFamily: "Georgia, serif",
+    fontWeight: 700, fontSize: "12.5px", color: "#0f172a", marginBottom: 4, fontFamily: "Georgia, serif",
   };
   const sectionText = {
-    fontSize: "0.7rem", color: "#334155", lineHeight: 1.6, fontFamily: "Georgia, serif", margin: 0,
+    fontSize: "11px", color: "#334155", lineHeight: 1.6, fontFamily: "Georgia, serif", margin: 0,
   };
 
+  const panelStyle = isMobile
+    ? { ...styles.previewPanel, width: "100%", position: "static", maxHeight: "70vh" }
+    : styles.previewPanel;
+
   return (
-    <div style={styles.previewPanel}>
+    <div style={panelStyle}>
       <div style={styles.previewHeader}>
-        <FaEye size={14} color="#f97316" />
-        <span style={{ fontWeight: 700, fontSize: "0.85rem", color: "#0f172a" }}>Live Preview</span>
-        <span style={{ fontSize: "0.7rem", color: "#94a3b8", marginLeft: "auto" }}>Updates as you type</span>
+        <FaEye size={14} color={accent} />
+        <span style={{ fontWeight: 700, fontSize: "14px", color: "#0f172a" }}>Live Preview</span>
+        <span style={{ fontSize: "11px", color: "#94a3b8", marginLeft: "auto" }}>Updates as you type</span>
       </div>
 
       <div style={{ padding: "16px", overflowY: "auto", flex: 1, backgroundColor: "#f1f5f9" }}>
         <div style={{ backgroundColor: "#fff", borderRadius: 10, padding: "20px 22px", fontFamily: "Georgia, serif", boxShadow: "0 2px 10px rgba(0,0,0,0.06)" }}>
 
-          <div style={{ fontSize: "0.7rem", fontWeight: 700, color: "#f97316", marginBottom: 6 }}>
+          <div style={{ fontSize: "11px", fontWeight: 700, color: accent, marginBottom: 6 }}>
             Orange Mega Software
           </div>
 
           <div style={{ marginBottom: 16 }}>
-            <div style={{ fontSize: "1.3rem", fontWeight: 700, color: "#0f172a", letterSpacing: "-0.3px" }}>
+            <div style={{ fontSize: "21px", fontWeight: 700, color: "#0f172a", letterSpacing: "-0.3px" }}>
               QUOTATION
             </div>
-            <div style={{ fontSize: "0.75rem", fontWeight: 700, color: "#334155", marginTop: 2 }}>
+            <div style={{ fontSize: "12px", fontWeight: 700, color: "#334155", marginTop: 2 }}>
               {form.company || <span style={{ color: "#cbd5e1" }}>Project Title</span>}
             </div>
             <div style={{ height: 1.5, backgroundColor: "#0f172a", marginTop: 8 }} />
           </div>
 
-          <div style={{ marginBottom: 14, fontSize: "0.65rem", color: "#64748b" }}>
+          <div style={{ marginBottom: 14, fontSize: "10.5px", color: "#64748b" }}>
             <div><strong style={{ color: "#0f172a" }}>Quotation No:</strong> {form.id}</div>
             <div><strong style={{ color: "#0f172a" }}>Date:</strong> {form.date}</div>
             <div>
               <strong style={{ color: "#0f172a" }}>Status:</strong>{" "}
               <span style={{
-                padding: "1px 8px", borderRadius: 20, fontSize: "0.62rem", fontWeight: 600,
+                padding: "1px 8px", borderRadius: 20, fontSize: "10px", fontWeight: 600,
                 backgroundColor: form.status === "Approved" ? "#ecfdf5" : form.status === "Pending" ? "#fff7ed" : "#f8fafc",
                 color: form.status === "Approved" ? "#059669" : form.status === "Pending" ? "#ea580c" : "#64748b",
               }}>{form.status}</span>
@@ -92,7 +98,7 @@ function QuotationPreview({ form }) {
               {form.projectCost
                 ? form.projectCost.split("\n").filter(l => l.trim()).map((line, i) => <div key={i}>• {line}</div>)
                 : <div style={{ display: "flex", justifyContent: "space-between" }}>
-                    <span>Total</span><span style={{ fontWeight: 700, color: "#f97316" }}>₹{form.amount?.toLocaleString() || 0}</span>
+                    <span>Total</span><span style={{ fontWeight: 700, color: accent }}>₹{form.amount?.toLocaleString() || 0}</span>
                   </div>
               }
             </div>
@@ -107,7 +113,7 @@ function QuotationPreview({ form }) {
             </div>
           ) : null)}
 
-          <div style={{ textAlign: "center", padding: "6px", fontSize: "0.62rem", color: "#94a3b8", fontStyle: "italic", borderTop: "1px solid #f1f5f9", marginTop: 10 }}>
+          <div style={{ textAlign: "center", padding: "6px", fontSize: "10px", color: "#94a3b8", fontStyle: "italic", borderTop: "1px solid #f1f5f9", marginTop: 10 }}>
             Live preview — actual document may paginate differently
           </div>
 
@@ -115,6 +121,22 @@ function QuotationPreview({ form }) {
       </div>
     </div>
   );
+}
+
+// ── Hook: track viewport for responsive layout ──────────────────────────────
+function useIsMobile(breakpoint = 900) {
+  const [isMobile, setIsMobile] = useState(
+    typeof window !== "undefined" ? window.innerWidth <= breakpoint : false
+  );
+
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth <= breakpoint);
+    handleResize();
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, [breakpoint]);
+
+  return isMobile;
 }
 
 export default function QuotationDetail({
@@ -125,6 +147,16 @@ export default function QuotationDetail({
     ...quotation,
     customSections: quotation.customSections || [],
   });
+
+  const isMobile = useIsMobile(900);
+
+  // ── Theming: each template carries its own accentColor/accentBg ──────────
+  // (set in QuotationsPage.handleNewFromTemplate from templates.js).
+  // Falls back to the original orange so older/plain quotations are unaffected.
+  const accent = form.accentColor || "#f97316";
+  const accentBg = form.accentBg || "linear-gradient(135deg,#f97316,#ea580c)";
+  const accentSoftBg = `${accent}0d`;   // ~5% tint, for soft backgrounds
+  const accentBorder = `${accent}55`;   // ~33% tint, for dashed/soft borders
 
   const tax = Math.round(form.amount * 0.18);
   const total = form.amount + tax;
@@ -174,48 +206,55 @@ export default function QuotationDetail({
 
   const inp = {
     border: "1px solid #cbd5e1", borderRadius: "4px", padding: "5px 10px",
-    fontSize: "0.92rem", color: "#1e293b", width: "100%", outline: "none",
+    fontSize: "15px", color: "#1e293b", width: "100%", outline: "none",
     backgroundColor: "#f8fafc", fontFamily: "Georgia, serif", lineHeight: 1.8,
   };
 
   const headingInp = {
-    ...inp, fontWeight: 700, fontSize: "1rem", color: "#0f172a",
-    backgroundColor: "#fff7ed", border: "1px solid #fed7aa",
+    ...inp, fontWeight: 700, fontSize: "16px", color: "#0f172a",
+    backgroundColor: accentSoftBg, border: `1px solid ${accentBorder}`,
   };
 
   const sectionTitle = {
-    fontWeight: 700, fontSize: "1rem", color: "#0f172a", marginBottom: 6,
+    fontWeight: 700, fontSize: "16px", color: "#0f172a", marginBottom: 6,
     fontFamily: "Georgia, serif", textAlign: "left",
   };
 
   const sectionText = {
-    fontSize: "0.92rem", color: "#334155", lineHeight: 1.9,
+    fontSize: "15px", color: "#334155", lineHeight: 1.9,
     fontFamily: "Georgia, serif", margin: 0, textAlign: "left",
   };
 
   const docContent = (
     <div className="bg-white print-doc"
-      style={{ borderRadius: "12px", boxShadow: "0 2px 16px rgba(0,0,0,0.07)", padding: "48px 56px", fontFamily: "Georgia, serif" }}
+      style={{
+        borderRadius: "12px", boxShadow: "0 2px 16px rgba(0,0,0,0.07)",
+        padding: isMobile ? "24px 18px" : "48px 56px",
+        fontFamily: "Georgia, serif",
+      }}
     >
-      <div style={{ fontSize: "1rem", fontWeight: 700, color: "#f97316", marginBottom: 8, fontFamily: "Georgia, serif" }}>
+      <div style={{ fontSize: "16px", fontWeight: 700, color: accent, marginBottom: 8, fontFamily: "Georgia, serif" }}>
         Orange Mega Software
       </div>
 
       <div style={{ marginBottom: 32 }}>
-        <div style={{ fontSize: "2.4rem", fontWeight: 700, color: "#0f172a", letterSpacing: "-0.5px" }}>
+        <div style={{ fontSize: isMobile ? "28px" : "38px", fontWeight: 700, color: "#0f172a", letterSpacing: "-0.5px" }}>
           QUOTATION
         </div>
-        <div style={{ fontSize: "1rem", fontWeight: 700, color: "#334155", marginTop: 4 }}>
+        <div style={{ fontSize: "16px", fontWeight: 700, color: "#334155", marginTop: 4 }}>
           {editMode
             ? <input value={form.company} onChange={e => updateField("company", e.target.value)}
-              style={{ ...inp, fontSize: "1rem", fontWeight: 700 }} placeholder="Project / Company Title" />
+              style={{ ...inp, fontSize: "16px", fontWeight: 700 }} placeholder="Project / Company Title" />
             : form.company
           }
         </div>
         <div style={{ height: 2, backgroundColor: "#0f172a", marginTop: 16 }} />
       </div>
 
-      <div style={{ marginBottom: 28, fontSize: "0.88rem", color: "#64748b", fontFamily: "Georgia, serif" }}>
+      <div style={{
+        marginBottom: 28, fontSize: "14px", color: "#64748b", fontFamily: "Georgia, serif",
+        display: "flex", flexDirection: isMobile ? "column" : "row", flexWrap: "wrap", gap: isMobile ? 10 : 0,
+      }}>
         <span style={{ marginRight: 24 }}>
           <strong style={{ color: "#0f172a" }}>Quotation No:</strong>
           {editMode ? (
@@ -239,7 +278,7 @@ export default function QuotationDetail({
               onChange={e => updateField("status", e.target.value)}
               style={{
                 border: "1px solid #cbd5e1", borderRadius: "4px", padding: "4px 8px",
-                fontSize: "0.88rem", color: "#1e293b", backgroundColor: "#f8fafc", marginLeft: "5px",
+                fontSize: "14px", color: "#1e293b", backgroundColor: "#f8fafc", marginLeft: "5px",
               }}
             >
               <option value="Draft">Draft</option>
@@ -248,7 +287,7 @@ export default function QuotationDetail({
             </select>
           ) : (
             <span style={{
-              marginLeft: 5, padding: "2px 10px", borderRadius: "20px", fontSize: "0.8rem", fontWeight: 600,
+              marginLeft: 5, padding: "2px 10px", borderRadius: "20px", fontSize: "13px", fontWeight: 600,
               backgroundColor: form.status === "Approved" ? "#ecfdf5" : form.status === "Pending" ? "#fff7ed" : "#f8fafc",
               color: form.status === "Approved" ? "#059669" : form.status === "Pending" ? "#ea580c" : "#64748b",
             }}>
@@ -267,7 +306,7 @@ export default function QuotationDetail({
             { label: "Timeline", field: "timeline" },
           ].map(({ label, field }) => (
             <div className="col-12 col-md-6" key={field}>
-              <label style={{ fontSize: "0.72rem", fontWeight: 600, color: "#64748b", display: "block", marginBottom: 2, fontFamily: "sans-serif" }}>{label}</label>
+              <label style={{ fontSize: "11.5px", fontWeight: 600, color: "#64748b", display: "block", marginBottom: 2, fontFamily: "sans-serif" }}>{label}</label>
               <input value={form[field] || ""} onChange={e => updateField(field, e.target.value)} style={inp} placeholder={label} />
             </div>
           ))}
@@ -354,19 +393,21 @@ export default function QuotationDetail({
         </div>
       )}
 
-      <div style={{ marginBottom: 24 }}>
-        <div style={sectionTitle}>Project Cost</div>
-        {editMode ? (
-          <textarea rows={6} value={form.projectCost || ""} onChange={e => updateField("projectCost", e.target.value)}
-            style={{ ...inp, resize: "vertical" }} placeholder="Enter project cost details..." />
-        ) : (
-          <div style={sectionText}>
-            {form.projectCost?.split("\n").filter(l => l.trim()).map((line, i) => (
-              <div key={i} style={{ display: "flex", gap: 8, marginBottom: 4 }}><span>•</span><span>{line}</span></div>
-            ))}
-          </div>
-        )}
-      </div>
+      {(editMode || form.projectCost?.trim()) && (
+        <div style={{ marginBottom: 24 }}>
+          <div style={sectionTitle}>Project Cost</div>
+          {editMode ? (
+            <textarea rows={6} value={form.projectCost || ""} onChange={e => updateField("projectCost", e.target.value)}
+              style={{ ...inp, resize: "vertical" }} placeholder="Enter project cost details..." />
+          ) : (
+            <div style={sectionText}>
+              {form.projectCost?.split("\n").filter(l => l.trim()).map((line, i) => (
+                <div key={i} style={{ display: "flex", gap: 8, marginBottom: 4 }}><span>•</span><span>{line}</span></div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {(editMode || form.terms) && (
         <div style={{ marginBottom: 24 }}>
@@ -397,7 +438,11 @@ export default function QuotationDetail({
       {form.customSections.map((sec, i) => (
         <div key={i} style={{ marginBottom: 24, paddingTop: 16, borderTop: "1px solid #e2e8f0", position: "relative" }}>
           {editMode ? (
-            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+            <div style={{
+              display: "flex", alignItems: isMobile ? "stretch" : "center",
+              flexDirection: isMobile ? "column" : "row",
+              gap: 8, marginBottom: 8,
+            }}>
               <input
                 value={sec.heading}
                 onChange={e => updateCustomSection(i, "heading", e.target.value)}
@@ -408,7 +453,7 @@ export default function QuotationDetail({
                 onClick={() => removeCustomSection(i)}
                 title="Remove this section"
                 style={{
-                  flexShrink: 0, width: 30, height: 30, border: "none", borderRadius: 6,
+                  flexShrink: 0, width: isMobile ? "100%" : 30, height: 30, border: "none", borderRadius: 6,
                   backgroundColor: "rgba(239,68,68,0.1)", color: "#ef4444", cursor: "pointer",
                   display: "flex", alignItems: "center", justifyContent: "center",
                 }}
@@ -446,12 +491,12 @@ export default function QuotationDetail({
             onClick={addCustomSection}
             style={{
               display: "flex", alignItems: "center", gap: 8, padding: "10px 18px",
-              border: "2px dashed #f97316", borderRadius: 8, backgroundColor: "rgba(249,115,22,0.05)",
-              color: "#f97316", fontWeight: 600, fontSize: "0.85rem", cursor: "pointer",
+              border: `2px dashed ${accent}`, borderRadius: 8, backgroundColor: accentSoftBg,
+              color: accent, fontWeight: 600, fontSize: "14px", cursor: "pointer",
               fontFamily: "sans-serif", transition: "all 0.18s", width: "100%", justifyContent: "center",
             }}
-            onMouseEnter={e => { e.currentTarget.style.backgroundColor = "rgba(249,115,22,0.12)"; }}
-            onMouseLeave={e => { e.currentTarget.style.backgroundColor = "rgba(249,115,22,0.05)"; }}
+            onMouseEnter={e => { e.currentTarget.style.backgroundColor = `${accent}20`; }}
+            onMouseLeave={e => { e.currentTarget.style.backgroundColor = accentSoftBg; }}
           >
             <FaPlus size={12} /> Add Custom Section
           </button>
@@ -460,34 +505,34 @@ export default function QuotationDetail({
 
       <div style={{ borderTop: "1px solid #e2e8f0", paddingTop: 32, marginTop: 32 }}>
         <div className="row g-3">
-          <div className="col-6">
+          <div className={isMobile ? "col-12" : "col-6"}>
             <div style={{ fontFamily: "Georgia, serif" }}>
-              <div style={{ fontSize: "0.82rem", color: "#94a3b8", marginBottom: 8 }}>Client Signature</div>
+              <div style={{ fontSize: "13px", color: "#94a3b8", marginBottom: 8 }}>Client Signature</div>
               <div style={{ height: 60, marginBottom: 8 }} />
-              <div style={{ borderTop: "1px solid #cbd5e1", paddingTop: 6, fontSize: "0.88rem", color: "#475569", wordBreak: "break-word" }}>
+              <div style={{ borderTop: "1px solid #cbd5e1", paddingTop: 6, fontSize: "14px", color: "#475569", wordBreak: "break-word" }}>
                 {form.name}
               </div>
             </div>
           </div>
 
-          <div className="col-6 text-end">
+          <div className={isMobile ? "col-12 mt-4" : "col-6 text-end"}>
             <div style={{ fontFamily: "Georgia, serif" }}>
-              <div style={{ fontSize: "0.82rem", color: "#94a3b8", marginBottom: 8 }}>Authorized Signature</div>
+              <div style={{ fontSize: "13px", color: "#94a3b8", marginBottom: 8 }}>Authorized Signature</div>
 
               {editMode ? (
-                <div className="d-flex flex-column align-items-end gap-2 mb-2">
+                <div className={`d-flex flex-column gap-2 mb-2 ${isMobile ? "align-items-start" : "align-items-end"}`}>
                   <div style={{
-                    width: 180, height: 60, border: "1px solid #e2e8f0", borderRadius: 8,
+                    width: isMobile ? "100%" : 180, maxWidth: 180, height: 60, border: "1px solid #e2e8f0", borderRadius: 8,
                     backgroundColor: "#f8fafc", display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden"
                   }}>
                     {form.signature
                       ? <img src={form.signature} alt="Signature" style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }} />
-                      : <span style={{ fontSize: "0.65rem", color: "#94a3b8" }}>No signature</span>
+                      : <span style={{ fontSize: "10.5px", color: "#94a3b8" }}>No signature</span>
                     }
                   </div>
                   <div className="d-flex gap-2">
                     <label htmlFor="qt-sig-upload"
-                      style={{ fontSize: "0.72rem", fontWeight: 600, color: "#f97316", border: "1px solid #f97316", borderRadius: 6, padding: "4px 10px", cursor: "pointer" }}>
+                      style={{ fontSize: "11.5px", fontWeight: 600, color: accent, border: `1px solid ${accent}`, borderRadius: 6, padding: "4px 10px", cursor: "pointer" }}>
                       {form.signature ? "Change" : "Upload Signature"}
                     </label>
                     <input id="qt-sig-upload" type="file" accept="image/*" style={{ display: "none" }}
@@ -503,14 +548,14 @@ export default function QuotationDetail({
                     {form.signature && (
                       <button onClick={() => updateField("signature", null)}
                         className="border-0 rounded-3 px-2 py-1"
-                        style={{ backgroundColor: "#fef2f2", color: "#ef4444", fontSize: "0.68rem", cursor: "pointer" }}>
+                        style={{ backgroundColor: "#fef2f2", color: "#ef4444", fontSize: "11px", cursor: "pointer" }}>
                         Remove
                       </button>
                     )}
                   </div>
                 </div>
               ) : (
-                <div style={{ minHeight: 60, display: "flex", justifyContent: "flex-end", alignItems: "center", marginBottom: 8 }}>
+                <div style={{ minHeight: 60, display: "flex", justifyContent: isMobile ? "flex-start" : "flex-end", alignItems: "center", marginBottom: 8 }}>
                   {form.signature
                     ? <img src={form.signature} alt="Signature" style={{ maxHeight: 60, maxWidth: 180, objectFit: "contain" }} />
                     : <div style={{ width: 180, height: 52 }} />
@@ -518,7 +563,7 @@ export default function QuotationDetail({
                 </div>
               )}
 
-              <div style={{ borderTop: "1px solid #cbd5e1", paddingTop: 6, fontSize: "0.88rem", color: "#475569", textAlign: "right", wordBreak: "break-word" }}>
+              <div style={{ borderTop: "1px solid #cbd5e1", paddingTop: 6, fontSize: "14px", color: "#475569", textAlign: isMobile ? "left" : "right", wordBreak: "break-word" }}>
                 Orange Mega Software
               </div>
             </div>
@@ -529,14 +574,14 @@ export default function QuotationDetail({
   );
 
   return (
-    <div style={editMode ? styles.splitContainer : { maxWidth: "800px" }}>
+    <div style={editMode ? (isMobile ? styles.splitContainerMobile : styles.splitContainer) : { maxWidth: "800px" }}>
 
       <div style={editMode ? styles.formSide : {}}>
 
-        <div className="d-flex justify-content-between align-items-center mb-4 no-print">
+        <div className="d-flex justify-content-between align-items-center mb-4 no-print" style={{ flexWrap: "wrap", gap: 10 }}>
           <button onClick={onBack}
             className="d-flex align-items-center gap-2 border-0 rounded-3 fw-semibold px-3 py-2"
-            style={{ backgroundColor: "#f1f5f9", color: "#475569", cursor: "pointer", fontSize: "0.85rem" }}
+            style={{ backgroundColor: "#f1f5f9", color: "#475569", cursor: "pointer", fontSize: "14px" }}
             onMouseEnter={e => e.currentTarget.style.backgroundColor = "#e2e8f0"}
             onMouseLeave={e => e.currentTarget.style.backgroundColor = "#f1f5f9"}
           >
@@ -547,8 +592,8 @@ export default function QuotationDetail({
             {!editMode && (
               <button onClick={onEdit}
                 className="d-flex align-items-center gap-2 border-0 rounded-3 fw-semibold px-3 py-2"
-                style={{ backgroundColor: "#f1f5f9", color: "#475569", cursor: "pointer", fontSize: "0.85rem" }}
-                onMouseEnter={e => { e.currentTarget.style.backgroundColor = "#f97316"; e.currentTarget.style.color = "#fff"; }}
+                style={{ backgroundColor: "#f1f5f9", color: "#475569", cursor: "pointer", fontSize: "14px" }}
+                onMouseEnter={e => { e.currentTarget.style.backgroundColor = accent; e.currentTarget.style.color = "#fff"; }}
                 onMouseLeave={e => { e.currentTarget.style.backgroundColor = "#f1f5f9"; e.currentTarget.style.color = "#475569"; }}
               >
                 <FaEdit size={12} /> Edit
@@ -560,15 +605,15 @@ export default function QuotationDetail({
         {docContent}
 
         {editMode && (
-          <div className="no-print mt-3 d-flex justify-content-end gap-2">
+          <div className="no-print mt-3 d-flex justify-content-end gap-2" style={{ flexWrap: "wrap" }}>
             <button onClick={() => { setForm({ ...quotation, customSections: quotation.customSections || [] }); onCancelEdit(); onBack(); }}
               className="d-flex align-items-center gap-2 border-0 rounded-3 fw-semibold px-3 py-2"
-              style={{ backgroundColor: "#f1f5f9", color: "#475569", cursor: "pointer", fontSize: "0.85rem" }}>
+              style={{ backgroundColor: "#f1f5f9", color: "#475569", cursor: "pointer", fontSize: "14px" }}>
               <FaTimes size={12} /> Cancel
             </button>
             <button onClick={() => onSave(form)}
               className="d-flex align-items-center gap-2 border-0 rounded-3 fw-semibold px-3 py-2"
-              style={{ backgroundColor: "#059669", color: "#fff", cursor: "pointer", fontSize: "0.85rem" }}>
+              style={{ backgroundColor: "#059669", color: "#fff", cursor: "pointer", fontSize: "14px" }}>
               <FaSave size={12} /> Save
             </button>
           </div>
@@ -578,7 +623,7 @@ export default function QuotationDetail({
           <div className="no-print mt-3 d-flex justify-content-end">
             <button onClick={() => window.print()}
               className="d-flex align-items-center gap-2 border-0 rounded-3 fw-semibold px-4 py-2"
-              style={{ background: "linear-gradient(135deg,#f97316,#ea580c)", color: "#fff", cursor: "pointer", fontSize: "0.85rem", boxShadow: "0 4px 12px rgba(249,115,22,0.3)" }}>
+              style={{ background: accentBg, color: "#fff", cursor: "pointer", fontSize: "14px", boxShadow: `0 4px 12px ${accent}4d` }}>
               <FaPrint size={12} /> Print / Download PDF
             </button>
           </div>
@@ -586,8 +631,8 @@ export default function QuotationDetail({
 
       </div>
 
-      {/* RIGHT: Preview — only in edit mode */}
-      {editMode && <QuotationPreview form={form} />}
+      {/* RIGHT (or BELOW on mobile): Preview — only in edit mode */}
+      {editMode && <QuotationPreview form={form} isMobile={isMobile} />}
 
     </div>
   );
@@ -595,6 +640,7 @@ export default function QuotationDetail({
 
 const styles = {
   splitContainer: { display: "flex", gap: "24px", alignItems: "flex-start", width: "100%" },
+  splitContainerMobile: { display: "flex", flexDirection: "column", gap: "20px", width: "100%" },
   formSide: { flex: "1 1 0", minWidth: 0, maxWidth: "800px" },
   previewPanel: {
     width: "360px", flexShrink: 0, position: "sticky", top: "20px",

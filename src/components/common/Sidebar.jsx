@@ -3,10 +3,11 @@ import { NavLink, useNavigate } from "react-router-dom";
 import {
   FaTachometerAlt, FaUsers, FaFileAlt,
   FaFileInvoiceDollar, FaCog,
-  FaSignOutAlt,FaMoneyBillWave
+  FaSignOutAlt, FaMoneyBillWave
 } from "react-icons/fa";
 import useAuth from "../../hooks/useAuth";
 
+const SIDEBAR_WIDTH = 72; // change this single value to resize the rail
 
 const mainLinks = [
   { to: "/", icon: FaTachometerAlt, label: "Dashboard", accent: "#f97316", light: "#fff7ed" },
@@ -21,43 +22,49 @@ const generalLinks = [
 ];
 
 function NavItem({ to, icon: Icon, label, accent, light, end }) {
+  const [hovered, setHovered] = useState(false);
+
   return (
     <NavLink to={to} end={end} style={{ textDecoration: "none" }}>
       {({ isActive }) => (
         <div
-          style={{
-            display: "flex", alignItems: "center", gap: 12,
-            padding: "10px 14px", borderRadius: 12, marginBottom: 4,
-            fontSize: "0.875rem", fontWeight: isActive ? 700 : 500,
-            color: isActive ? "#fff" : "#475569",
-            background: isActive ? `linear-gradient(135deg, ${accent}, ${accent}bb)` : "transparent",
-            boxShadow: isActive ? `0 4px 14px ${accent}40` : "none",
-            transition: "all 0.18s ease", cursor: "pointer",
-          }}
-          onMouseEnter={e => {
-            if (!isActive) {
-              e.currentTarget.style.background = light;
-              e.currentTarget.style.color = accent;
-              e.currentTarget.style.transform = "translateX(4px)";
-            }
-          }}
-          onMouseLeave={e => {
-            if (!isActive) {
-              e.currentTarget.style.background = "transparent";
-              e.currentTarget.style.color = "#475569";
-              e.currentTarget.style.transform = "translateX(0)";
-            }
-          }}
+          onMouseEnter={() => setHovered(true)}
+          onMouseLeave={() => setHovered(false)}
+          style={{ position: "relative", display: "flex", justifyContent: "center", marginBottom: 10 }}
         >
-          <div style={{
-            width: 32, height: 32, borderRadius: 8,
-            backgroundColor: isActive ? "rgba(255,255,255,0.25)" : light,
-            display: "flex", alignItems: "center", justifyContent: "center",
-            flexShrink: 0, color: isActive ? "#fff" : accent,
-          }}>
-            <Icon size={15} />
+          <div
+            style={{
+              width: 42, height: 42, borderRadius: 12,
+              display: "flex", alignItems: "center", justifyContent: "center",
+              cursor: "pointer", flexShrink: 0,
+              background: isActive
+                ? `linear-gradient(135deg, ${accent}, ${accent}bb)`
+                : (hovered ? light : "transparent"),
+              color: isActive ? "#fff" : (hovered ? accent : "#64748b"),
+              boxShadow: isActive ? `0 4px 14px ${accent}40` : "none",
+              transition: "all 0.18s ease",
+            }}
+          >
+            <Icon size={16} />
           </div>
-          {label}
+
+          {/* Tooltip */}
+          {hovered && (
+            <div
+              style={{
+                position: "absolute", left: "100%", top: "50%",
+                transform: "translateY(-50%)", marginLeft: 10,
+                background: "#0f172a", color: "#fff",
+                fontSize: "0.75rem", fontWeight: 600,
+                padding: "6px 10px", borderRadius: 8,
+                whiteSpace: "nowrap", zIndex: 10000,
+                boxShadow: "0 6px 16px rgba(0,0,0,0.25)",
+                pointerEvents: "none",
+              }}
+            >
+              {label}
+            </div>
+          )}
         </div>
       )}
     </NavLink>
@@ -68,6 +75,7 @@ export default function Sidebar() {
   const { logout } = useAuth();
   const navigate = useNavigate();
   const [showConfirm, setShowConfirm] = useState(false);
+  const [logoutHovered, setLogoutHovered] = useState(false);
 
   const handleLogoutConfirm = () => {
     logout();
@@ -80,64 +88,44 @@ export default function Sidebar() {
       <div
         className="no-print"
         style={{
-          width: "240px", minWidth: "240px", height: "100%",
+          width: SIDEBAR_WIDTH, minWidth: SIDEBAR_WIDTH, height: "100%",
           background: "linear-gradient(180deg, #fff7ed 0%, #ffffff 40%, #eff6ff 100%)",
-          display: "flex", flexDirection: "column",
-          borderRight: "1.5px solid #fed7aa", overflowY: "auto",
+          display: "flex", flexDirection: "column", alignItems: "center",
+          borderRight: "1.5px solid #fed7aa", overflowY: "auto", overflowX: "visible",
         }}
       >
-        {/* User Profile */}
+        {/* User Profile (avatar only) */}
         <div style={{
-          padding: "20px 16px", borderBottom: "1.5px solid #fde8cc",
-          flexShrink: 0, background: "linear-gradient(135deg, #fff7ed, #ffedd5)",
+          padding: "20px 0", borderBottom: "1.5px solid #fde8cc",
+          flexShrink: 0, width: "100%", display: "flex", justifyContent: "center",
+          background: "linear-gradient(135deg, #fff7ed, #ffedd5)",
         }}>
-          <div className="d-flex align-items-center gap-3">
-            <div style={{
-              width: 42, height: 42,
+          <div
+            title="Admin User · admin@test.com"
+            style={{
+              width: 40, height: 40,
               background: "linear-gradient(135deg,#f97316,#ea580c)",
               borderRadius: "12px", display: "flex", alignItems: "center",
               justifyContent: "center", fontWeight: 700, color: "#fff",
-              fontSize: "1rem", flexShrink: 0,
+              fontSize: "0.95rem", flexShrink: 0, cursor: "pointer",
               boxShadow: "0 4px 12px rgba(249,115,22,0.35)",
-            }}>
-              A
-            </div>
-            <div style={{ overflow: "hidden" }}>
-              <div style={{ color: "#7c2d12", fontWeight: 700, fontSize: "0.88rem", lineHeight: 1.3 }}>
-                Admin User
-              </div>
-              <div style={{ color: "#c2410c", fontSize: "0.73rem" }}>admin@test.com</div>
-            </div>
+            }}
+          >
+            A
           </div>
         </div>
 
         {/* Nav */}
-        <div style={{ flex: 1, padding: "16px 12px", overflowY: "auto" }}>
-          <div style={{
-            fontSize: "0.63rem", fontWeight: 800, letterSpacing: "0.14em",
-            textTransform: "uppercase", color: "#f97316",
-            padding: "0 12px", marginBottom: 8,
-          }}>
-            Main Menu
-          </div>
-
+        <div style={{ flex: 1, padding: "16px 8px", display: "flex", flexDirection: "column", alignItems: "center", width: "100%" }}>
           {mainLinks.map(link => (
             <NavItem key={link.to} {...link} end={link.to === "/"} />
           ))}
 
           <div style={{
-            height: 1,
+            width: "70%", height: 1,
             background: "linear-gradient(90deg, transparent, #fed7aa, transparent)",
-            margin: "16px 4px",
+            margin: "8px 0 14px",
           }} />
-
-          <div style={{
-            fontSize: "0.63rem", fontWeight: 800, letterSpacing: "0.14em",
-            textTransform: "uppercase", color: "#f97316",
-            padding: "0 12px", marginBottom: 8,
-          }}>
-            General
-          </div>
 
           {generalLinks.map(link => (
             <NavItem key={link.to} {...link} />
@@ -146,49 +134,51 @@ export default function Sidebar() {
 
         {/* Bottom */}
         <div style={{
-          padding: "12px", borderTop: "1.5px solid #fde8cc",
-          flexShrink: 0, background: "linear-gradient(135deg, #fff7ed, #ffedd5)",
+          padding: "12px 0", borderTop: "1.5px solid #fde8cc",
+          flexShrink: 0, width: "100%", display: "flex", flexDirection: "column", alignItems: "center", gap: 10,
+          background: "linear-gradient(135deg, #fff7ed, #ffedd5)",
         }}>
-          <button
-            onClick={() => setShowConfirm(true)}
-            style={{
-              display: "flex", alignItems: "center", gap: 12,
-              width: "100%", padding: "10px 14px",
-              borderRadius: 12, border: "none",
-              backgroundColor: "rgba(239,68,68,0.08)",
-              color: "#ef4444", fontSize: "0.875rem",
-              fontWeight: 600, cursor: "pointer", transition: "all 0.18s",
-              marginBottom: 10,
-            }}
-            onMouseEnter={e => { e.currentTarget.style.backgroundColor = "rgba(239,68,68,0.15)"; e.currentTarget.style.transform = "translateX(4px)"; }}
-            onMouseLeave={e => { e.currentTarget.style.backgroundColor = "rgba(239,68,68,0.08)"; e.currentTarget.style.transform = "translateX(0)"; }}
-          >
-            <div style={{
-              width: 32, height: 32, borderRadius: 8,
-              backgroundColor: "rgba(239,68,68,0.12)",
-              display: "flex", alignItems: "center", justifyContent: "center",
-            }}>
-              <FaSignOutAlt size={14} color="#ef4444" />
-            </div>
-            Logout
-          </button>
+          <div style={{ position: "relative" }}>
+            <button
+              onClick={() => setShowConfirm(true)}
+              onMouseEnter={() => setLogoutHovered(true)}
+              onMouseLeave={() => setLogoutHovered(false)}
+              style={{
+                width: 40, height: 40, borderRadius: 10, border: "none",
+                backgroundColor: logoutHovered ? "rgba(239,68,68,0.15)" : "rgba(239,68,68,0.08)",
+                color: "#ef4444", cursor: "pointer", transition: "all 0.18s",
+                display: "flex", alignItems: "center", justifyContent: "center",
+              }}
+            >
+              <FaSignOutAlt size={15} color="#ef4444" />
+            </button>
 
-          <div className="d-flex align-items-center justify-content-between px-2">
-            <span style={{ color: "#c2410c", fontSize: "0.68rem", fontWeight: 600 }}>InvoicePro v1.0.0</span>
-            <span style={{
-              display: "flex", alignItems: "center", gap: 4,
-              backgroundColor: "rgba(16,185,129,0.12)",
-              color: "#059669", fontSize: "0.65rem", fontWeight: 700,
-              padding: "3px 8px", borderRadius: 20,
-            }}>
-              <span style={{ width: 6, height: 6, borderRadius: "50%", backgroundColor: "#10b981", display: "inline-block" }} />
-              Live
-            </span>
+            {logoutHovered && (
+              <div
+                style={{
+                  position: "absolute", left: "100%", top: "50%",
+                  transform: "translateY(-50%)", marginLeft: 10,
+                  background: "#0f172a", color: "#fff",
+                  fontSize: "0.75rem", fontWeight: 600,
+                  padding: "6px 10px", borderRadius: 8,
+                  whiteSpace: "nowrap", zIndex: 10000,
+                  boxShadow: "0 6px 16px rgba(0,0,0,0.25)",
+                  pointerEvents: "none",
+                }}
+              >
+                Logout
+              </div>
+            )}
           </div>
+
+          <span style={{
+            width: 8, height: 8, borderRadius: "50%",
+            backgroundColor: "#10b981", display: "inline-block",
+          }} title="Live" />
         </div>
       </div>
 
-      {/* ── Logout Confirmation Modal ── */}
+      {/* ── Logout Confirmation Modal (unchanged) ── */}
       {showConfirm && (
         <div
           style={{
@@ -219,7 +209,7 @@ export default function Sidebar() {
               Logout?
             </h5>
             <p style={{ color: "#64748b", fontSize: "0.875rem", marginBottom: 24, lineHeight: 1.6 }}>
-             do u want to logout
+              do u want to logout
             </p>
 
             <div style={{ display: "flex", gap: 10 }}>

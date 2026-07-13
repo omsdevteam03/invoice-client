@@ -66,7 +66,7 @@ function CustomerPreview({ form, customerId }) {
   }[form.status] || { bg: "#f8fafc", color: "#64748b", border: "#e2e8f0" };
 
   return (
-    <div style={styles.previewPanel}>
+    <div className="cf-preview-panel">
       {/* Preview Header */}
       <div style={styles.previewHeader}>
         <FaEye size={14} color="#f97316" />
@@ -210,198 +210,218 @@ export default function CustomerForm({ customer, allCustomers = [], onSave, onBa
   );
 
   return (
-    <div style={styles.splitContainer}>
+    <>
+      {/* Responsive layout rules — inline styles can't do media queries, so this
+          handles the split-column -> stacked-column breakpoint. */}
+      <style>{`
+        .cf-split {
+          display: flex;
+          gap: 24px;
+          align-items: flex-start;
+          width: 100%;
+          flex-wrap: wrap;
+        }
+        .cf-form-side {
+          flex: 1 1 320px;
+          min-width: 280px;
+          max-width: 620px;
+        }
+        .cf-preview-panel {
+          width: 340px;
+          flex: 0 1 340px;
+          position: sticky;
+          top: 20px;
+          background-color: #fff;
+          border-radius: 16px;
+          box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+          border: 1.5px solid #f1f5f9;
+          display: flex;
+          flex-direction: column;
+          max-height: calc(100vh - 100px);
+          overflow: hidden;
+        }
+        @media (max-width: 900px) {
+          .cf-form-side { max-width: 100%; }
+          .cf-preview-panel {
+            width: 100%;
+            flex: 1 1 100%;
+            position: static;
+            max-height: none;
+          }
+        }
+        @media (max-width: 480px) {
+          .cf-preview-panel .row.g-3 > div { flex: 0 0 100%; max-width: 100%; }
+        }
+      `}</style>
 
-      {/* ══ LEFT: Form ══════════════════════════════════════════════════════ */}
-      <div style={styles.formSide}>
+      <div className="cf-split">
 
-        {/* Top Bar */}
-        <div className="d-flex justify-content-between align-items-center mb-4">
-          <button
-            onClick={onBack}
-            className="d-flex align-items-center gap-2 border-0 rounded-3 fw-semibold px-3 py-2"
-            style={{ backgroundColor: "#f1f5f9", color: "#475569", cursor: "pointer", fontSize: "0.85rem" }}
-            onMouseEnter={e => e.currentTarget.style.backgroundColor = "#e2e8f0"}
-            onMouseLeave={e => e.currentTarget.style.backgroundColor = "#f1f5f9"}
-          >
-            <FaArrowLeft size={12} /> Back
-          </button>
-          <h4 className="fw-bold mb-0" style={{ color: "#0f172a", fontSize: "1.2rem" }}>
-            {isEdit ? "Edit Customer" : "New Customer"}
-          </h4>
-          <div />
-        </div>
+        {/* ══ LEFT: Form ══════════════════════════════════════════════════ */}
+        <div className="cf-form-side">
 
-        {/* Basic Info */}
-        <div className="card border-0 mb-3 p-4" style={styles.card}>
-          <SectionHead icon={<FaUser size={13} />} title="Basic Information" />
-          <div className="row g-3">
-            <div className="col-12 col-md-6">
-              <Field label="Full Name" required icon={<FaUser size={11} />}>
-                <input type="text" name="fullName" value={form.fullName} onChange={handleChange}
-                  placeholder="e.g. Arjun Mehta"
-                  style={{ ...styles.input, ...(errors.fullName ? styles.inputError : {}) }} autoComplete="off" />
-                {errors.fullName && <div style={styles.errorMsg}>{errors.fullName}</div>}
-              </Field>
+          {/* Top Bar */}
+          <div className="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+            <button
+              onClick={onBack}
+              className="d-flex align-items-center gap-2 border-0 rounded-3 fw-semibold px-3 py-2"
+              style={{ backgroundColor: "#f1f5f9", color: "#475569", cursor: "pointer", fontSize: "0.85rem" }}
+              onMouseEnter={e => e.currentTarget.style.backgroundColor = "#e2e8f0"}
+              onMouseLeave={e => e.currentTarget.style.backgroundColor = "#f1f5f9"}
+            >
+              <FaArrowLeft size={12} /> Back
+            </button>
+            <h4 className="fw-bold mb-0" style={{ color: "#0f172a", fontSize: "1.2rem" }}>
+              {isEdit ? "Edit Customer" : "New Customer"}
+            </h4>
+            <div />
+          </div>
+
+          {/* Basic Info */}
+          <div className="card border-0 mb-3 p-4" style={styles.card}>
+            <SectionHead icon={<FaUser size={13} />} title="Basic Information" />
+            <div className="row g-3">
+              <div className="col-12 col-md-6">
+                <Field label="Full Name" required icon={<FaUser size={11} />}>
+                  <input type="text" name="fullName" value={form.fullName} onChange={handleChange}
+                    placeholder="e.g. Arjun Mehta"
+                    style={{ ...styles.input, ...(errors.fullName ? styles.inputError : {}) }} autoComplete="off" />
+                  {errors.fullName && <div style={styles.errorMsg}>{errors.fullName}</div>}
+                </Field>
+              </div>
+              <div className="col-12 col-md-6">
+                <Field label="Company" icon={<FaBuilding size={11} />}>
+                  <input type="text" name="company" value={form.company} onChange={handleChange}
+                    placeholder="e.g. Mehta Enterprises" style={styles.input} autoComplete="off" />
+                </Field>
+              </div>
+              <div className="col-12 col-md-6">
+                <Field label="Email Address" required icon={<FaEnvelope size={11} />}>
+                  <input type="email" name="email" value={form.email} onChange={handleChange}
+                    placeholder="client@example.com"
+                    style={{ ...styles.input, ...(errors.email ? styles.inputError : {}) }} autoComplete="off" />
+                  {errors.email && <div style={styles.errorMsg}>{errors.email}</div>}
+                </Field>
+              </div>
+              <div className="col-12 col-md-6">
+                <Field label="Phone Number" required icon={<FaPhone size={11} />}>
+                  <input type="tel" name="phone" value={form.phone} onChange={handleChange}
+                    placeholder="9876543210"
+                    style={{ ...styles.input, ...(errors.phone ? styles.inputError : {}) }}
+                    autoComplete="off" maxLength={10} />
+                  {errors.phone && <div style={styles.errorMsg}>{errors.phone}</div>}
+                </Field>
+              </div>
+              <div className="col-12">
+                <Field label="Address" icon={<FaMapMarkerAlt size={11} />}>
+                  <input type="text" name="address" value={form.address} onChange={handleChange}
+                    placeholder="Street, City, State, PIN" style={styles.input} autoComplete="off" />
+                </Field>
+              </div>
             </div>
-            <div className="col-12 col-md-6">
-              <Field label="Company" icon={<FaBuilding size={11} />}>
-                <input type="text" name="company" value={form.company} onChange={handleChange}
-                  placeholder="e.g. Mehta Enterprises" style={styles.input} autoComplete="off" />
-              </Field>
+          </div>
+
+          {/* Status & Type */}
+          <div className="card border-0 mb-3 p-4" style={styles.card}>
+            <SectionHead icon={<FaCalendarAlt size={13} />} title="Status & Type" />
+            <div className="row g-3">
+              <div className="col-12 col-md-4">
+                <Field label="Type">
+                  <select name="type" value={form.type} onChange={handleChange} style={styles.select}>
+                    <option value="Business">Business</option>
+                    <option value="Individual">Individual</option>
+                    <option value="Government">Government</option>
+                  </select>
+                </Field>
+              </div>
+              <div className="col-12 col-md-4">
+                <Field label="Status">
+                  <select name="status" value={form.status} onChange={handleChange} style={styles.select}>
+                    <option value="Active">Active</option>
+                    <option value="Inactive">Inactive</option>
+                    <option value="Lead">Lead</option>
+                  </select>
+                </Field>
+              </div>
+              <div className="col-12 col-md-4">
+                <Field label="Customer Since" icon={<FaCalendarAlt size={11} />}>
+                  <input type="date" name="since" value={form.since} onChange={handleChange} style={styles.input} />
+                </Field>
+              </div>
             </div>
-            <div className="col-12 col-md-6">
-              <Field label="Email Address" required icon={<FaEnvelope size={11} />}>
-                <input type="email" name="email" value={form.email} onChange={handleChange}
-                  placeholder="client@example.com"
-                  style={{ ...styles.input, ...(errors.email ? styles.inputError : {}) }} autoComplete="off" />
-                {errors.email && <div style={styles.errorMsg}>{errors.email}</div>}
-              </Field>
+          </div>
+
+          {/* Tags */}
+          <div className="card border-0 mb-3 p-4" style={styles.card}>
+            <SectionHead icon={<FaTags size={13} />} title="Tags" />
+            <div className="d-flex flex-wrap gap-2">
+              {customerTags.map((tag) => {
+                const active = form.tags.includes(tag);
+                return (
+                  <button key={tag} onClick={() => toggleTag(tag)}
+                    className="border-0 rounded-pill fw-semibold"
+                    style={{
+                      padding: "6px 16px", fontSize: "0.78rem", cursor: "pointer", transition: "all 0.15s",
+                      border: active ? "2px solid #f97316" : "1.5px solid #e2e8f0",
+                      backgroundColor: active ? "#fff7ed" : "#f8fafc",
+                      color: active ? "#ea580c" : "#64748b",
+                      boxShadow: active ? "0 2px 8px rgba(249,115,22,0.2)" : "none",
+                    }}
+                    onMouseEnter={e => { if (!active) e.currentTarget.style.backgroundColor = "#f1f5f9"; }}
+                    onMouseLeave={e => { if (!active) e.currentTarget.style.backgroundColor = "#f8fafc"; }}
+                  >
+                    {tag}
+                  </button>
+                );
+              })}
             </div>
-            <div className="col-12 col-md-6">
-              <Field label="Phone Number" required icon={<FaPhone size={11} />}>
-                <input type="tel" name="phone" value={form.phone} onChange={handleChange}
-                  placeholder="9876543210"
-                  style={{ ...styles.input, ...(errors.phone ? styles.inputError : {}) }}
-                  autoComplete="off" maxLength={10} />
-                {errors.phone && <div style={styles.errorMsg}>{errors.phone}</div>}
-              </Field>
-            </div>
-            <div className="col-12">
-              <Field label="Address" icon={<FaMapMarkerAlt size={11} />}>
-                <input type="text" name="address" value={form.address} onChange={handleChange}
-                  placeholder="Street, City, State, PIN" style={styles.input} autoComplete="off" />
-              </Field>
-            </div>
+            {form.tags.length > 0 && (
+              <div className="mt-2" style={{ fontSize: "0.75rem", color: "#94a3b8" }}>
+                {form.tags.length} tag{form.tags.length > 1 ? "s" : ""} selected
+              </div>
+            )}
+          </div>
+
+          {/* Notes */}
+          <div className="card border-0 mb-3 p-4" style={{ ...styles.card, backgroundColor: "#fffbeb", border: "1px solid #fde68a" }}>
+            <SectionHead icon={<FaStickyNote size={13} />} title="Notes" />
+            <textarea name="notes" value={form.notes} onChange={handleChange} rows={4}
+              placeholder="Add any notes about this customer — preferences, follow-ups, special requirements…"
+              style={{ ...styles.input, resize: "vertical", fontFamily: "inherit", lineHeight: 1.6, backgroundColor: "#fff" }} />
+          </div>
+
+          {/* Footer */}
+          <div className="d-flex justify-content-end gap-3 mb-4 flex-wrap">
+            <button onClick={onBack} className="border-0 rounded-3 fw-semibold px-4 py-2"
+              style={{ backgroundColor: "#f1f5f9", color: "#475569", cursor: "pointer", fontSize: "0.85rem" }}
+              onMouseEnter={e => e.currentTarget.style.backgroundColor = "#e2e8f0"}
+              onMouseLeave={e => e.currentTarget.style.backgroundColor = "#f1f5f9"}
+            >
+              Cancel
+            </button>
+            <button onClick={handleSave} disabled={saving}
+              className="d-flex align-items-center gap-2 border-0 rounded-3 fw-semibold px-4 py-2"
+              style={{
+                background: "linear-gradient(135deg,#f97316,#ea580c)", color: "#fff",
+                cursor: saving ? "not-allowed" : "pointer", fontSize: "0.85rem",
+                boxShadow: "0 4px 12px rgba(249,115,22,0.3)",
+              }}
+            >
+              <FaSave size={12} />
+              {saving ? "Saving…" : isEdit ? "Save Changes" : "Create Customer"}
+            </button>
           </div>
         </div>
 
-        {/* Status & Type */}
-        <div className="card border-0 mb-3 p-4" style={styles.card}>
-          <SectionHead icon={<FaCalendarAlt size={13} />} title="Status & Type" />
-          <div className="row g-3">
-            <div className="col-12 col-md-4">
-              <Field label="Type">
-                <select name="type" value={form.type} onChange={handleChange} style={styles.select}>
-                  <option value="Business">Business</option>
-                  <option value="Individual">Individual</option>
-                  <option value="Government">Government</option>
-                </select>
-              </Field>
-            </div>
-            <div className="col-12 col-md-4">
-              <Field label="Status">
-                <select name="status" value={form.status} onChange={handleChange} style={styles.select}>
-                  <option value="Active">Active</option>
-                  <option value="Inactive">Inactive</option>
-                  <option value="Lead">Lead</option>
-                </select>
-              </Field>
-            </div>
-            <div className="col-12 col-md-4">
-              <Field label="Customer Since" icon={<FaCalendarAlt size={11} />}>
-                <input type="date" name="since" value={form.since} onChange={handleChange} style={styles.input} />
-              </Field>
-            </div>
-          </div>
-        </div>
+        {/* ══ RIGHT: Preview ══  */}
+        <CustomerPreview form={form} customerId={customer?.id} />
 
-        {/* Tags */}
-        <div className="card border-0 mb-3 p-4" style={styles.card}>
-          <SectionHead icon={<FaTags size={13} />} title="Tags" />
-          <div className="d-flex flex-wrap gap-2">
-            {customerTags.map((tag) => {
-              const active = form.tags.includes(tag);
-              return (
-                <button key={tag} onClick={() => toggleTag(tag)}
-                  className="border-0 rounded-pill fw-semibold"
-                  style={{
-                    padding: "6px 16px", fontSize: "0.78rem", cursor: "pointer", transition: "all 0.15s",
-                    border: active ? "2px solid #f97316" : "1.5px solid #e2e8f0",
-                    backgroundColor: active ? "#fff7ed" : "#f8fafc",
-                    color: active ? "#ea580c" : "#64748b",
-                    boxShadow: active ? "0 2px 8px rgba(249,115,22,0.2)" : "none",
-                  }}
-                  onMouseEnter={e => { if (!active) e.currentTarget.style.backgroundColor = "#f1f5f9"; }}
-                  onMouseLeave={e => { if (!active) e.currentTarget.style.backgroundColor = "#f8fafc"; }}
-                >
-                  {tag}
-                </button>
-              );
-            })}
-          </div>
-          {form.tags.length > 0 && (
-            <div className="mt-2" style={{ fontSize: "0.75rem", color: "#94a3b8" }}>
-              {form.tags.length} tag{form.tags.length > 1 ? "s" : ""} selected
-            </div>
-          )}
-        </div>
-
-        {/* Notes */}
-        <div className="card border-0 mb-3 p-4" style={{ ...styles.card, backgroundColor: "#fffbeb", border: "1px solid #fde68a" }}>
-          <SectionHead icon={<FaStickyNote size={13} />} title="Notes" />
-          <textarea name="notes" value={form.notes} onChange={handleChange} rows={4}
-            placeholder="Add any notes about this customer — preferences, follow-ups, special requirements…"
-            style={{ ...styles.input, resize: "vertical", fontFamily: "inherit", lineHeight: 1.6, backgroundColor: "#fff" }} />
-        </div>
-
-        {/* Footer */}
-        <div className="d-flex justify-content-end gap-3 mb-4">
-          <button onClick={onBack} className="border-0 rounded-3 fw-semibold px-4 py-2"
-            style={{ backgroundColor: "#f1f5f9", color: "#475569", cursor: "pointer", fontSize: "0.85rem" }}
-            onMouseEnter={e => e.currentTarget.style.backgroundColor = "#e2e8f0"}
-            onMouseLeave={e => e.currentTarget.style.backgroundColor = "#f1f5f9"}
-          >
-            Cancel
-          </button>
-          <button onClick={handleSave} disabled={saving}
-            className="d-flex align-items-center gap-2 border-0 rounded-3 fw-semibold px-4 py-2"
-            style={{
-              background: "linear-gradient(135deg,#f97316,#ea580c)", color: "#fff",
-              cursor: saving ? "not-allowed" : "pointer", fontSize: "0.85rem",
-              boxShadow: "0 4px 12px rgba(249,115,22,0.3)",
-            }}
-          >
-            <FaSave size={12} />
-            {saving ? "Saving…" : isEdit ? "Save Changes" : "Create Customer"}
-          </button>
-        </div>
       </div>
-
-      {/* ══ RIGHT: Preview ══════════════════════════════════════════════════ */}
-      <CustomerPreview form={form} customerId={customer?.id} />
-
-    </div>
+    </>
   );
 }
 
-// ── Styles ────────────────────────────────────────────────────────────────────
+// ── Styles ──
 const styles = {
-  splitContainer: {
-    display: "flex",
-    gap: "24px",
-    alignItems: "flex-start",
-    width: "100%",
-  },
-  formSide: {
-    flex: "1 1 0",
-    minWidth: 0,
-    maxWidth: "620px",
-  },
-  previewPanel: {
-    width: "340px",
-    flexShrink: 0,
-    position: "sticky",
-    top: "20px",
-    backgroundColor: "#fff",
-    borderRadius: "16px",
-    boxShadow: "0 4px 20px rgba(0,0,0,0.08)",
-    border: "1.5px solid #f1f5f9",
-    display: "flex",
-    flexDirection: "column",
-    maxHeight: "calc(100vh - 100px)",
-    overflow: "hidden",
-  },
   previewHeader: {
     display: "flex",
     alignItems: "center",

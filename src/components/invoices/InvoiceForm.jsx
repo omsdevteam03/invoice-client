@@ -21,8 +21,24 @@ const cell = (content, style = {}) => (
   </td>
 );
 
+// ── Hook: track viewport for responsive layout ──────────────────────────────
+function useIsMobile(breakpoint = 900) {
+  const [isMobile, setIsMobile] = useState(
+    typeof window !== "undefined" ? window.innerWidth <= breakpoint : false
+  );
+
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth <= breakpoint);
+    handleResize();
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, [breakpoint]);
+
+  return isMobile;
+}
+
 // ── Live Preview (mini version of InvoiceDocument) ──────────────────────────
-function InvoicePreview({ form }) {
+function InvoicePreview({ form, isMobile }) {
   const subtotal = form.items.reduce((a, b) => a + Number(b.amount || 0), 0);
   const tax = form.gstType === "With GST" ? Math.round(subtotal * 0.18)
     : form.gstType === "Without GST" ? Math.round(subtotal - subtotal / 1.18)
@@ -30,8 +46,12 @@ function InvoicePreview({ form }) {
   const total = form.gstType === "With GST" ? subtotal + tax : subtotal;
   const due = total - Number(form.amountPaid || 0);
 
+  const panelStyle = isMobile
+    ? { ...styles.previewPanel, width: "100%", position: "static", maxHeight: "70vh" }
+    : styles.previewPanel;
+
   return (
-    <div style={styles.previewPanel}>
+    <div style={panelStyle}>
       <div style={styles.previewHeader}>
         <FaEye size={14} color="#f97316" />
         <span style={{ fontWeight: 700, fontSize: "0.85rem", color: "#0f172a" }}>Live Preview</span>
@@ -120,6 +140,7 @@ function InvoicePreview({ form }) {
 
 export default function InvoiceForm({ invoice, onSave, onBack }) {
   const isEdit = !!invoice;
+  const isMobile = useIsMobile(900);
 
   const [form, setForm] = useState(invoice || {
     invoiceNo: `2026-OMS${Date.now().toString().slice(-4)}`,
@@ -198,12 +219,12 @@ export default function InvoiceForm({ invoice, onSave, onBack }) {
   };
 
   return (
-    <div style={styles.splitContainer}>
+    <div style={isMobile ? styles.splitContainerMobile : styles.splitContainer}>
 
       {/* ══ LEFT: Form ══ */}
       <div style={styles.formSide}>
 
-        <div className="d-flex justify-content-between align-items-center mb-4 no-print">
+        <div className="d-flex justify-content-between align-items-center mb-4 no-print" style={{ flexWrap: "wrap", gap: 10 }}>
           <button onClick={onBack}
             className="d-flex align-items-center gap-2 border-0 rounded-3 fw-semibold px-3 py-2"
             style={{ backgroundColor: "#f1f5f9", color: "#475569", cursor: "pointer", fontSize: "0.85rem" }}
@@ -212,9 +233,11 @@ export default function InvoiceForm({ invoice, onSave, onBack }) {
           >
             <FaArrowLeft size={12} /> Back
           </button>
-          <div>
-            <h5 className="fw-bold mb-0" style={{ color: "#0f172a" }}>{isEdit ? "Edit Invoice" : "New Invoice"}</h5>
-          </div>
+          {!isMobile && (
+            <div>
+              <h5 className="fw-bold mb-0" style={{ color: "#0f172a" }}>{isEdit ? "Edit Invoice" : "New Invoice"}</h5>
+            </div>
+          )}
           <button onClick={handleSave}
             className="d-flex align-items-center gap-2 border-0 rounded-3 fw-semibold px-4 py-2"
             style={{ background: "linear-gradient(135deg,#f97316,#ea580c)", color: "#fff", cursor: "pointer", fontSize: "0.85rem", boxShadow: "0 4px 12px rgba(249,115,22,0.3)" }}
@@ -223,12 +246,19 @@ export default function InvoiceForm({ invoice, onSave, onBack }) {
           </button>
         </div>
 
+        {isMobile && (
+          <h5 className="fw-bold mb-3" style={{ color: "#0f172a" }}>{isEdit ? "Edit Invoice" : "New Invoice"}</h5>
+        )}
+
         <div className="card border-0 shadow-sm" style={{ borderRadius: "16px" }}>
           <div className="p-4">
 
             {/* Invoice Meta */}
             <div className="row g-3 mb-4 p-3 rounded-3" style={{ backgroundColor: "#f8fafc", border: "1px solid #e2e8f0" }}>
-              <div className="col-12 d-flex justify-content-between align-items-center">
+              <div
+                className="col-12 d-flex justify-content-between align-items-center"
+                style={{ flexDirection: isMobile ? "column" : "row", alignItems: isMobile ? "flex-start" : "center", gap: isMobile ? 12 : 0 }}
+              >
                 <div className="fw-bold" style={{ color: "#0f172a", fontSize: "0.9rem" }}>Invoice Details</div>
 
                 <div className="d-flex align-items-center gap-3">
@@ -330,43 +360,82 @@ export default function InvoiceForm({ invoice, onSave, onBack }) {
             {/* Items Table */}
             <div className="mb-4">
               <div className="fw-bold mb-3" style={{ color: "#0f172a", fontSize: "0.9rem" }}>Services / Items</div>
-              <div className="rounded-3 overflow-hidden" style={{ border: "1px solid #e2e8f0" }}>
-                <div className="row g-0 px-3 py-2" style={{ backgroundColor: "#0f172a" }}>
-                  {["Sl.", "Description of Services", "Qty", "Rate (₹)", "Amount (₹)", ""].map((h, i) => (
-                    <div key={i}
-                      className={i === 1 ? "col-5" : i === 5 ? "col-1" : "col"}
-                      style={{ color: "#94a3b8", fontSize: "0.72rem", fontWeight: 700, letterSpacing: "0.05em" }}>
-                      {h}
+
+              {isMobile ? (
+                // ── Stacked card layout for items on mobile ──────────────
+                <div className="d-flex flex-column gap-2">
+                  {form.items.map((item, i) => (
+                    <div key={i} className="rounded-3 p-3" style={{ border: "1px solid #e2e8f0", backgroundColor: "#fff" }}>
+                      <div className="d-flex justify-content-between align-items-center mb-2">
+                        <span style={{ fontSize: "0.78rem", fontWeight: 700, color: "#94a3b8" }}>Item #{item.sl}</span>
+                        {form.items.length > 1 && (
+                          <button onClick={() => removeItem(i)} className="border-0 bg-transparent p-0" style={{ color: "#ef4444", cursor: "pointer" }}>
+                            <FaTrash size={12} />
+                          </button>
+                        )}
+                      </div>
+                      <label style={{ fontSize: "0.72rem", fontWeight: 600, color: "#64748b", display: "block", marginBottom: 4 }}>Description</label>
+                      <textarea rows={2} value={item.description} onChange={e => updateItem(i, "description", e.target.value)}
+                        style={{ ...inp, resize: "vertical", fontSize: "0.82rem", marginBottom: 8 }} placeholder="Service description..." />
+                      <div className="row g-2">
+                        <div className="col-4">
+                          <label style={{ fontSize: "0.72rem", fontWeight: 600, color: "#64748b", display: "block", marginBottom: 4 }}>Qty</label>
+                          <input type="number" value={item.qty} onChange={e => updateItem(i, "qty", e.target.value)} style={{ ...inp, fontSize: "0.82rem" }} />
+                        </div>
+                        <div className="col-4">
+                          <label style={{ fontSize: "0.72rem", fontWeight: 600, color: "#64748b", display: "block", marginBottom: 4 }}>Rate</label>
+                          <input type="number" value={item.rate} onChange={e => updateItem(i, "rate", e.target.value)} style={{ ...inp, fontSize: "0.82rem" }} />
+                        </div>
+                        <div className="col-4">
+                          <label style={{ fontSize: "0.72rem", fontWeight: 600, color: "#64748b", display: "block", marginBottom: 4 }}>Amount</label>
+                          <div className="fw-semibold" style={{ fontSize: "0.85rem", color: "#0f172a", padding: "8px 0" }}>
+                            ₹{Number(item.amount).toLocaleString()}
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   ))}
                 </div>
-
-                {form.items.map((item, i) => (
-                  <div key={i} className="row g-0 px-3 py-2 align-items-center" style={{ borderTop: "1px solid #f1f5f9" }}>
-                    <div className="col" style={{ fontSize: "0.82rem", color: "#94a3b8" }}>{item.sl}</div>
-                    <div className="col-5 pe-2">
-                      <textarea rows={2} value={item.description} onChange={e => updateItem(i, "description", e.target.value)}
-                        style={{ ...inp, resize: "vertical", fontSize: "0.82rem" }} placeholder="Service description..." />
-                    </div>
-                    <div className="col pe-2">
-                      <input type="number" value={item.qty} onChange={e => updateItem(i, "qty", e.target.value)} style={{ ...inp, fontSize: "0.82rem" }} />
-                    </div>
-                    <div className="col pe-2">
-                      <input type="number" value={item.rate} onChange={e => updateItem(i, "rate", e.target.value)} style={{ ...inp, fontSize: "0.82rem" }} />
-                    </div>
-                    <div className="col fw-semibold" style={{ fontSize: "0.82rem", color: "#0f172a" }}>
-                      ₹{Number(item.amount).toLocaleString()}
-                    </div>
-                    <div className="col-1 text-end">
-                      {form.items.length > 1 && (
-                        <button onClick={() => removeItem(i)} className="border-0 bg-transparent p-0" style={{ color: "#ef4444", cursor: "pointer" }}>
-                          <FaTrash size={12} />
-                        </button>
-                      )}
-                    </div>
+              ) : (
+                // ── Table layout for items on desktop ────────────────────
+                <div className="rounded-3 overflow-hidden" style={{ border: "1px solid #e2e8f0" }}>
+                  <div className="row g-0 px-3 py-2" style={{ backgroundColor: "#0f172a" }}>
+                    {["Sl.", "Description of Services", "Qty", "Rate (₹)", "Amount (₹)", ""].map((h, i) => (
+                      <div key={i}
+                        className={i === 1 ? "col-5" : i === 5 ? "col-1" : "col"}
+                        style={{ color: "#94a3b8", fontSize: "0.72rem", fontWeight: 700, letterSpacing: "0.05em" }}>
+                        {h}
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
+
+                  {form.items.map((item, i) => (
+                    <div key={i} className="row g-0 px-3 py-2 align-items-center" style={{ borderTop: "1px solid #f1f5f9" }}>
+                      <div className="col" style={{ fontSize: "0.82rem", color: "#94a3b8" }}>{item.sl}</div>
+                      <div className="col-5 pe-2">
+                        <textarea rows={2} value={item.description} onChange={e => updateItem(i, "description", e.target.value)}
+                          style={{ ...inp, resize: "vertical", fontSize: "0.82rem" }} placeholder="Service description..." />
+                      </div>
+                      <div className="col pe-2">
+                        <input type="number" value={item.qty} onChange={e => updateItem(i, "qty", e.target.value)} style={{ ...inp, fontSize: "0.82rem" }} />
+                      </div>
+                      <div className="col pe-2">
+                        <input type="number" value={item.rate} onChange={e => updateItem(i, "rate", e.target.value)} style={{ ...inp, fontSize: "0.82rem" }} />
+                      </div>
+                      <div className="col fw-semibold" style={{ fontSize: "0.82rem", color: "#0f172a" }}>
+                        ₹{Number(item.amount).toLocaleString()}
+                      </div>
+                      <div className="col-1 text-end">
+                        {form.items.length > 1 && (
+                          <button onClick={() => removeItem(i)} className="border-0 bg-transparent p-0" style={{ color: "#ef4444", cursor: "pointer" }}>
+                            <FaTrash size={12} />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
 
               <button onClick={addItem}
                 className="d-flex align-items-center gap-2 border-0 rounded-3 px-3 py-2 mt-2"
@@ -377,7 +446,7 @@ export default function InvoiceForm({ invoice, onSave, onBack }) {
 
             {/* Totals */}
             <div className="d-flex justify-content-end mb-4">
-              <div style={{ minWidth: "280px" }}>
+              <div style={{ minWidth: isMobile ? "100%" : "280px", width: isMobile ? "100%" : "auto" }}>
                 {[
                   { label: "Sub Total", value: `₹${subtotal.toLocaleString()}` },
                   ...(form.gstType !== "No GST" ? [{
@@ -411,9 +480,16 @@ export default function InvoiceForm({ invoice, onSave, onBack }) {
               <label style={{ fontSize: "0.75rem", fontWeight: 600, color: "#64748b", display: "block", marginBottom: 8 }}>
                 Authorized Signature
               </label>
-              <div className="d-flex align-items-center gap-4 p-3 rounded-3" style={{ backgroundColor: "#f8fafc", border: "1.5px dashed #e2e8f0" }}>
+              <div
+                className="d-flex align-items-center gap-4 p-3 rounded-3"
+                style={{
+                  backgroundColor: "#f8fafc", border: "1.5px dashed #e2e8f0",
+                  flexDirection: isMobile ? "column" : "row",
+                  alignItems: isMobile ? "stretch" : "center",
+                }}
+              >
                 <div style={{
-                  width: 180, height: 70, border: "1px solid #e2e8f0", borderRadius: 8,
+                  width: isMobile ? "100%" : 180, height: 70, border: "1px solid #e2e8f0", borderRadius: 8,
                   backgroundColor: "#fff", display: "flex", alignItems: "center", justifyContent: "center",
                   flexShrink: 0, overflow: "hidden",
                 }}>
@@ -426,7 +502,7 @@ export default function InvoiceForm({ invoice, onSave, onBack }) {
                   <div style={{ fontSize: "0.78rem", color: "#64748b", marginBottom: 8 }}>
                     Upload your signature image (PNG with transparent background recommended)
                   </div>
-                  <div className="d-flex gap-2">
+                  <div className="d-flex gap-2" style={{ flexWrap: "wrap" }}>
                     <label htmlFor="sig-upload"
                       style={{
                         fontSize: "0.78rem", fontWeight: 600, color: "#f97316",
@@ -462,8 +538,8 @@ export default function InvoiceForm({ invoice, onSave, onBack }) {
         </div>
       </div>
 
-      {/* ══ RIGHT: Preview ══ */}
-      <InvoicePreview form={form} />
+      {/* ══ RIGHT (or BELOW on mobile): Preview ══ */}
+      <InvoicePreview form={form} isMobile={isMobile} />
 
     </div>
   );
@@ -471,6 +547,7 @@ export default function InvoiceForm({ invoice, onSave, onBack }) {
 
 const styles = {
   splitContainer: { display: "flex", gap: "24px", alignItems: "flex-start", width: "100%" },
+  splitContainerMobile: { display: "flex", flexDirection: "column", gap: "20px", width: "100%" },
   formSide: { flex: "1 1 0", minWidth: 0, maxWidth: "700px" },
   previewPanel: {
     width: "380px", flexShrink: 0, position: "sticky", top: "20px",
