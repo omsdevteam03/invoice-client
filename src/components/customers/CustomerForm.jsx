@@ -1,23 +1,66 @@
 // src/components/customers/CustomerForm.jsx
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import {
   FaArrowLeft, FaSave, FaUser, FaBuilding, FaEnvelope,
-  FaPhone, FaMapMarkerAlt, FaCalendarAlt, FaStickyNote, FaTags,
-  FaEye, FaCheckCircle,
+  FaPhone, FaMapMarkerAlt, FaStickyNote, FaTags,
+  FaEye, FaCheckCircle, FaPlus, FaTimes,
+  FaHeadset, FaToggleOn, FaToggleOff, FaCircle,
+  FaHistory, FaGlobe, FaMobileAlt, FaPaintBrush,
+  FaSearch, FaShoppingCart, FaTools,
 } from "react-icons/fa";
 import { customerTags } from "../../data/customerData.jsx";
+
+const BRAND = "#1F6F5C";
+const BRAND_DARK = "#175646";
+const BRAND_SOFT = "#e8f3f0";
+const BRAND_SOFT_BORDER = "#bfe0d6";
+
+const phoneTypes = ["Mobile", "Work", "Home", "Other"];
+const addressTypes = ["Home", "Office", "Other"];
+
+// Each known tag gets its own color + icon so the suggestion pills don't
+// all look like the same flat gray chip. Unknown/custom tags fall back
+// to a neutral style automatically (see tagStyleFor below).
+const TAG_STYLES = {
+  Web:          { icon: FaGlobe,        bg: "#eff6ff", color: "#3b82f6", border: "#bfdbfe" },
+  App:          { icon: FaMobileAlt,    bg: "#f5f3ff", color: "#7c3aed", border: "#ddd6fe" },
+  Design:       { icon: FaPaintBrush,   bg: "#fdf2f8", color: "#db2777", border: "#fbcfe8" },
+  SEO:          { icon: FaSearch,       bg: "#ecfdf5", color: "#059669", border: "#a7f3d0" },
+  "E-commerce": { icon: FaShoppingCart, bg: "#fff7ed", color: "#ea580c", border: "#fed7aa" },
+  Maintenance:  { icon: FaTools,        bg: "#f1f5f9", color: "#475569", border: "#cbd5e1" },
+};
+const tagStyleFor = (tag) => TAG_STYLES[tag] || { icon: FaTags, bg: "#f8fafc", color: "#64748b", border: "#e2e8f0" };// ── Draft auto-save (localStorage) ──────────────────────────────────────────
+// Keeps whatever the user has typed even if they forget to click Save and
+// navigate away, close the tab, or refresh the page.
+export const DRAFT_PREFIX = "cf_draft_";
+const draftKeyFor = (customer, draftId) =>
+  customer ? `${DRAFT_PREFIX}edit_${customer.id}` : `${DRAFT_PREFIX}new_${draftId}`;
+
+export function timeAgo(ts) {
+  if (!ts) return "";
+  const diff = Date.now() - ts;
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  return `${days}d ago`;
+}
+
+let uid = 0;
+const nextId = () => `row-${Date.now()}-${++uid}`;
 
 const EMPTY_FORM = {
   fullName: "",
   company: "",
   email: "",
-  phone: "",
-  address: "",
-  type: "Business",
+  phones: [{ id: nextId(), type: "Mobile", value: "" }],
+  supportNumber: "",
+  addresses: [{ id: nextId(), type: "Home", value: "" }],
   status: "Active",
-  since: new Date().toISOString().split("T")[0],
-  notes: "",
   tags: [],
+  notes: [{ id: nextId(), text: "" }],
 };
 
 function buildFormFromCustomer(c) {
@@ -26,13 +69,18 @@ function buildFormFromCustomer(c) {
     fullName: c.name ?? "",
     company: c.company ?? "",
     email: c.email ?? "",
-    phone: c.phone ?? "",
-    address: c.address ?? "",
-    type: c.type ?? "Business",
-    status: c.status ?? "Active",
-    since: c.since ?? new Date().toISOString().split("T")[0],
-    notes: c.notes ?? "",
+    phones: c.phones?.length
+      ? c.phones.map(p => ({ id: nextId(), type: p.type ?? "Mobile", value: p.value ?? "" }))
+      : [{ id: nextId(), type: "Mobile", value: c.phone ?? "" }],
+    supportNumber: c.supportNumber ?? "",
+    addresses: c.addresses?.length
+      ? c.addresses.map(a => ({ id: nextId(), type: a.type ?? "Home", value: a.value ?? "" }))
+      : [{ id: nextId(), type: "Home", value: c.address ?? "" }],
+    status: c.status === "Lead" ? "Active" : (c.status ?? "Active"),
     tags: c.tags ?? [],
+    notes: c.notes
+      ? (Array.isArray(c.notes) ? c.notes.map(t => ({ id: nextId(), text: t })) : [{ id: nextId(), text: c.notes }])
+      : [{ id: nextId(), text: "" }],
   };
 }
 
@@ -44,11 +92,10 @@ function generateId(allCustomers) {
   return `CUST-${String(max + 1).padStart(3, "0")}`;
 }
 
-function Field({ label, required, icon, children }) {
+function Field({ label, required, children }) {
   return (
     <div>
       <label style={styles.label}>
-        {icon && <span style={{ marginRight: 6, opacity: 0.6 }}>{icon}</span>}
         {label}
         {required && <span style={{ color: "#ef4444", marginLeft: 3 }}>*</span>}
       </label>
@@ -57,67 +104,112 @@ function Field({ label, required, icon, children }) {
   );
 }
 
-// ── Live Preview Panel (Customer only) ──────────────────────────────────────
+// Dense divider-based section head (replaces the old boxy per-section cards)
+function SectionRow({ icon, title, children, first }) {
+  return (
+    <div style={{ ...styles.sectionRow, ...(first ? { borderTop: "none", paddingTop: 4 } : {}) }}>
+      <div style={styles.sectionRowHead}>
+        <span style={styles.sectionIconSm}>{icon}</span>
+        <span style={styles.sectionTitleSm}>{title}</span>
+      </div>
+      <div style={{ marginTop: 12 }}>{children}</div>
+    </div>
+  );
+}
+
+// ── Draft restore banner — shown when a leftover, unsaved draft is found ────
+function DraftBanner({ draft, onRestore, onDiscard }) {
+  if (!draft) return null;
+  const who = draft.fullName || draft.company;
+  return (
+    <div style={styles.draftBanner}>
+      <div className="d-flex align-items-center gap-2">
+        <span style={styles.draftIcon}><FaHistory size={13} /></span>
+        <div>
+          <div style={{ fontWeight: 700, fontSize: "0.84rem", color: "#92400e" }}>
+            Unsaved draft found
+          </div>
+          <div style={{ fontSize: "0.74rem", color: "#92400e" }}>
+            {who ? `From "${who}" — ` : ""}saved {timeAgo(draft.savedAt)}. Restore it or start fresh.
+          </div>
+        </div>
+      </div>
+      <div className="d-flex gap-2 flex-shrink-0">
+        <button onClick={onDiscard}
+          className="border-0 fw-semibold px-3 py-2 rounded-3"
+          style={{ backgroundColor: "#fff", color: "#92400e", border: "1.5px solid #fde68a", cursor: "pointer", fontSize: "0.78rem" }}>
+          Discard
+        </button>
+        <button onClick={onRestore}
+          className="border-0 fw-semibold px-3 py-2 rounded-3"
+          style={{ backgroundColor: "#92400e", color: "#fff", cursor: "pointer", fontSize: "0.78rem" }}>
+          Restore Draft
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── Live Preview — document/table style ─────────────────────────────────────
 function CustomerPreview({ form, customerId }) {
-  const statusColor = {
-    Active: { bg: "#ecfdf5", color: "#059669", border: "#a7f3d0" },
-    Inactive: { bg: "#f8fafc", color: "#64748b", border: "#e2e8f0" },
-    Lead: { bg: "#eff6ff", color: "#2563eb", border: "#bfdbfe" },
-  }[form.status] || { bg: "#f8fafc", color: "#64748b", border: "#e2e8f0" };
+  const filledPhones = form.phones.filter(p => p.value.trim());
+  const filledAddresses = form.addresses.filter(a => a.value.trim());
+  const filledNotes = form.notes.filter(n => n.text.trim());
+
+  const rows = [
+    { label: "Full Name", value: form.fullName },
+    { label: "Company", value: form.company },
+    { label: "Email", value: form.email },
+    ...(filledPhones.length
+      ? filledPhones.map(p => ({ label: `Phone (${p.type})`, value: p.value }))
+      : [{ label: "Phone", value: "" }]),
+    ...(form.supportNumber ? [{ label: "Support Number", value: form.supportNumber }] : []),
+    ...(filledAddresses.length
+      ? filledAddresses.map(a => ({ label: `Address (${a.type})`, value: a.value }))
+      : [{ label: "Address", value: "" }]),
+    { label: "Status", value: form.status },
+  ];
 
   return (
     <div className="cf-preview-panel">
-      {/* Preview Header */}
       <div style={styles.previewHeader}>
-        <FaEye size={14} color="#f97316" />
-        <span style={{ fontWeight: 700, fontSize: "0.88rem", color: "#0f172a" }}>Live Preview</span>
-        <span style={{ fontSize: "0.72rem", color: "#94a3b8", marginLeft: "auto" }}>Updates as you type</span>
+        <FaEye size={13} color={BRAND} />
+        <span style={{ fontWeight: 700, fontSize: "0.85rem", color: "#0f172a" }}>Live Preview</span>
+        <span style={{ fontSize: "0.68rem", color: "#94a3b8", marginLeft: "auto" }}>Updates as you type</span>
       </div>
 
-      <div style={{ padding: "16px", overflowY: "auto", flex: 1 }}>
+      <div style={{ padding: "18px", overflowY: "auto", flex: 1 }}>
 
-        {/* Avatar + Name */}
-        <div style={{ textAlign: "center", marginBottom: 20 }}>
-          <div style={styles.avatar}>
-            {form.fullName ? form.fullName.charAt(0).toUpperCase() : "?"}
+        {/* Document heading, Quotebill-style */}
+        <div style={styles.docHeading}>
+          <div style={{ fontWeight: 800, fontSize: "1.15rem", color: "#0f172a", letterSpacing: "0.01em" }}>
+            CUSTOMER
           </div>
-          <div style={{ fontWeight: 700, fontSize: "1.1rem", color: "#0f172a", marginTop: 8 }}>
-            {form.fullName || <span style={{ color: "#cbd5e1" }}>Full Name</span>}
+          <div style={{ fontSize: "0.72rem", color: "#94a3b8", marginTop: 2 }}>
+            {customerId ? customerId : "New record"} · {form.status}
           </div>
-          {form.company && (
-            <div style={{ fontSize: "0.82rem", color: "#64748b" }}>{form.company}</div>
-          )}
-          <span style={{
-            display: "inline-block", marginTop: 6, padding: "3px 12px",
-            borderRadius: 20, fontSize: "0.72rem", fontWeight: 600,
-            backgroundColor: statusColor.bg, color: statusColor.color,
-            border: `1px solid ${statusColor.border}`,
-          }}>
-            {form.status}
-          </span>
         </div>
 
-        {/* Info Rows */}
-        <div style={styles.infoCard}>
-          {[
-            { icon: <FaEnvelope size={11} />, label: "Email", value: form.email },
-            { icon: <FaPhone size={11} />, label: "Phone", value: form.phone },
-            { icon: <FaMapMarkerAlt size={11} />, label: "Address", value: form.address },
-            { icon: <FaBuilding size={11} />, label: "Type", value: form.type },
-            { icon: <FaCalendarAlt size={11} />, label: "Since", value: form.since },
-          ].map(({ icon, label, value }) => (
-            <div key={label} style={styles.infoRow}>
-              <span style={styles.infoIcon}>{icon}</span>
-              <span style={styles.infoLabel}>{label}</span>
-              <span style={styles.infoValue}>{value || <span style={{ color: "#cbd5e1" }}>—</span>}</span>
+        {/* Document-style field table */}
+        <div style={styles.docTable}>
+          <div style={styles.docTableHead}>
+            <span style={{ flex: "0 0 42%" }}>FIELD</span>
+            <span style={{ flex: 1 }}>VALUE</span>
+          </div>
+          {rows.map((r, i) => (
+            <div key={r.label + i} style={{ ...styles.docTableRow, ...(i % 2 === 1 ? { backgroundColor: "#fafcfb" } : {}) }}>
+              <span style={styles.docTableLabel}>{r.label}</span>
+              <span style={styles.docTableValue}>
+                {r.value || <span style={{ color: "#cbd5e1" }}>—</span>}
+              </span>
             </div>
           ))}
         </div>
 
-        {/* Tags */}
+        {/* Tags row */}
         {form.tags.length > 0 && (
-          <div style={{ marginTop: 12 }}>
-            <div style={{ fontSize: "0.72rem", fontWeight: 600, color: "#94a3b8", marginBottom: 6 }}>TAGS</div>
+          <div style={styles.docBlock}>
+            <div style={styles.docBlockLabel}>TAGS</div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
               {form.tags.map(tag => (
                 <span key={tag} style={styles.tagChip}>{tag}</span>
@@ -126,23 +218,18 @@ function CustomerPreview({ form, customerId }) {
           </div>
         )}
 
-        {/* Notes */}
-        {form.notes && (
-          <div style={{ marginTop: 12, padding: 12, backgroundColor: "#fffbeb", borderRadius: 8, border: "1px solid #fde68a" }}>
-            <div style={{ fontSize: "0.72rem", fontWeight: 600, color: "#92400e", marginBottom: 4 }}>NOTES</div>
-            <div style={{ fontSize: "0.8rem", color: "#78350f", lineHeight: 1.5 }}>{form.notes}</div>
+        {/* Notes block */}
+        {filledNotes.length > 0 && (
+          <div style={{ ...styles.docBlock, backgroundColor: "#fffbeb", border: "1px solid #fde68a", borderRadius: 8, padding: 10 }}>
+            <div style={{ ...styles.docBlockLabel, color: "#92400e" }}>NOTES ({filledNotes.length})</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              {filledNotes.map(n => (
+                <div key={n.id} style={{ fontSize: "0.78rem", color: "#78350f", lineHeight: 1.5 }}>• {n.text}</div>
+              ))}
+            </div>
           </div>
         )}
 
-        {/* Auto-create notice */}
-        {!customerId && (
-          <div style={styles.autoNotice}>
-            <FaCheckCircle size={12} color="#059669" />
-            <span style={{ fontSize: "0.75rem", color: "#059669", fontWeight: 600 }}>
-              A Quotation & Invoice will be auto-created on save
-            </span>
-          </div>
-        )}
       </div>
     </div>
   );
@@ -150,11 +237,64 @@ function CustomerPreview({ form, customerId }) {
 
 
 // ── Main Form ─────────────────────────────────────────────────────────────────
-export default function CustomerForm({ customer, allCustomers = [], onSave, onBack }) {
+export default function CustomerForm({ customer, allCustomers = [], onSave, onBack, draftId }) {
   const isEdit = Boolean(customer);
+  const [instanceDraftId] = useState(() => draftId || `${Date.now()}_${Math.random().toString(36).slice(2, 7)}`);
+  const draftKey = draftKeyFor(customer, instanceDraftId);
+
   const [form, setForm] = useState(() => buildFormFromCustomer(customer));
   const [errors, setErrors] = useState({});
   const [saving, setSaving] = useState(false);
+  const [showPreview, setShowPreview] = useState(true);
+  const [tagInput, setTagInput] = useState("");
+
+  // Draft state: while `pendingDraft` is set, we're waiting on the user to
+  // choose Restore/Discard, so autosave is paused (we don't want to silently
+  // overwrite the very draft we're asking them about).
+  const [pendingDraft, setPendingDraft] = useState(null);
+  const [draftChecked, setDraftChecked] = useState(false);
+
+  // On mount: look for a leftover draft for this exact form (new, or this
+  // specific customer's edit) and surface it instead of applying it blindly.
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(draftKey);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed?.form) setPendingDraft(parsed);
+      }
+    } catch {}
+    setDraftChecked(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Autosave — debounced write to localStorage on every change, once the
+  // initial draft check is done and there's no pending restore/discard choice.
+  useEffect(() => {
+    if (!draftChecked || pendingDraft) return;
+    const timer = setTimeout(() => {
+      try {
+        localStorage.setItem(draftKey, JSON.stringify({
+          form, savedAt: Date.now(), fullName: form.fullName, company: form.company,
+        }));
+      } catch {}
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [form, draftChecked, pendingDraft, draftKey]);
+
+  const handleRestoreDraft = () => {
+    if (pendingDraft?.form) setForm(pendingDraft.form);
+    setPendingDraft(null);
+  };
+
+  const handleDiscardDraft = () => {
+    try { localStorage.removeItem(draftKey); } catch {}
+    setPendingDraft(null);
+  };
+
+  const clearDraft = () => {
+    try { localStorage.removeItem(draftKey); } catch {}
+  };
 
   const handleChange = useCallback((e) => {
     const { name, value } = e.target;
@@ -162,22 +302,42 @@ export default function CustomerForm({ customer, allCustomers = [], onSave, onBa
     setErrors((prev) => ({ ...prev, [name]: undefined }));
   }, []);
 
-  const toggleTag = useCallback((tag) => {
-    setForm((prev) => ({
-      ...prev,
-      tags: prev.tags.includes(tag)
-        ? prev.tags.filter((t) => t !== tag)
-        : [...prev.tags, tag],
-    }));
-  }, []);
+  const addPhone = () => setForm(f => ({ ...f, phones: [...f.phones, { id: nextId(), type: "Mobile", value: "" }] }));
+  const removePhone = (id) => setForm(f => ({ ...f, phones: f.phones.filter(p => p.id !== id) }));
+  const updatePhone = (id, field, value) =>
+    setForm(f => ({ ...f, phones: f.phones.map(p => p.id === id ? { ...p, [field]: value } : p) }));
+
+  const addAddress = () => setForm(f => ({ ...f, addresses: [...f.addresses, { id: nextId(), type: "Home", value: "" }] }));
+  const removeAddress = (id) => setForm(f => ({ ...f, addresses: f.addresses.filter(a => a.id !== id) }));
+  const updateAddress = (id, field, value) =>
+    setForm(f => ({ ...f, addresses: f.addresses.map(a => a.id === id ? { ...a, [field]: value } : a) }));
+
+  const addNote = () => setForm(f => ({ ...f, notes: [...f.notes, { id: nextId(), text: "" }] }));
+  const removeNote = (id) => setForm(f => ({ ...f, notes: f.notes.filter(n => n.id !== id) }));
+  const updateNote = (id, text) =>
+    setForm(f => ({ ...f, notes: f.notes.map(n => n.id === id ? { ...n, text } : n) }));
+
+  const addTag = (raw) => {
+    const tag = raw.trim();
+    if (tag && !form.tags.includes(tag)) {
+      setForm(f => ({ ...f, tags: [...f.tags, tag] }));
+    }
+    setTagInput("");
+  };
+  const removeTag = (tag) => setForm(f => ({ ...f, tags: f.tags.filter(t => t !== tag) }));
 
   const validate = () => {
     const e = {};
     if (!form.fullName.trim()) e.fullName = "Full name is required";
-    if (!form.email.trim()) e.email = "Email is required";
-    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) e.email = "Invalid email address";
-    if (!form.phone.trim()) e.phone = "Phone number is required";
-    else if (!/^\d{10}$/.test(form.phone.replace(/\s/g, ""))) e.phone = "Enter a valid 10-digit number";
+    if (form.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) {
+      e.email = "Invalid email address";
+    }
+    const hasPhone = form.phones.some(p => p.value.trim());
+    if (!hasPhone) e.phones = "At least one phone number is required";
+    else {
+      const badPhone = form.phones.find(p => p.value.trim() && !/^\d{10}$/.test(p.value.replace(/\s/g, "")));
+      if (badPhone) e.phones = "Enter valid 10-digit numbers";
+    }
     return e;
   };
 
@@ -185,34 +345,36 @@ export default function CustomerForm({ customer, allCustomers = [], onSave, onBa
     const e = validate();
     if (Object.keys(e).length) { setErrors(e); return; }
     setSaving(true);
+    const filledPhones = form.phones.filter(p => p.value.trim());
+    const filledAddresses = form.addresses.filter(a => a.value.trim());
+    const filledNotes = form.notes.filter(n => n.text.trim());
     const saved = {
       id: customer?.id ?? generateId(allCustomers),
+       isNew: !isEdit,
       name: form.fullName.trim(),
       company: form.company.trim(),
       email: form.email.trim(),
-      phone: form.phone.trim(),
-      address: form.address.trim(),
-      type: form.type,
+      phone: filledPhones[0]?.value ?? "",
+      phones: filledPhones,
+      supportNumber: form.supportNumber.trim(),
+      address: filledAddresses[0]?.value ?? "",
+      addresses: filledAddresses,
       status: form.status,
-      since: form.since,
+      type: customer?.type ?? "Business",
+      since: customer?.since ?? new Date().toISOString().split("T")[0],
       totalBilled: customer?.totalBilled ?? 0,
-      notes: form.notes.trim(),
+      notes: filledNotes.map(n => n.text),
       tags: form.tags,
     };
-    setTimeout(() => { setSaving(false); onSave(saved); }, 300);
+    setTimeout(() => {
+      setSaving(false);
+      clearDraft(); // saved for real now — the safety-net draft is no longer needed
+      onSave(saved);
+    }, 300);
   };
-
-  const SectionHead = ({ icon, title }) => (
-    <div style={styles.sectionHead}>
-      <span style={styles.sectionIcon}>{icon}</span>
-      <span style={styles.sectionTitle}>{title}</span>
-    </div>
-  );
 
   return (
     <>
-      {/* Responsive layout rules — inline styles can't do media queries, so this
-          handles the split-column -> stacked-column breakpoint. */}
       <style>{`
         .cf-split {
           display: flex;
@@ -221,18 +383,32 @@ export default function CustomerForm({ customer, allCustomers = [], onSave, onBa
           width: 100%;
           flex-wrap: wrap;
         }
+        /* Default (no preview): form takes the full width, capped so it
+           doesn't stretch into an unreadably wide single column. */
         .cf-form-side {
-          flex: 1 1 320px;
+          flex: 1 1 100%;
           min-width: 280px;
-          max-width: 620px;
+          max-width: 100%;
+        }
+        /* With preview on: form and preview panel share the row 50/50. */
+        .cf-form-side.cf-half {
+          flex: 1 1 0;
+          max-width: calc(50% - 12px);
+        }
+        .cf-form-panel {
+          background: #fff;
+          border-radius: 14px;
+          box-shadow: 0 2px 10px rgba(0,0,0,0.06);
+          padding: 8px 22px 22px;
         }
         .cf-preview-panel {
-          width: 340px;
-          flex: 0 1 340px;
+          flex: 1 1 0;
+          max-width: calc(50% - 12px);
+          width: 100%;
           position: sticky;
           top: 20px;
           background-color: #fff;
-          border-radius: 16px;
+          border-radius: 14px;
           box-shadow: 0 4px 20px rgba(0,0,0,0.08);
           border: 1.5px solid #f1f5f9;
           display: flex;
@@ -241,169 +417,245 @@ export default function CustomerForm({ customer, allCustomers = [], onSave, onBa
           overflow: hidden;
         }
         @media (max-width: 900px) {
-          .cf-form-side { max-width: 100%; }
+          .cf-form-side, .cf-form-side.cf-half { max-width: 100%; flex: 1 1 100%; }
           .cf-preview-panel {
-            width: 100%;
+            max-width: 100%;
             flex: 1 1 100%;
             position: static;
             max-height: none;
           }
         }
-        @media (max-width: 480px) {
-          .cf-preview-panel .row.g-3 > div { flex: 0 0 100%; max-width: 100%; }
-        }
       `}</style>
 
       <div className="cf-split">
 
-        {/* ══ LEFT: Form ══════════════════════════════════════════════════ */}
-        <div className="cf-form-side">
+        {/* ══ LEFT: Form ══ */}
+        <div className={`cf-form-side${showPreview ? " cf-half" : ""}`}>
 
           {/* Top Bar */}
-          <div className="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+          <div className="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
             <button
               onClick={onBack}
               className="d-flex align-items-center gap-2 border-0 rounded-3 fw-semibold px-3 py-2"
               style={{ backgroundColor: "#f1f5f9", color: "#475569", cursor: "pointer", fontSize: "0.85rem" }}
-              onMouseEnter={e => e.currentTarget.style.backgroundColor = "#e2e8f0"}
-              onMouseLeave={e => e.currentTarget.style.backgroundColor = "#f1f5f9"}
             >
               <FaArrowLeft size={12} /> Back
             </button>
             <h4 className="fw-bold mb-0" style={{ color: "#0f172a", fontSize: "1.2rem" }}>
               {isEdit ? "Edit Customer" : "New Customer"}
             </h4>
-            <div />
+            <button
+              onClick={() => setShowPreview(s => !s)}
+              className="d-flex align-items-center gap-2 border-0 rounded-3 fw-semibold px-3 py-2"
+              style={{
+                backgroundColor: showPreview ? BRAND_SOFT : "#f1f5f9",
+                color: showPreview ? BRAND_DARK : "#64748b",
+                cursor: "pointer",
+                fontSize: "0.82rem",
+                border: showPreview ? `1px solid ${BRAND_SOFT_BORDER}` : "1px solid transparent",
+              }}
+            >
+              {showPreview ? <FaToggleOn size={18} color={BRAND} /> : <FaToggleOff size={18} />}
+              {showPreview ? "Preview On" : "Preview Off"}
+            </button>
           </div>
 
-          {/* Basic Info */}
-          <div className="card border-0 mb-3 p-4" style={styles.card}>
-            <SectionHead icon={<FaUser size={13} />} title="Basic Information" />
-            <div className="row g-3">
-              <div className="col-12 col-md-6">
-                <Field label="Full Name" required icon={<FaUser size={11} />}>
-                  <input type="text" name="fullName" value={form.fullName} onChange={handleChange}
-                    placeholder="e.g. Arjun Mehta"
-                    style={{ ...styles.input, ...(errors.fullName ? styles.inputError : {}) }} autoComplete="off" />
-                  {errors.fullName && <div style={styles.errorMsg}>{errors.fullName}</div>}
-                </Field>
-              </div>
-              <div className="col-12 col-md-6">
-                <Field label="Company" icon={<FaBuilding size={11} />}>
-                  <input type="text" name="company" value={form.company} onChange={handleChange}
-                    placeholder="e.g. Mehta Enterprises" style={styles.input} autoComplete="off" />
-                </Field>
-              </div>
-              <div className="col-12 col-md-6">
-                <Field label="Email Address" required icon={<FaEnvelope size={11} />}>
-                  <input type="email" name="email" value={form.email} onChange={handleChange}
-                    placeholder="client@example.com"
-                    style={{ ...styles.input, ...(errors.email ? styles.inputError : {}) }} autoComplete="off" />
-                  {errors.email && <div style={styles.errorMsg}>{errors.email}</div>}
-                </Field>
-              </div>
-              <div className="col-12 col-md-6">
-                <Field label="Phone Number" required icon={<FaPhone size={11} />}>
-                  <input type="tel" name="phone" value={form.phone} onChange={handleChange}
-                    placeholder="9876543210"
-                    style={{ ...styles.input, ...(errors.phone ? styles.inputError : {}) }}
-                    autoComplete="off" maxLength={10} />
-                  {errors.phone && <div style={styles.errorMsg}>{errors.phone}</div>}
-                </Field>
-              </div>
-              <div className="col-12">
-                <Field label="Address" icon={<FaMapMarkerAlt size={11} />}>
-                  <input type="text" name="address" value={form.address} onChange={handleChange}
-                    placeholder="Street, City, State, PIN" style={styles.input} autoComplete="off" />
-                </Field>
-              </div>
-            </div>
-          </div>
+          {/* Draft recovery banner */}
+          <DraftBanner draft={pendingDraft} onRestore={handleRestoreDraft} onDiscard={handleDiscardDraft} />
 
-          {/* Status & Type */}
-          <div className="card border-0 mb-3 p-4" style={styles.card}>
-            <SectionHead icon={<FaCalendarAlt size={13} />} title="Status & Type" />
-            <div className="row g-3">
-              <div className="col-12 col-md-4">
-                <Field label="Type">
-                  <select name="type" value={form.type} onChange={handleChange} style={styles.select}>
-                    <option value="Business">Business</option>
-                    <option value="Individual">Individual</option>
-                    <option value="Government">Government</option>
-                  </select>
-                </Field>
-              </div>
-              <div className="col-12 col-md-4">
-                <Field label="Status">
-                  <select name="status" value={form.status} onChange={handleChange} style={styles.select}>
-                    <option value="Active">Active</option>
-                    <option value="Inactive">Inactive</option>
-                    <option value="Lead">Lead</option>
-                  </select>
-                </Field>
-              </div>
-              <div className="col-12 col-md-4">
-                <Field label="Customer Since" icon={<FaCalendarAlt size={11} />}>
-                  <input type="date" name="since" value={form.since} onChange={handleChange} style={styles.input} />
-                </Field>
-              </div>
-            </div>
-          </div>
+          {/* Single dense panel — all sections live here, separated by hairlines */}
+          <div className="cf-form-panel">
 
-          {/* Tags */}
-          <div className="card border-0 mb-3 p-4" style={styles.card}>
-            <SectionHead icon={<FaTags size={13} />} title="Tags" />
-            <div className="d-flex flex-wrap gap-2">
-              {customerTags.map((tag) => {
-                const active = form.tags.includes(tag);
-                return (
-                  <button key={tag} onClick={() => toggleTag(tag)}
-                    className="border-0 rounded-pill fw-semibold"
-                    style={{
-                      padding: "6px 16px", fontSize: "0.78rem", cursor: "pointer", transition: "all 0.15s",
-                      border: active ? "2px solid #f97316" : "1.5px solid #e2e8f0",
-                      backgroundColor: active ? "#fff7ed" : "#f8fafc",
-                      color: active ? "#ea580c" : "#64748b",
-                      boxShadow: active ? "0 2px 8px rgba(249,115,22,0.2)" : "none",
-                    }}
-                    onMouseEnter={e => { if (!active) e.currentTarget.style.backgroundColor = "#f1f5f9"; }}
-                    onMouseLeave={e => { if (!active) e.currentTarget.style.backgroundColor = "#f8fafc"; }}
-                  >
-                    {tag}
-                  </button>
-                );
-              })}
-            </div>
-            {form.tags.length > 0 && (
-              <div className="mt-2" style={{ fontSize: "0.75rem", color: "#94a3b8" }}>
-                {form.tags.length} tag{form.tags.length > 1 ? "s" : ""} selected
+            <SectionRow icon={<FaUser size={12} />} title="Basic Information" first>
+              <div className="row g-3">
+                <div className="col-12 col-md-6">
+                  <Field label="Full Name" required>
+                    <input type="text" name="fullName" value={form.fullName} onChange={handleChange}
+                      placeholder="e.g. Arjun Mehta"
+                      style={{ ...styles.input, ...(errors.fullName ? styles.inputError : {}) }} autoComplete="off" />
+                    {errors.fullName && <div style={styles.errorMsg}>{errors.fullName}</div>}
+                  </Field>
+                </div>
+                <div className="col-12 col-md-6">
+                  <Field label="Company">
+                    <input type="text" name="company" value={form.company} onChange={handleChange}
+                      placeholder="e.g. Mehta Enterprises" style={styles.input} autoComplete="off" />
+                  </Field>
+                </div>
+                <div className="col-12">
+                  <Field label="Email Address">
+                    <input type="email" name="email" value={form.email} onChange={handleChange}
+                      placeholder="client@example.com"
+                      style={{ ...styles.input, ...(errors.email ? styles.inputError : {}) }} autoComplete="off" />
+                    {errors.email && <div style={styles.errorMsg}>{errors.email}</div>}
+                  </Field>
+                </div>
               </div>
-            )}
-          </div>
+            </SectionRow>
 
-          {/* Notes */}
-          <div className="card border-0 mb-3 p-4" style={{ ...styles.card, backgroundColor: "#fffbeb", border: "1px solid #fde68a" }}>
-            <SectionHead icon={<FaStickyNote size={13} />} title="Notes" />
-            <textarea name="notes" value={form.notes} onChange={handleChange} rows={4}
-              placeholder="Add any notes about this customer — preferences, follow-ups, special requirements…"
-              style={{ ...styles.input, resize: "vertical", fontFamily: "inherit", lineHeight: 1.6, backgroundColor: "#fff" }} />
+            <SectionRow icon={<FaPhone size={12} />} title="Phone Numbers">
+              <div className="d-flex flex-column gap-2">
+                {form.phones.map((p) => (
+                  <div key={p.id} className="d-flex align-items-center gap-2">
+                    <select value={p.type} onChange={e => updatePhone(p.id, "type", e.target.value)}
+                      style={{ ...styles.select, width: 100, flexShrink: 0 }}>
+                      {phoneTypes.map(t => <option key={t} value={t}>{t}</option>)}
+                    </select>
+                    <input type="tel" value={p.value} onChange={e => updatePhone(p.id, "value", e.target.value)}
+                      placeholder="9876543210" maxLength={10}
+                      style={{ ...styles.input, ...(errors.phones ? styles.inputError : {}) }} autoComplete="off" />
+                    {form.phones.length > 1 && (
+                      <button onClick={() => removePhone(p.id)}
+                        className="border-0 bg-transparent d-flex align-items-center justify-content-center"
+                        style={{ color: "#ef4444", cursor: "pointer", flexShrink: 0, width: 26, height: 26 }}>
+                        <FaTimes size={12} />
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+              {errors.phones && <div style={styles.errorMsg}>{errors.phones}</div>}
+              <button onClick={addPhone}
+                className="d-flex align-items-center gap-2 border-0 fw-semibold mt-2"
+                style={{ background: "none", color: BRAND, cursor: "pointer", fontSize: "0.78rem", padding: 0 }}>
+                <FaPlus size={10} /> Add another number
+              </button>
+
+              <div className="mt-3" style={{ maxWidth: 320 }}>
+                <Field label="Support Number">
+                  <input type="tel" value={form.supportNumber}
+                    onChange={e => setForm(f => ({ ...f, supportNumber: e.target.value }))}
+                    placeholder="1800-123-4567" style={styles.input} autoComplete="off" />
+                </Field>
+              </div>
+            </SectionRow>
+
+            <SectionRow icon={<FaMapMarkerAlt size={12} />} title="Addresses">
+              <div className="d-flex flex-column gap-2">
+                {form.addresses.map((a) => (
+                  <div key={a.id} className="d-flex align-items-center gap-2">
+                    <select value={a.type} onChange={e => updateAddress(a.id, "type", e.target.value)}
+                      style={{ ...styles.select, width: 100, flexShrink: 0 }}>
+                      {addressTypes.map(t => <option key={t} value={t}>{t}</option>)}
+                    </select>
+                    <input type="text" value={a.value} onChange={e => updateAddress(a.id, "value", e.target.value)}
+                      placeholder="Street, City, State, PIN" style={styles.input} autoComplete="off" />
+                    {form.addresses.length > 1 && (
+                      <button onClick={() => removeAddress(a.id)}
+                        className="border-0 bg-transparent d-flex align-items-center justify-content-center"
+                        style={{ color: "#ef4444", cursor: "pointer", flexShrink: 0, width: 26, height: 26 }}>
+                        <FaTimes size={12} />
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+              <button onClick={addAddress}
+                className="d-flex align-items-center gap-2 border-0 fw-semibold mt-2"
+                style={{ background: "none", color: BRAND, cursor: "pointer", fontSize: "0.78rem", padding: 0 }}>
+                <FaPlus size={10} /> Add another address
+              </button>
+            </SectionRow>
+
+            <SectionRow icon={<FaCircle size={9} />} title="Status">
+              <select name="status" value={form.status} onChange={handleChange} style={{ ...styles.select, maxWidth: 200 }}>
+                <option value="Active">Active</option>
+                <option value="Inactive">Inactive</option>
+              </select>
+            </SectionRow>
+
+            <SectionRow icon={<FaTags size={12} />} title="Tags">
+              {form.tags.length > 0 && (
+                <div className="d-flex flex-wrap gap-2 mb-2">
+                  {form.tags.map(tag => (
+                    <span key={tag} className="d-flex align-items-center gap-2 rounded-pill fw-semibold"
+                      style={{
+                        padding: "5px 10px 5px 14px", fontSize: "0.76rem",
+                        backgroundColor: BRAND_SOFT, color: BRAND_DARK, border: `1.5px solid ${BRAND_SOFT_BORDER}`,
+                      }}>
+                      {tag}
+                      <FaTimes size={10} style={{ cursor: "pointer" }} onClick={() => removeTag(tag)} />
+                    </span>
+                  ))}
+                </div>
+              )}
+              <div className="d-flex gap-2">
+                <input type="text" value={tagInput} onChange={e => setTagInput(e.target.value)}
+                  onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); addTag(tagInput); } }}
+                  placeholder="Type a tag and press Enter…" style={styles.input} autoComplete="off" />
+                <button onClick={() => addTag(tagInput)}
+                  className="d-flex align-items-center gap-1 border-0 rounded-3 fw-semibold px-3"
+                  style={{ background: BRAND, color: "#fff", cursor: "pointer", fontSize: "0.78rem", flexShrink: 0 }}>
+                  <FaPlus size={10} /> Add
+                </button>
+              </div>
+             {customerTags.filter(t => !form.tags.includes(t)).length > 0 && (
+  <div className="d-flex flex-wrap gap-2 mt-2">
+    {customerTags.filter(t => !form.tags.includes(t)).map(tag => {
+      const { icon: Icon, bg, color, border } = tagStyleFor(tag);
+      return (
+        <button key={tag} onClick={() => addTag(tag)}
+          className="d-flex align-items-center gap-2 rounded-pill fw-semibold"
+          style={{
+            padding: "6px 14px", fontSize: "0.75rem", cursor: "pointer",
+            border: `1.5px solid ${border}`, backgroundColor: bg, color: color,
+            transition: "transform 0.15s ease, box-shadow 0.15s ease",
+          }}
+          onMouseEnter={e => {
+            e.currentTarget.style.transform = "translateY(-2px)";
+            e.currentTarget.style.boxShadow = `0 4px 10px ${color}33`;
+          }}
+          onMouseLeave={e => {
+            e.currentTarget.style.transform = "translateY(0)";
+            e.currentTarget.style.boxShadow = "none";
+          }}
+        >
+          <Icon size={11} /> {tag}
+        </button>
+      );
+    })}
+  </div>
+)}
+            </SectionRow>
+
+            <SectionRow icon={<FaStickyNote size={12} />} title="Notes">
+              <div className="d-flex flex-column gap-2">
+                {form.notes.map((n, i) => (
+                  <div key={n.id} style={{ position: "relative" }}>
+                    <textarea value={n.text} onChange={e => updateNote(n.id, e.target.value)} rows={2}
+                      placeholder={`Note ${i + 1} — preferences, follow-ups, special requirements…`}
+                      style={{ ...styles.input, resize: "vertical", fontFamily: "inherit", lineHeight: 1.5, backgroundColor: "#fffbeb" }} />
+                    {form.notes.length > 1 && (
+                      <button onClick={() => removeNote(n.id)}
+                        className="border-0 bg-transparent d-flex align-items-center justify-content-center"
+                        style={{ color: "#ef4444", cursor: "pointer", position: "absolute", top: 6, right: 6 }}>
+                        <FaTimes size={12} />
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+              <button onClick={addNote}
+                className="d-flex align-items-center gap-2 border-0 fw-semibold mt-2"
+                style={{ background: "none", color: "#92400e", cursor: "pointer", fontSize: "0.78rem", padding: 0 }}>
+                <FaPlus size={10} /> Add another note
+              </button>
+            </SectionRow>
+
           </div>
 
           {/* Footer */}
-          <div className="d-flex justify-content-end gap-3 mb-4 flex-wrap">
+          <div className="d-flex justify-content-end gap-3 mt-3 mb-4 flex-wrap">
             <button onClick={onBack} className="border-0 rounded-3 fw-semibold px-4 py-2"
-              style={{ backgroundColor: "#f1f5f9", color: "#475569", cursor: "pointer", fontSize: "0.85rem" }}
-              onMouseEnter={e => e.currentTarget.style.backgroundColor = "#e2e8f0"}
-              onMouseLeave={e => e.currentTarget.style.backgroundColor = "#f1f5f9"}
-            >
+              style={{ backgroundColor: "#f1f5f9", color: "#475569", cursor: "pointer", fontSize: "0.85rem" }}>
               Cancel
             </button>
             <button onClick={handleSave} disabled={saving}
               className="d-flex align-items-center gap-2 border-0 rounded-3 fw-semibold px-4 py-2"
               style={{
-                background: "linear-gradient(135deg,#f97316,#ea580c)", color: "#fff",
+                background: `linear-gradient(135deg, ${BRAND}, ${BRAND_DARK})`, color: "#fff",
                 cursor: saving ? "not-allowed" : "pointer", fontSize: "0.85rem",
-                boxShadow: "0 4px 12px rgba(249,115,22,0.3)",
+                boxShadow: `0 4px 12px ${BRAND}4d`,
               }}
             >
               <FaSave size={12} />
@@ -412,8 +664,8 @@ export default function CustomerForm({ customer, allCustomers = [], onSave, onBa
           </div>
         </div>
 
-        {/* ══ RIGHT: Preview ══  */}
-        <CustomerPreview form={form} customerId={customer?.id} />
+        {/* ══ RIGHT: Preview (togglable) ══ */}
+        {showPreview && <CustomerPreview form={form} customerId={customer?.id} />}
 
       </div>
     </>
@@ -423,92 +675,70 @@ export default function CustomerForm({ customer, allCustomers = [], onSave, onBa
 // ── Styles ──
 const styles = {
   previewHeader: {
-    display: "flex",
-    alignItems: "center",
-    gap: 8,
-    padding: "14px 16px",
-    borderBottom: "1px solid #f1f5f9",
-    backgroundColor: "#fafafa",
-    borderRadius: "16px 16px 0 0",
+    display: "flex", alignItems: "center", gap: 8,
+    padding: "12px 16px", borderBottom: "1px solid #f1f5f9",
+    backgroundColor: "#fafafa", borderRadius: "14px 14px 0 0",
   },
-  avatar: {
-    width: 56,
-    height: 56,
-    borderRadius: "50%",
-    background: "linear-gradient(135deg,#f97316,#ea580c)",
-    color: "#fff",
-    fontWeight: 700,
-    fontSize: "1.4rem",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    margin: "0 auto",
-    boxShadow: "0 4px 12px rgba(249,115,22,0.3)",
+  docHeading: {
+    borderBottom: `3px solid ${BRAND}`, paddingBottom: 10, marginBottom: 14,
   },
-  infoCard: {
-    backgroundColor: "#f8fafc",
-    borderRadius: 10,
-    overflow: "hidden",
-    border: "1px solid #f1f5f9",
+  docTable: {
+    border: "1px solid #eef2f0", borderRadius: 8, overflow: "hidden",
   },
-  infoRow: {
-    display: "flex",
-    alignItems: "center",
-    gap: 8,
-    padding: "8px 12px",
-    borderBottom: "1px solid #f1f5f9",
-    fontSize: "0.78rem",
+  docTableHead: {
+    display: "flex", backgroundColor: BRAND, color: "#fff",
+    fontSize: "0.66rem", fontWeight: 800, letterSpacing: "0.05em",
+    padding: "7px 10px", textTransform: "uppercase",
   },
-  infoIcon: { color: "#94a3b8", width: 16, flexShrink: 0 },
-  infoLabel: { color: "#94a3b8", width: 60, flexShrink: 0 },
-  infoValue: { color: "#0f172a", fontWeight: 500, flex: 1, wordBreak: "break-all" },
+  docTableRow: {
+    display: "flex", padding: "7px 10px", fontSize: "0.76rem",
+    borderTop: "1px solid #f1f5f9",
+  },
+  docTableLabel: { flex: "0 0 42%", color: "#64748b", fontWeight: 600 },
+  docTableValue: { flex: 1, color: "#0f172a", fontWeight: 500, wordBreak: "break-word" },
+  docBlock: { marginTop: 14 },
+  docBlockLabel: { fontSize: "0.68rem", fontWeight: 700, color: "#94a3b8", marginBottom: 6, letterSpacing: "0.04em" },
   tagChip: {
-    padding: "3px 10px",
-    borderRadius: 20,
-    fontSize: "0.7rem",
-    fontWeight: 600,
-    backgroundColor: "#fff7ed",
-    color: "#ea580c",
-    border: "1px solid #fed7aa",
+    padding: "3px 10px", borderRadius: 20, fontSize: "0.7rem", fontWeight: 600,
+    backgroundColor: BRAND_SOFT, color: BRAND_DARK, border: `1px solid ${BRAND_SOFT_BORDER}`,
   },
   autoNotice: {
-    display: "flex",
-    alignItems: "center",
-    gap: 6,
-    marginTop: 14,
-    padding: "10px 12px",
-    backgroundColor: "#ecfdf5",
-    borderRadius: 8,
-    border: "1px solid #a7f3d0",
+    display: "flex", alignItems: "center", gap: 6, marginTop: 16,
+    padding: "10px 12px", backgroundColor: "#ecfdf5", borderRadius: 8, border: "1px solid #a7f3d0",
   },
-  card: {
-    borderRadius: "16px",
-    boxShadow: "0 2px 10px rgba(0,0,0,0.06)",
+  sectionRow: {
+    borderTop: "1px solid #f1f5f9", paddingTop: 16, paddingBottom: 16,
   },
-  sectionHead: {
-    display: "flex", alignItems: "center", gap: 8,
-    marginBottom: 20, paddingBottom: 12, borderBottom: "1px solid #f1f5f9",
-  },
-  sectionIcon: {
+  sectionRowHead: { display: "flex", alignItems: "center", gap: 8 },
+  sectionIconSm: {
     display: "flex", alignItems: "center", justifyContent: "center",
-    width: 30, height: 30, borderRadius: 8,
-    background: "linear-gradient(135deg,#f97316,#ea580c)", color: "#fff",
+    width: 22, height: 22, borderRadius: 6, background: BRAND_SOFT, color: BRAND_DARK, flexShrink: 0,
   },
-  sectionTitle: { fontWeight: 700, fontSize: "0.95rem", color: "#0f172a" },
+  sectionTitleSm: { fontWeight: 700, fontSize: "0.82rem", color: "#0f172a" },
   label: {
-    display: "block", fontSize: "0.78rem", fontWeight: 600, color: "#475569",
-    marginBottom: 6, textTransform: "uppercase", letterSpacing: "0.04em",
+    display: "block", fontSize: "0.72rem", fontWeight: 600, color: "#94a3b8",
+    marginBottom: 5, textTransform: "uppercase", letterSpacing: "0.04em",
   },
   input: {
-    width: "100%", boxSizing: "border-box", padding: "10px 12px",
-    border: "1.5px solid #e2e8f0", borderRadius: 10, fontSize: "0.88rem",
+    width: "100%", boxSizing: "border-box", padding: "8px 11px",
+    border: "1.5px solid #e2e8f0", borderRadius: 8, fontSize: "0.85rem",
     color: "#0f172a", outline: "none", backgroundColor: "#fff", transition: "border-color 0.15s",
   },
   inputError: { borderColor: "#fca5a5", backgroundColor: "#fef2f2" },
   select: {
-    width: "100%", boxSizing: "border-box", padding: "10px 12px",
-    border: "1.5px solid #e2e8f0", borderRadius: 10, fontSize: "0.88rem",
+    width: "100%", boxSizing: "border-box", padding: "8px 11px",
+    border: "1.5px solid #e2e8f0", borderRadius: 8, fontSize: "0.85rem",
     color: "#0f172a", outline: "none", backgroundColor: "#fff", cursor: "pointer", appearance: "auto",
   },
-  errorMsg: { marginTop: 4, fontSize: "0.75rem", color: "#ef4444", fontWeight: 500 },
+  errorMsg: { marginTop: 4, fontSize: "0.72rem", color: "#ef4444", fontWeight: 500 },
+  draftBanner: {
+    display: "flex", alignItems: "center", justifyContent: "space-between",
+    gap: 12, flexWrap: "wrap",
+    backgroundColor: "#fffbeb", border: "1.5px solid #fde68a", borderRadius: 12,
+    padding: "12px 16px", marginBottom: 16,
+  },
+  draftIcon: {
+    display: "flex", alignItems: "center", justifyContent: "center",
+    width: 30, height: 30, borderRadius: 8, background: "#fde68a", color: "#92400e", flexShrink: 0,
+  },
 };

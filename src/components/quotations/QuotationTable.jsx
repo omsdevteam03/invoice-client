@@ -8,12 +8,12 @@ import {
 } from "react-icons/fa";
 
 export const templates = [
-  { id: "tpl-01", title: "Basic Website Development", subtitle: "5 Pages", icon: <FaCode size={20} />, color: "#3b82f6", bg: "linear-gradient(135deg,#3b82f6,#1d4ed8)", timeline: "7–10 working days", amount: 3000, tech: "Next.js" },
-  { id: "tpl-02", title: "UI/UX Design Package", subtitle: "Full Branding", icon: <FaPaintBrush size={20} />, color: "#8b5cf6", bg: "linear-gradient(135deg,#8b5cf6,#6d28d9)", timeline: "10–14 working days", amount: 8000, tech: "Figma" },
-  { id: "tpl-03", title: "Digital Marketing", subtitle: "3 Month Campaign", icon: <FaBullhorn size={20} />, color: "#f97316", bg: "linear-gradient(135deg,#f97316,#ea580c)", timeline: "3 months", amount: 15000, tech: "Google Ads, Meta" },
-  { id: "tpl-04", title: "E-Commerce Store", subtitle: "Full Setup", icon: <FaStore size={20} />, color: "#10b981", bg: "linear-gradient(135deg,#10b981,#059669)", timeline: "14–20 working days", amount: 25000, tech: "Next.js + Stripe" },
-  { id: "tpl-05", title: "Mobile App Development", subtitle: "iOS & Android", icon: <FaMobile size={20} />, color: "#ec4899", bg: "linear-gradient(135deg,#ec4899,#db2777)", timeline: "30–45 working days", amount: 60000, tech: "React Native" },
-  { id: "tpl-06", title: "Backend API Development", subtitle: "REST API", icon: <FaServer size={20} />, color: "#64748b", bg: "linear-gradient(135deg,#64748b,#475569)", timeline: "10–15 working days", amount: 18000, tech: "Node.js + MongoDB" },
+  { id: "tpl-01", title: "Basic Website Development", subtitle: "5 Pages", icon: <FaCode size={20} />, color: "#3b82f6", bg: "linear-gradient(135deg,#3b82f6,#1d4ed8)", timeline: "7–10 working days", amount: 3000, tech: "Next.js", templateStyle: "classic" },
+  { id: "tpl-02", title: "UI/UX Design Package", subtitle: "Full Branding", icon: <FaPaintBrush size={20} />, color: "#8b5cf6", bg: "linear-gradient(135deg,#8b5cf6,#6d28d9)", timeline: "10–14 working days", amount: 8000, tech: "Figma", templateStyle: "creative" },
+  { id: "tpl-03", title: "Digital Marketing", subtitle: "3 Month Campaign", icon: <FaBullhorn size={20} />, color: "#f97316", bg: "linear-gradient(135deg,#f97316,#ea580c)", timeline: "3 months", amount: 15000, tech: "Google Ads, Meta", templateStyle: "bold" },
+  { id: "tpl-04", title: "E-Commerce Store", subtitle: "Full Setup", icon: <FaStore size={20} />, color: "#10b981", bg: "linear-gradient(135deg,#10b981,#059669)", timeline: "14–20 working days", amount: 25000, tech: "Next.js + Stripe", templateStyle: "modern" },
+  { id: "tpl-05", title: "Mobile App Development", subtitle: "iOS & Android", icon: <FaMobile size={20} />, color: "#ec4899", bg: "linear-gradient(135deg,#ec4899,#db2777)", timeline: "30–45 working days", amount: 60000, tech: "React Native", templateStyle: "creative" },
+  { id: "tpl-06", title: "Backend API Development", subtitle: "REST API", icon: <FaServer size={20} />, color: "#64748b", bg: "linear-gradient(135deg,#64748b,#475569)", timeline: "10–15 working days", amount: 18000, tech: "Node.js + MongoDB", templateStyle: "corporate" },
 ];
 
  export const initialQuotations = [

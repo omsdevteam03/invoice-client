@@ -1,9 +1,8 @@
 import { useState, useEffect, useRef } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { FaFileInvoiceDollar, FaSignInAlt, FaBars, FaBell, FaMoon, FaSun, FaSearch, FaUser, FaCog, FaSignOutAlt, FaChevronDown } from "react-icons/fa";
-import useAuth from "../../hooks/useAuth";
+import { FaFileInvoiceDollar, FaSignInAlt, FaUser, FaCog, FaSignOutAlt, FaChevronDown } from "react-icons/fa";import useAuth from "../../hooks/useAuth";
 
-export default function Navbar({ onMenuClick }) {
+export default function Navbar() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const [darkMode, setDarkMode] = useState(false);
@@ -38,23 +37,16 @@ export default function Navbar({ onMenuClick }) {
       <nav
         className="no-print d-flex justify-content-between align-items-center px-3 px-md-4 flex-shrink-0"
         style={{
-          background: "linear-gradient(135deg, #ea6000, #f97316)",
+          background: "linear-gradient(135deg, #1F6F5C, #2d8a73)",
           height: "62px",
           zIndex: 101,
-          boxShadow: "0 2px 12px rgba(249,115,22,0.3)",
+          boxShadow: "0 2px 12px rgba(31,111,92,0.3)",
           position: "sticky",
           top: 0,
         }}
       >
         {/* Left: Logo */}
         <div className="d-flex align-items-center gap-3">
-          <button
-            className="btn btn-link text-white p-0 d-lg-none"
-            onClick={onMenuClick}
-            style={{ fontSize: "1.3rem" }}
-          >
-            <FaBars />
-          </button>
           <Link
             to="/"
             className="text-white fw-bold text-decoration-none d-flex align-items-center gap-2"
@@ -68,72 +60,7 @@ export default function Navbar({ onMenuClick }) {
         {/* Right: Actions */}
         <div className="d-flex align-items-center gap-2">
 
-          {/* Search */}
-          <div style={{ display: "flex", alignItems: "center" }}>
-            {showSearch && (
-              <input
-                autoFocus
-                placeholder="Search..."
-                onBlur={() => setShowSearch(false)}
-                style={{
-                  border: "none", outline: "none",
-                  background: "rgba(255,255,255,0.2)",
-                  color: "#fff", borderRadius: 20,
-                  padding: "5px 14px", fontSize: "0.82rem",
-                  width: 160, marginRight: 6,
-                }}
-              />
-            )}
-            <button
-              onClick={() => setShowSearch(!showSearch)}
-              style={{
-                width: 34, height: 34, borderRadius: "50%", border: "none",
-                background: "rgba(255,255,255,0.15)", color: "#fff",
-                display: "flex", alignItems: "center", justifyContent: "center",
-                cursor: "pointer",
-              }}
-            >
-              <FaSearch size={13} />
-            </button>
-          </div>
-
-          {/* Notifications */}
-          <button
-            style={{
-              width: 34, height: 34, borderRadius: "50%", border: "none",
-              background: "rgba(255,255,255,0.15)", color: "#fff",
-              display: "flex", alignItems: "center", justifyContent: "center",
-              cursor: "pointer", position: "relative",
-            }}
-          >
-            <FaBell size={13} />
-            {notifCount > 0 && (
-              <span style={{
-                position: "absolute", top: 2, right: 2,
-                width: 16, height: 16, borderRadius: "50%",
-                background: "#ef4444", color: "#fff",
-                fontSize: "0.6rem", fontWeight: 700,
-                display: "flex", alignItems: "center", justifyContent: "center",
-                border: "2px solid #f97316",
-              }}>
-                {notifCount}
-              </span>
-            )}
-          </button>
-
-          {/* Dark mode toggle */}
-          <button
-            onClick={() => setDarkMode(prev => !prev)}
-            style={{
-              width: 34, height: 34, borderRadius: "50%", border: "none",
-              background: darkMode ? "rgba(255,255,255,0.3)" : "rgba(255,255,255,0.15)",
-              color: "#fff",
-              display: "flex", alignItems: "center", justifyContent: "center",
-              cursor: "pointer", transition: "background 0.2s",
-            }}
-          >
-            {darkMode ? <FaSun size={14} /> : <FaMoon size={13} />}
-          </button>
+         
 
           {/* Divider */}
           <div style={{ width: 1, height: 24, background: "rgba(255,255,255,0.3)", margin: "0 4px" }} />
@@ -153,7 +80,7 @@ export default function Navbar({ onMenuClick }) {
               >
                 <div style={{
                   width: 26, height: 26, borderRadius: "50%",
-                  backgroundColor: "#fff", color: "#f97316",
+                  backgroundColor: "#fff", color: "#1F6F5C",
                   display: "flex", alignItems: "center", justifyContent: "center",
                   fontWeight: 800, fontSize: "0.75rem", flexShrink: 0,
                 }}>
@@ -180,11 +107,11 @@ export default function Navbar({ onMenuClick }) {
                   overflow: "hidden",
                 }}>
                   {/* Profile Info */}
-                  <div style={{ padding: "16px", borderBottom: "1px solid #f1f5f9", backgroundColor: "#fff7ed" }}>
+                  <div style={{ padding: "16px", borderBottom: "1px solid #f1f5f9", backgroundColor: "#eaf5f2" }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                       <div style={{
                         width: 40, height: 40, borderRadius: "50%",
-                        background: "linear-gradient(135deg,#f97316,#ea580c)",
+                        background: "linear-gradient(135deg,#1F6F5C,#17534A)",
                         color: "#fff", display: "flex", alignItems: "center",
                         justifyContent: "center", fontWeight: 800, fontSize: "1rem",
                       }}>
@@ -214,7 +141,7 @@ export default function Navbar({ onMenuClick }) {
                       onMouseEnter={e => e.currentTarget.style.backgroundColor = "#f8fafc"}
                       onMouseLeave={e => e.currentTarget.style.backgroundColor = "transparent"}
                     >
-                      <FaUser size={13} color="#f97316" /> My Profile
+                      <FaUser size={13} color="#1F6F5C" /> My Profile
                     </button>
 
                     <button
@@ -228,7 +155,7 @@ export default function Navbar({ onMenuClick }) {
                       onMouseEnter={e => e.currentTarget.style.backgroundColor = "#f8fafc"}
                       onMouseLeave={e => e.currentTarget.style.backgroundColor = "transparent"}
                     >
-                      <FaCog size={13} color="#f97316" /> Settings
+                      <FaCog size={13} color="#1F6F5C" /> Settings
                     </button>
 
                     <div style={{ height: 1, backgroundColor: "#f1f5f9", margin: "6px 0" }} />
@@ -254,7 +181,7 @@ export default function Navbar({ onMenuClick }) {
             <Link
               to="/login"
               className="btn fw-semibold rounded-pill px-3 d-flex align-items-center gap-2"
-              style={{ backgroundColor: "#fff", color: "#f97316", fontSize: "0.85rem" }}
+              style={{ backgroundColor: "#fff", color: "#1F6F5C", fontSize: "0.85rem" }}
             >
               <FaSignInAlt size={12} /> Login
             </Link>
@@ -332,7 +259,7 @@ export default function Navbar({ onMenuClick }) {
             <div style={{ textAlign: "center", marginBottom: 24 }}>
               <div style={{
                 width: 72, height: 72, borderRadius: "50%",
-                background: "linear-gradient(135deg,#f97316,#ea580c)",
+                background: "linear-gradient(135deg,#1F6F5C,#17534A)",
                 color: "#fff", display: "flex", alignItems: "center",
                 justifyContent: "center", fontWeight: 800, fontSize: "1.8rem",
                 margin: "0 auto 12px",
@@ -367,7 +294,7 @@ export default function Navbar({ onMenuClick }) {
               onClick={() => setShowProfile(false)}
               style={{
                 width: "100%", padding: "10px", border: "none",
-                borderRadius: 8, background: "linear-gradient(135deg,#f97316,#ea580c)",
+                borderRadius: 8, background: "linear-gradient(135deg,#1F6F5C,#17534A)",
                 color: "#fff", fontWeight: 600, cursor: "pointer", fontSize: "0.88rem",
               }}
             >

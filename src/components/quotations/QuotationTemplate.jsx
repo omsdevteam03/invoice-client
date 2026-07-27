@@ -1,7 +1,6 @@
 import { FaTimes, FaChevronRight } from "react-icons/fa";
 
-export default function QuotationTemplate({ templates, onClose, onSelect }) {
-  return (
+export default function QuotationTemplate({ templates, onClose, onSelect, onCustom }) {  return (
     <div
       style={{ position: "fixed", inset: 0, zIndex: 1000, backgroundColor: "rgba(15,23,42,0.8)", display: "flex", alignItems: "center", justifyContent: "center", padding: "20px", backdropFilter: "blur(4px)" }}
       onClick={onClose}
@@ -27,6 +26,7 @@ export default function QuotationTemplate({ templates, onClose, onSelect }) {
         {/* Template Grid */}
         <div style={{ overflowY: "auto", padding: "20px" }}>
           <div className="row g-3">
+       
             {templates.map((tpl) => (
               <div className="col-12 col-md-6 col-lg-4" key={tpl.id}>
                 <div
@@ -70,6 +70,29 @@ export default function QuotationTemplate({ templates, onClose, onSelect }) {
                 </div>
               </div>
             ))}
+
+            {/* Custom / blank template card */}
+            <div className="col-12 col-md-6 col-lg-4">
+              <div
+                style={{ border: "1.5px dashed #cbd5e1", borderRadius: "14px", cursor: "pointer", transition: "all 0.18s", overflow: "hidden", height: "100%", display: "flex", flexDirection: "column" }}
+                onMouseEnter={e => { e.currentTarget.style.borderColor = "#1F6F5C"; e.currentTarget.style.transform = "translateY(-2px)"; e.currentTarget.style.boxShadow = "0 6px 20px rgba(31,111,92,0.12)"; }}
+                onMouseLeave={e => { e.currentTarget.style.borderColor = "#cbd5e1"; e.currentTarget.style.transform = "translateY(0)"; e.currentTarget.style.boxShadow = "none"; }}
+                onClick={() => (onCustom ? onCustom() : onSelect(null))}
+              >
+                <div className="p-3 d-flex flex-column align-items-center justify-content-center text-center flex-fill" style={{ minHeight: 190 }}>
+                  <div className="d-flex align-items-center justify-content-center rounded-3 mb-3"
+                    style={{ width: 44, height: 44, background: "#f1f5f9", color: "#1F6F5C", fontSize: "1.4rem", fontWeight: 700 }}>
+                    +
+                  </div>
+                  <div className="fw-bold mb-1" style={{ color: "#0f172a", fontSize: "0.9rem" }}>Customize Your Own</div>
+                  <div style={{ color: "#94a3b8", fontSize: "0.75rem" }}>Start from a blank quotation</div>
+                  <div className="d-flex align-items-center justify-content-center gap-1 mt-3 py-2 px-3 rounded-3 fw-semibold"
+                    style={{ backgroundColor: "#E6F1EC", color: "#1F6F5C", fontSize: "0.75rem", border: "1px solid #BFDED2" }}>
+                    Start Blank <FaChevronRight size={9} />
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>

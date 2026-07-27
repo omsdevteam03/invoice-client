@@ -1,6 +1,5 @@
 import { useState, useEffect } from "react";
 import { FaArrowLeft, FaPrint, FaEdit } from "react-icons/fa";
-import { companyInfo } from "../../data/invoiceData";
 
 function numberToWords(num) {
   const ones = ["", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine",
@@ -39,11 +38,9 @@ const cell = (content, style = {}) => (
 
 export default function InvoiceDocument({ invoice, onBack, onEdit }) {
   const isMobile = useIsMobile(700);
-
   const subtotal = invoice.items.reduce((a, b) => a + Number(b.amount), 0);
-  const tax = invoice.gstType === "With GST" ? Math.round(subtotal * 0.18)
-    : invoice.gstType === "Without GST" ? Math.round(subtotal - subtotal / 1.18)
-    : 0;
+  const gstPercent = Number(invoice.gstPercent || 18);
+  const tax = invoice.gstType === "With GST" ? Math.round(subtotal * (gstPercent / 100)) : 0;
   const total = invoice.gstType === "With GST" ? subtotal + tax : subtotal;
   const amountPaid = Number(invoice.amountPaid || 0);
   const due = total - amountPaid;
@@ -84,14 +81,14 @@ export default function InvoiceDocument({ invoice, onBack, onEdit }) {
           <button onClick={() => onEdit(invoice)}
             className="d-flex align-items-center gap-2 border-0 rounded-3 fw-semibold px-3 py-2"
             style={{ backgroundColor: "#f1f5f9", color: "#475569", cursor: "pointer", fontSize: "0.85rem" }}
-            onMouseEnter={e => { e.currentTarget.style.backgroundColor = "#f97316"; e.currentTarget.style.color = "#fff"; }}
+            onMouseEnter={e => { e.currentTarget.style.backgroundColor = "#059669"; e.currentTarget.style.color = "#fff"; }}
             onMouseLeave={e => { e.currentTarget.style.backgroundColor = "#f1f5f9"; e.currentTarget.style.color = "#475569"; }}
           >
             <FaEdit size={12} /> Edit
           </button>
           <button onClick={() => window.print()}
             className="d-flex align-items-center gap-2 border-0 rounded-3 fw-semibold px-4 py-2"
-            style={{ background: "linear-gradient(135deg,#f97316,#ea580c)", color: "#fff", cursor: "pointer", fontSize: "0.85rem" }}
+            style={{ background: "linear-gradient(135deg,#10b981,#059669)", color: "#fff", cursor: "pointer", fontSize: "0.85rem" }}
           >
             <FaPrint size={12} /> Print / PDF
           </button>
@@ -100,7 +97,7 @@ export default function InvoiceDocument({ invoice, onBack, onEdit }) {
 
       {/* Invoice Document — scrolls horizontally on narrow screens instead
           of squashing the table illegibly, since it's a fixed-format doc. */}
-      <div
+   <div
         className="print-doc"
         style={{
           padding: isMobile ? "14px" : "32px",
@@ -109,24 +106,34 @@ export default function InvoiceDocument({ invoice, onBack, onEdit }) {
           backgroundColor: "#fff",
         }}
       >
+        {invoice.invoiceType === "Proforma" && (
+          <div style={{
+            textAlign: "center", fontWeight: 700, letterSpacing: "0.08em",
+            fontSize: isMobile ? "0.85rem" : "1rem", color: "#7c3aed",
+            border: "1.5px solid #7c3aed", borderRadius: 8, padding: "6px 0",
+            marginBottom: 12, backgroundColor: "#f5f3ff",
+          }}>
+            PROFORMA INVOICE
+          </div>
+        )}
         <table style={{ width: "100%", minWidth: isMobile ? "620px" : "auto", borderCollapse: "collapse", border: "1px solid #000" }}>
           <tbody>
 
             {/* Header Row — Company + Invoice Info */}
             <tr>
               <td colSpan={2} style={{ border: "1px solid #000", padding: isMobile ? "8px" : "10px 12px", width: "60%" }}>
-                <div className="d-flex align-items-start gap-3">
+               <div className="d-flex align-items-start gap-3">
                   {/* Logo placeholder */}
-                  {companyInfo.logo
-  ? <img src={companyInfo.logo} alt="Logo" style={{ width: isMobile ? 40 : 52, height: isMobile ? 40 : 52, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
-  : <div style={{ width: isMobile ? 40 : 52, height: isMobile ? 40 : 52, backgroundColor: "#f97316", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                  {invoice.logo
+  ? <img src={invoice.logo} alt="Logo" style={{ width: isMobile ? 40 : 52, height: isMobile ? 40 : 52, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
+  : <div style={{ width: isMobile ? 40 : 52, height: isMobile ? 40 : 52, backgroundColor: "#059669", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
       <span style={{ color: "#fff", fontWeight: 700, fontSize: "0.7rem", textAlign: "center", lineHeight: 1.2 }}>OMS</span>
     </div>
 }
-                  <div>
-                    <div style={{ fontWeight: 700, fontSize: isMobile ? "0.8rem" : "0.95rem", color: "#0f172a" }}>{companyInfo.name}</div>
-                    <div style={{ fontSize: isMobile ? "0.65rem" : "0.78rem", color: "#334155", whiteSpace: "pre-line" }}>{companyInfo.address}</div>
-                    <div style={{ fontSize: isMobile ? "0.65rem" : "0.78rem", color: "#334155" }}>GST Number (GSTIN): {companyInfo.gstin}</div>
+              <div>
+                    <div style={{ fontWeight: 700, fontSize: isMobile ? "0.8rem" : "0.95rem", color: "#0f172a" }}>{invoice.companyName}</div>
+                    <div style={{ fontSize: isMobile ? "0.65rem" : "0.78rem", color: "#334155", whiteSpace: "pre-line" }}>{invoice.companyAddress}</div>
+                    <div style={{ fontSize: isMobile ? "0.65rem" : "0.78rem", color: "#334155" }}>GST Number (GSTIN): {invoice.companyGSTIN}</div>
                   </div>
                 </div>
               </td>
@@ -183,10 +190,10 @@ export default function InvoiceDocument({ invoice, onBack, onEdit }) {
             </tr>
 
          {/* GST */}
-            {invoice.gstType !== "No GST" && (
+          {invoice.gstType === "With GST" && (
               <tr>
                 {mobileCell("", { border: "1px solid #000" })}
-                {mobileCell(<strong>{invoice.gstType === "With GST" ? "GST @ 18%" : "GST (included)"}</strong>, { border: "1px solid #000" })}
+                {mobileCell(<strong>{`GST @ ${gstPercent}%`}</strong>, { border: "1px solid #000" })}
                 {mobileCell("", { border: "1px solid #000" })}
                 {mobileCell("", { border: "1px solid #000" })}
                 {mobileCell(<strong>{tax.toFixed(2)}</strong>, { border: "1px solid #000", textAlign: "right" })}
@@ -212,12 +219,12 @@ export default function InvoiceDocument({ invoice, onBack, onEdit }) {
             </tr>
 
             {/* Amount Due */}
-            <tr style={{ backgroundColor: "#fff7ed" }}>
+            <tr style={{ backgroundColor: "#ecfdf5" }}>
               {mobileCell("", { border: "1px solid #000" })}
               {mobileCell(<strong>Amount Due</strong>, { border: "1px solid #000" })}
               {mobileCell("", { border: "1px solid #000" })}
               {mobileCell("", { border: "1px solid #000" })}
-              {mobileCell(<strong>{due.toFixed(2)}</strong>, { border: "1px solid #000", textAlign: "right", color: "#ea580c" })}
+              {mobileCell(<strong>{due.toFixed(2)}</strong>, { border: "1px solid #000", textAlign: "right", color: "#059669" })}
             </tr>
 
             {/* Amount in Words */}
@@ -250,9 +257,7 @@ export default function InvoiceDocument({ invoice, onBack, onEdit }) {
     )}
   </td>
   <td colSpan={2} style={{ border: "1px solid #000", padding: isMobile ? "6px 8px" : "8px 12px", textAlign: "right", verticalAlign: "bottom" }}>
-    <div style={{ fontSize: isMobile ? "0.68rem" : "0.82rem", color: "#334155" }}>For OrangeMegaSoftware Pvt ltd</div>
-
-    {/* Signature Image or Upload */}
+<div style={{ fontSize: isMobile ? "0.68rem" : "0.82rem", color: "#334155" }}>For {invoice.companyName}</div>    {/* Signature Image or Upload */}
     <div style={{ margin: "8px 0", minHeight: 48, display: "flex", justifyContent: "flex-end" }}>
       {invoice.signature
         ? <img src={invoice.signature} alt="Signature" style={{ maxHeight: 60, maxWidth: 160, objectFit: "contain" }} />

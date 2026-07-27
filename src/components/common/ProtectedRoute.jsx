@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { Navigate, Outlet } from "react-router-dom";
 import useAuth from "../../hooks/useAuth";
 import Navbar from "./Navbar";
@@ -6,59 +5,54 @@ import Sidebar from "./Sidebar";
 
 export default function ProtectedRoute() {
   const { user } = useAuth();
-  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   if (!user) return <Navigate to="/login" replace />;
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100vh", overflow: "hidden" }}>
+    <div style={{ display: "flex", flexDirection: "column", height: "100vh", maxWidth: "100vw", overflow: "hidden" }}>
 
       {/* Sticky Navbar */}
-      <Navbar onMenuClick={() => setSidebarOpen(prev => !prev)} />
+      <Navbar />
 
-      <div style={{ display: "flex", flex: 1, overflow: "hidden" }}>
+      <div style={{ display: "flex", flex: 1, minWidth: 0, overflow: "hidden" }}>
 
-        {/* Mobile Overlay */}
-        {sidebarOpen && (
-          <div
-            className="position-fixed top-0 start-0 w-100 h-100 d-lg-none"
-            style={{ backgroundColor: "rgba(0,0,0,0.5)", zIndex: 99 }}
-            onClick={() => setSidebarOpen(false)}
-          />
-        )}
+        {/* Sidebar — a left icon rail on desktop, a fixed bottom tab bar on
+            mobile. Rendered once; the split is handled entirely by Sidebar's
+            own responsive CSS, so there's no separate drawer/overlay to manage here. */}
+        <Sidebar />
 
-        {/* Mobile Sidebar */}
-        <div
-          className="position-fixed top-0 start-0 h-100 d-lg-none"
-          style={{
-            zIndex: 100,
-            paddingTop: "62px",
-            transform: sidebarOpen ? "translateX(0)" : "translateX(-100%)",
-            transition: "transform 0.28s cubic-bezier(0.4,0,0.2,1)",
-          }}
-          onClick={() => setSidebarOpen(false)} // link click பண்ணா close
-        >
-          <Sidebar />
-        </div>
-
-        {/* Desktop Sidebar */}
-        <div className="d-none d-lg-block flex-shrink-0">
-          <Sidebar />
-        </div>
-
-        {/* Main Content */}
+        {/* Main Content.
+            minWidth: 0 is the key fix — without it, a flex item refuses to
+            shrink below its content's natural width, so any page with a
+            wide table/card silently pushes this whole row (and the sticky
+            navbar above it) wider than the viewport, causing the page to
+            scroll sideways. overflowX: hidden is a second line of defense
+            so an overly-wide page clips instead of leaking out. */}
         <main
+          className="main-content"
           style={{
             flex: 1,
+            minWidth: 0,
             padding: "28px 32px",
             backgroundColor: "#f1f5f9",
             overflowY: "auto",
+            overflowX: "hidden",
           }}
         >
           <Outlet />
         </main>
 
       </div>
+
+      {/* Leave room at the bottom of the content on mobile so the floating
+          pill nav never covers the last bit of the page. */}
+      <style>{`
+        @media (max-width: 760px) {
+          .main-content {
+            padding: 16px 16px calc(60px + 14px + env(safe-area-inset-bottom, 0px) + 16px) !important;
+          }
+        }
+      `}</style>
     </div>
   );
 }
