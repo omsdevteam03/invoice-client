@@ -56,6 +56,15 @@ function normalizeValues(list, legacySingle) {
   return [];
 }
 
+function normalizeEntries(list, legacySingle) {
+  if (Array.isArray(list) && list.length) {
+    return list
+      .map(e => ({ type: e?.type || "Other", value: e?.value?.trim() }))
+      .filter(e => e.value);
+  }
+  if (legacySingle) return [{ type: "Other", value: legacySingle }];
+  return [];
+}
 // Single contact row — no boxed icon background, just an outlined circle
 function ContactRow({ icon, label, children, last }) {
   return (
@@ -110,9 +119,14 @@ export default function CustomerDetail({ customer: c, onBack, onEdit, quotations
       return sum + (inv.gstType === "With GST" ? subtotal + tax : subtotal);
     }, 0);
 
-  const phoneNumbers = normalizeValues(c.phones, c.phone);
-  const addressValues = normalizeValues(c.addresses, c.address);
-  const notes = normalizeNotes(c.notes);
+   const emailEntries = normalizeEntries(c.emails, c.email);
+  const emailValues = emailEntries.map(e => e.value);
+  const phoneEntries = normalizeEntries(c.phones, c.phone);
+  const phoneNumbers = phoneEntries.map(e => e.value);
+  const whatsappEntries = normalizeEntries(c.whatsapps, c.whatsapp);
+  const whatsappNumbers = whatsappEntries.map(e => e.value);
+
+  const addressValues = normalizeValues(c.addresses, c.address);  const notes = normalizeNotes(c.notes);
 
   // Merge quotations + invoices into a single "recent activity" feed, newest first.
   const recentActivity = [
@@ -137,40 +151,67 @@ export default function CustomerDetail({ customer: c, onBack, onEdit, quotations
     .sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0))
     .slice(0, 6);
 
+const [selectedEmailIdx, setSelectedEmailIdx] = useState(0);
+  const activeEmail = emailValues[selectedEmailIdx] ?? emailValues[0] ?? "";
   const [selectedPhoneIdx, setSelectedPhoneIdx] = useState(0);
   const activePhone = phoneNumbers[selectedPhoneIdx] ?? phoneNumbers[0] ?? "";
+  const [selectedWhatsappIdx, setSelectedWhatsappIdx] = useState(0);
+  const activeWhatsapp = whatsappNumbers[selectedWhatsappIdx] ?? whatsappNumbers[0] ?? activePhone;
 
   // Build the ordered list of rows to render, so "last" (no border) is easy to compute
-  const rows = [
-    c.email && { key: "email", icon: <FaEnvelope size={13} />, label: "Email", content: <div style={{ fontSize: "0.86rem", color: "#0f172a", fontWeight: 600 }}>{c.email}</div> },
-    phoneNumbers.length > 0 && {
-      key: "phone", icon: <FaPhone size={13} />, label: "Phone",
-      content: phoneNumbers.length > 1 ? (
+ const rows = [
+    emailValues.length > 0 && {
+      key: "email", icon: <FaEnvelope size={13} />, label: "Email",
+      content: emailEntries.length > 1 ? (
         <div className="d-flex align-items-center gap-1">
-          <select className="cd-phone-select" value={selectedPhoneIdx} onChange={e => setSelectedPhoneIdx(Number(e.target.value))}>
-            {phoneNumbers.map((num, i) => <option key={i} value={i}>{num}</option>)}
+          <select className="cd-phone-select" value={selectedEmailIdx} onChange={e => setSelectedEmailIdx(Number(e.target.value))}>
+            {emailEntries.map((e, i) => <option key={i} value={i}>{e.type}: {e.value}</option>)}
           </select>
           <FaChevronDown size={9} color="#64748b" style={{ marginLeft: -14, pointerEvents: "none" }} />
         </div>
       ) : (
-        <div style={{ fontSize: "0.86rem", color: "#0f172a", fontWeight: 600 }}>{phoneNumbers[0]}</div>
+        <div style={{ fontSize: "0.86rem", color: "#0f172a", fontWeight: 600 }}>{emailEntries[0].type}: {emailEntries[0].value}</div>
       ),
     },
-    c.supportNumber && { key: "support", icon: <FaHeadset size={13} />, label: "Support Number", content: <div style={{ fontSize: "0.86rem", color: "#0f172a", fontWeight: 600 }}>{c.supportNumber}</div> },
-    ...addressValues.map((addr, i) => ({
+     phoneNumbers.length > 0 && {
+      key: "phone", icon: <FaPhone size={13} />, label: "Phone",
+      content: phoneEntries.length > 1 ? (
+        <div className="d-flex align-items-center gap-1">
+          <select className="cd-phone-select" value={selectedPhoneIdx} onChange={e => setSelectedPhoneIdx(Number(e.target.value))}>
+            {phoneEntries.map((e, i) => <option key={i} value={i}>{e.value}</option>)}
+          </select>
+          <FaChevronDown size={9} color="#64748b" style={{ marginLeft: -14, pointerEvents: "none" }} />
+        </div>
+      ) : (
+        <div style={{ fontSize: "0.86rem", color: "#0f172a", fontWeight: 600 }}>{phoneEntries[0].value}</div>
+      ),
+    },
+ whatsappNumbers.length > 0 && {
+      key: "whatsapp", icon: <FaWhatsapp size={13} />, label: "WhatsApp",
+      content: whatsappEntries.length > 1 ? (
+        <div className="d-flex align-items-center gap-1">
+          <select className="cd-phone-select" value={selectedWhatsappIdx} onChange={e => setSelectedWhatsappIdx(Number(e.target.value))}>
+            {whatsappEntries.map((e, i) => <option key={i} value={i}>{e.value}</option>)}
+          </select>
+          <FaChevronDown size={9} color="#64748b" style={{ marginLeft: -14, pointerEvents: "none" }} />
+        </div>
+      ) : (
+        <div style={{ fontSize: "0.86rem", color: "#0f172a", fontWeight: 600 }}>{whatsappEntries[0].value}</div>
+      ),
+    },
+    c.supportNumber && { key: "support", icon: <FaHeadset size={13} />, label: "Support Number", content: <div style={{ fontSize: "0.86rem", color: "#0f172a", fontWeight: 600 }}>{c.supportNumber}</div> },    ...addressValues.map((addr, i) => ({
       key: `addr-${i}`, icon: <FaMapMarkerAlt size={13} />,
       label: addressValues.length > 1 ? `Address ${i + 1}` : "Address",
       content: <div style={{ fontSize: "0.86rem", color: "#0f172a", fontWeight: 600 }}>{addr}</div>,
     })),
-    // These only appear if your customer record actually has the field — safe to keep even if unused.
-    c.gstNumber && { key: "gst", icon: <FaBuilding size={13} />, label: "GSTIN", content: <div style={{ fontSize: "0.86rem", color: "#0f172a", fontWeight: 600 }}>{c.gstNumber}</div> },
-    c.website && { key: "website", icon: <FaBuilding size={13} />, label: "Website", content: <div style={{ fontSize: "0.86rem", color: "#0f172a", fontWeight: 600 }}>{c.website}</div> },
-    (c.createdAt || c.customerSince) && {
-      key: "since", icon: <FaBuilding size={13} />, label: "Customer Since",
+    // 🔽 NEW: City / State / Country — shown as one combined row when any are present
+    (c.city || c.state || c.country) && {
+      key: "location", icon: <FaMapMarkerAlt size={13} />, label: "City / State / Country",
       content: <div style={{ fontSize: "0.86rem", color: "#0f172a", fontWeight: 600 }}>
-        {new Date(c.createdAt || c.customerSince).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
+        {[c.city, c.state, c.country].filter(Boolean).join(", ")}
       </div>,
     },
+       c.website && { key: "website", icon: <FaBuilding size={13} />, label: "Website", content: <div style={{ fontSize: "0.86rem", color: "#0f172a", fontWeight: 600 }}>{c.website}</div> },
   ].filter(Boolean);
 
 
@@ -186,7 +227,7 @@ export default function CustomerDetail({ customer: c, onBack, onEdit, quotations
     }}>
     <div style={{ flex: "1 1 480px", minWidth: 320, display: "flex", flexDirection: "column" }}>
       <style>{`
-        .cd-topbar {
+     .cd-topbar {
           display: flex;
           justify-content: space-between;
           align-items: center;
@@ -206,22 +247,51 @@ export default function CustomerDetail({ customer: c, onBack, onEdit, quotations
           cursor: pointer;
           padding-right: 18px;
         }
-        .cd-action {
+               .cd-action-combo {
+          position: relative;
+          display: flex;
+          align-items: stretch;
+          border-radius: 10px;
+          background: ${BRAND_SOFT};
+          border: 1px solid ${BRAND_SOFT_BORDER};
+          overflow: hidden;
+          transition: background-color 0.15s;
+        }
+        .cd-action-combo:hover { background: #dcefe9; }
+        .cd-action-main {
+          flex: 1;
           display: flex;
           align-items: center;
           justify-content: center;
           gap: 8px;
-          padding: 12px;
-          border-radius: 10px;
+          padding: 12px 6px;
           text-decoration: none;
           font-size: 0.85rem;
           font-weight: 600;
           color: ${BRAND_DARK};
-          background: ${BRAND_SOFT};
-          border: 1px solid ${BRAND_SOFT_BORDER};
-          transition: background-color 0.15s;
+          min-width: 0;
         }
-        .cd-action:hover { background: #dcefe9; color: ${BRAND_DARK}; }
+        .cd-action-combo.cd-solo .cd-action-main { padding: 12px; }
+        .cd-action-chev-wrap {
+          position: relative;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          width: 26px;
+          flex-shrink: 0;
+          border-left: 1px solid ${BRAND_SOFT_BORDER};
+          color: ${BRAND_DARK};
+        }
+        .cd-action-inline-select {
+          position: absolute;
+          inset: 0;
+          width: 100%;
+          height: 100%;
+          opacity: 0;
+          cursor: pointer;
+          border: none;
+        }
+
       `}</style>
 
       {/* Top Bar */}
@@ -302,18 +372,51 @@ export default function CustomerDetail({ customer: c, onBack, onEdit, quotations
         {/* Spacer pushes quick actions to the bottom of the card so the card fills available height */}
         <div style={{ flex: 1 }} />
 
-        {/* Quick Actions — soft brand tint, not full solid blocks */}
+   {/* Quick Actions — soft brand tint, not full solid blocks */}
           <div className="row g-2 px-4 pb-4">
-          <div className="col-4">
-            <a href={`mailto:${c.email}`} className="cd-action"><FaEnvelope size={15} /> Email</a>
+                   <div className="col-4">
+            <div className={`cd-action-combo${emailEntries.length > 1 ? "" : " cd-solo"}`}>
+              <a href={`mailto:${activeEmail}`} className="cd-action-main"><FaEnvelope size={15} /> Email</a>
+              {emailEntries.length > 1 && (
+                <div className="cd-action-chev-wrap" title="Choose email">
+                  <FaChevronDown size={9} />
+                  <select className="cd-action-inline-select" value={selectedEmailIdx}
+                    onChange={e => setSelectedEmailIdx(Number(e.target.value))}>
+                    {emailEntries.map((e, i) => <option key={i} value={i}>{e.type}: {e.value}</option>)}
+                  </select>
+                </div>
+              )}
+            </div>
           </div>
           <div className="col-4">
-            <a href={`tel:${activePhone}`} className="cd-action"><FaPhone size={15} /> Call</a>
+            <div className={`cd-action-combo${phoneEntries.length > 1 ? "" : " cd-solo"}`}>
+              <a href={`tel:${activePhone}`} className="cd-action-main"><FaPhone size={15} /> Call</a>
+              {phoneEntries.length > 1 && (
+                <div className="cd-action-chev-wrap" title="Choose number">
+                  <FaChevronDown size={9} />
+                                   <select className="cd-action-inline-select" value={selectedPhoneIdx}
+                    onChange={e => setSelectedPhoneIdx(Number(e.target.value))}>
+                    {phoneEntries.map((e, i) => <option key={i} value={i}>{e.value}</option>)}
+                  </select>
+                </div>
+              )}
+            </div>
           </div>
           <div className="col-4">
-            <a href={`https://wa.me/91${activePhone}`} target="_blank" rel="noopener noreferrer" className="cd-action">
-              <FaWhatsapp size={15} /> WhatsApp
-            </a>
+            <div className={`cd-action-combo${whatsappEntries.length > 1 ? "" : " cd-solo"}`}>
+              <a href={`https://wa.me/91${activeWhatsapp}`} target="_blank" rel="noopener noreferrer" className="cd-action-main">
+                <FaWhatsapp size={15} /> WhatsApp
+              </a>
+              {whatsappEntries.length > 1 && (
+                <div className="cd-action-chev-wrap" title="Choose number">
+                  <FaChevronDown size={9} />
+                                   <select className="cd-action-inline-select" value={selectedWhatsappIdx}
+                    onChange={e => setSelectedWhatsappIdx(Number(e.target.value))}>
+                    {whatsappEntries.map((e, i) => <option key={i} value={i}>{e.value}</option>)}
+                  </select>
+                </div>
+              )}
+            </div>
           </div>
      
         </div>

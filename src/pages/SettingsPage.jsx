@@ -1,13 +1,15 @@
 import { useState } from 'react';
-import { FaBuilding, FaUser, FaFileInvoiceDollar } from 'react-icons/fa';
+import { FaBuilding, FaUser, FaFileInvoiceDollar, FaDatabase } from 'react-icons/fa';
 import CompanySettings from '../components/settings/CompanySettings';
 import InvoiceQuotationSettings from '../components/settings/InvoiceQuotationSettings';
 import ProfileSettings from '../components/settings/ProfileSettings';
+import BackupRestoreSettings from '../components/settings/BackupRestoreSettings';
 
 const navItems = [
   { id: 'company', label: 'Company', icon: <FaBuilding size={14} />, Component: CompanySettings },
   { id: 'invoice', label: 'Invoice & Quotation', icon: <FaFileInvoiceDollar size={14} />, Component: InvoiceQuotationSettings },
   { id: 'profile', label: 'Profile', icon: <FaUser size={14} />, Component: ProfileSettings },
+  { id: 'backup', label: 'Backup & Restore', icon: <FaDatabase size={14} />, Component: BackupRestoreSettings },
 ];
 
 export default function SettingsPage() {

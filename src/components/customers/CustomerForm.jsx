@@ -6,7 +6,8 @@ import {
   FaEye, FaCheckCircle, FaPlus, FaTimes,
   FaHeadset, FaToggleOn, FaToggleOff, FaCircle,
   FaHistory, FaGlobe, FaMobileAlt, FaPaintBrush,
-  FaSearch, FaShoppingCart, FaTools,
+  FaSearch, FaShoppingCart, FaTools, FaWhatsapp,
+  FaIdCard,
 } from "react-icons/fa";
 import { customerTags } from "../../data/customerData.jsx";
 
@@ -16,20 +17,24 @@ const BRAND_SOFT = "#e8f3f0";
 const BRAND_SOFT_BORDER = "#bfe0d6";
 
 const phoneTypes = ["Mobile", "Work", "Home", "Other"];
+const emailTypes = ["Personal", "Work", "Other"];
 const addressTypes = ["Home", "Office", "Other"];
+const customerTypeOptions = ["Business", "Individual", "Government", "Other"];
 
 // Each known tag gets its own color + icon so the suggestion pills don't
 // all look like the same flat gray chip. Unknown/custom tags fall back
 // to a neutral style automatically (see tagStyleFor below).
 const TAG_STYLES = {
-  Web:          { icon: FaGlobe,        bg: "#eff6ff", color: "#3b82f6", border: "#bfdbfe" },
-  App:          { icon: FaMobileAlt,    bg: "#f5f3ff", color: "#7c3aed", border: "#ddd6fe" },
-  Design:       { icon: FaPaintBrush,   bg: "#fdf2f8", color: "#db2777", border: "#fbcfe8" },
-  SEO:          { icon: FaSearch,       bg: "#ecfdf5", color: "#059669", border: "#a7f3d0" },
+  Web: { icon: FaGlobe, bg: "#eff6ff", color: "#3b82f6", border: "#bfdbfe" },
+  App: { icon: FaMobileAlt, bg: "#f5f3ff", color: "#7c3aed", border: "#ddd6fe" },
+  Design: { icon: FaPaintBrush, bg: "#fdf2f8", color: "#db2777", border: "#fbcfe8" },
+  SEO: { icon: FaSearch, bg: "#ecfdf5", color: "#059669", border: "#a7f3d0" },
   "E-commerce": { icon: FaShoppingCart, bg: "#fff7ed", color: "#ea580c", border: "#fed7aa" },
-  Maintenance:  { icon: FaTools,        bg: "#f1f5f9", color: "#475569", border: "#cbd5e1" },
+  Maintenance: { icon: FaTools, bg: "#f1f5f9", color: "#475569", border: "#cbd5e1" },
 };
-const tagStyleFor = (tag) => TAG_STYLES[tag] || { icon: FaTags, bg: "#f8fafc", color: "#64748b", border: "#e2e8f0" };// ── Draft auto-save (localStorage) ──────────────────────────────────────────
+const tagStyleFor = (tag) => TAG_STYLES[tag] || { icon: FaTags, bg: "#f8fafc", color: "#64748b", border: "#e2e8f0" };
+
+// ── Draft auto-save (localStorage) ──────────────────────────────────────────
 // Keeps whatever the user has typed even if they forget to click Save and
 // navigate away, close the tab, or refresh the page.
 export const DRAFT_PREFIX = "cf_draft_";
@@ -54,10 +59,16 @@ const nextId = () => `row-${Date.now()}-${++uid}`;
 const EMPTY_FORM = {
   fullName: "",
   company: "",
-  email: "",
+  emails: [{ id: nextId(), type: "Personal", value: "" }],
   phones: [{ id: nextId(), type: "Mobile", value: "" }],
+  whatsapps: [{ id: nextId(), type: "Mobile", value: "" }],
   supportNumber: "",
   addresses: [{ id: nextId(), type: "Home", value: "" }],
+  city: "",
+  state: "",
+  country: "India",
+  gstNumber: "",
+  customerType: "Business",
   status: "Active",
   tags: [],
   notes: [{ id: nextId(), text: "" }],
@@ -68,14 +79,24 @@ function buildFormFromCustomer(c) {
   return {
     fullName: c.name ?? "",
     company: c.company ?? "",
-    email: c.email ?? "",
+    emails: c.emails?.length
+      ? c.emails.map(e => ({ id: nextId(), type: e.type ?? "Personal", value: e.value ?? "" }))
+      : [{ id: nextId(), type: "Personal", value: c.email ?? "" }],
     phones: c.phones?.length
       ? c.phones.map(p => ({ id: nextId(), type: p.type ?? "Mobile", value: p.value ?? "" }))
       : [{ id: nextId(), type: "Mobile", value: c.phone ?? "" }],
     supportNumber: c.supportNumber ?? "",
+    whatsapps: c.whatsapps?.length
+      ? c.whatsapps.map(w => ({ id: nextId(), type: w.type ?? "Mobile", value: w.value ?? "" }))
+      : [{ id: nextId(), type: "Mobile", value: "" }],
     addresses: c.addresses?.length
       ? c.addresses.map(a => ({ id: nextId(), type: a.type ?? "Home", value: a.value ?? "" }))
       : [{ id: nextId(), type: "Home", value: c.address ?? "" }],
+    city: c.city ?? "",
+    state: c.state ?? "",
+    country: c.country ?? "India",
+    gstNumber: c.gstNumber ?? "",
+    customerType: c.customerType ?? c.type ?? "Business",
     status: c.status === "Lead" ? "Active" : (c.status ?? "Active"),
     tags: c.tags ?? [],
     notes: c.notes
@@ -86,7 +107,9 @@ function buildFormFromCustomer(c) {
 
 function generateId(allCustomers) {
   const max = allCustomers.reduce((m, c) => {
-    const n = parseInt(c.id?.replace("CUST-", "") || "0", 10);
+    if (!c.id || !c.id.startsWith("CUST-")) return m;
+    const n = parseInt(c.id.slice(5), 10);
+    if (Number.isNaN(n)) return m;
     return Math.max(m, n);
   }, 0);
   return `CUST-${String(max + 1).padStart(3, "0")}`;
@@ -150,8 +173,10 @@ function DraftBanner({ draft, onRestore, onDiscard }) {
   );
 }
 
+
 // ── Live Preview — document/table style ─────────────────────────────────────
 function CustomerPreview({ form, customerId }) {
+  const filledEmails = form.emails.filter(e => e.value.trim());
   const filledPhones = form.phones.filter(p => p.value.trim());
   const filledAddresses = form.addresses.filter(a => a.value.trim());
   const filledNotes = form.notes.filter(n => n.text.trim());
@@ -159,7 +184,9 @@ function CustomerPreview({ form, customerId }) {
   const rows = [
     { label: "Full Name", value: form.fullName },
     { label: "Company", value: form.company },
-    { label: "Email", value: form.email },
+    ...(filledEmails.length
+      ? filledEmails.map(e => ({ label: `Email (${e.type})`, value: e.value }))
+      : [{ label: "Email", value: "" }]),
     ...(filledPhones.length
       ? filledPhones.map(p => ({ label: `Phone (${p.type})`, value: p.value }))
       : [{ label: "Phone", value: "" }]),
@@ -167,6 +194,9 @@ function CustomerPreview({ form, customerId }) {
     ...(filledAddresses.length
       ? filledAddresses.map(a => ({ label: `Address (${a.type})`, value: a.value }))
       : [{ label: "Address", value: "" }]),
+    { label: "City", value: form.city },
+    { label: "State", value: form.state },
+      { label: "Country", value: form.country },
     { label: "Status", value: form.status },
   ];
 
@@ -237,12 +267,16 @@ function CustomerPreview({ form, customerId }) {
 
 
 // ── Main Form ─────────────────────────────────────────────────────────────────
-export default function CustomerForm({ customer, allCustomers = [], onSave, onBack, draftId }) {
-  const isEdit = Boolean(customer);
+// `prefillProfile`: an optional saved Customer Profile (see
+// CustomerProfilesSection) used to seed a brand-new customer's form when the
+// user clicks "Use Profile". Ignored when `customer` (edit mode) is set.
+export default function CustomerForm({ customer, allCustomers = [], onSave, onBack, draftId }) {  const isEdit = Boolean(customer);
   const [instanceDraftId] = useState(() => draftId || `${Date.now()}_${Math.random().toString(36).slice(2, 7)}`);
   const draftKey = draftKeyFor(customer, instanceDraftId);
 
-  const [form, setForm] = useState(() => buildFormFromCustomer(customer));
+  const [form, setForm] = useState(() =>
+    customer ? buildFormFromCustomer(customer) : EMPTY_FORM
+  );
   const [errors, setErrors] = useState({});
   const [saving, setSaving] = useState(false);
   const [showPreview, setShowPreview] = useState(true);
@@ -263,7 +297,7 @@ export default function CustomerForm({ customer, allCustomers = [], onSave, onBa
         const parsed = JSON.parse(raw);
         if (parsed?.form) setPendingDraft(parsed);
       }
-    } catch {}
+    } catch { }
     setDraftChecked(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -277,7 +311,7 @@ export default function CustomerForm({ customer, allCustomers = [], onSave, onBa
         localStorage.setItem(draftKey, JSON.stringify({
           form, savedAt: Date.now(), fullName: form.fullName, company: form.company,
         }));
-      } catch {}
+      } catch { }
     }, 400);
     return () => clearTimeout(timer);
   }, [form, draftChecked, pendingDraft, draftKey]);
@@ -288,12 +322,12 @@ export default function CustomerForm({ customer, allCustomers = [], onSave, onBa
   };
 
   const handleDiscardDraft = () => {
-    try { localStorage.removeItem(draftKey); } catch {}
+    try { localStorage.removeItem(draftKey); } catch { }
     setPendingDraft(null);
   };
 
   const clearDraft = () => {
-    try { localStorage.removeItem(draftKey); } catch {}
+    try { localStorage.removeItem(draftKey); } catch { }
   };
 
   const handleChange = useCallback((e) => {
@@ -302,10 +336,21 @@ export default function CustomerForm({ customer, allCustomers = [], onSave, onBa
     setErrors((prev) => ({ ...prev, [name]: undefined }));
   }, []);
 
+  const addEmail = () => setForm(f => ({ ...f, emails: [...f.emails, { id: nextId(), type: "Personal", value: "" }] }));
+  const removeEmail = (id) => setForm(f => ({ ...f, emails: f.emails.filter(e => e.id !== id) }));
+  const updateEmail = (id, field, value) =>
+    setForm(f => ({ ...f, emails: f.emails.map(e => e.id === id ? { ...e, [field]: value } : e) }));
+
   const addPhone = () => setForm(f => ({ ...f, phones: [...f.phones, { id: nextId(), type: "Mobile", value: "" }] }));
   const removePhone = (id) => setForm(f => ({ ...f, phones: f.phones.filter(p => p.id !== id) }));
+
   const updatePhone = (id, field, value) =>
     setForm(f => ({ ...f, phones: f.phones.map(p => p.id === id ? { ...p, [field]: value } : p) }));
+
+  const addWhatsapp = () => setForm(f => ({ ...f, whatsapps: [...f.whatsapps, { id: nextId(), type: "Mobile", value: "" }] }));
+  const removeWhatsapp = (id) => setForm(f => ({ ...f, whatsapps: f.whatsapps.filter(w => w.id !== id) }));
+  const updateWhatsapp = (id, field, value) =>
+    setForm(f => ({ ...f, whatsapps: f.whatsapps.map(w => w.id === id ? { ...w, [field]: value } : w) }));
 
   const addAddress = () => setForm(f => ({ ...f, addresses: [...f.addresses, { id: nextId(), type: "Home", value: "" }] }));
   const removeAddress = (id) => setForm(f => ({ ...f, addresses: f.addresses.filter(a => a.id !== id) }));
@@ -329,9 +374,8 @@ export default function CustomerForm({ customer, allCustomers = [], onSave, onBa
   const validate = () => {
     const e = {};
     if (!form.fullName.trim()) e.fullName = "Full name is required";
-    if (form.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) {
-      e.email = "Invalid email address";
-    }
+    const badEmail = form.emails.find(em => em.value.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(em.value.trim()));
+    if (badEmail) e.emails = "Enter a valid email address";
     const hasPhone = form.phones.some(p => p.value.trim());
     if (!hasPhone) e.phones = "At least one phone number is required";
     else {
@@ -345,22 +389,32 @@ export default function CustomerForm({ customer, allCustomers = [], onSave, onBa
     const e = validate();
     if (Object.keys(e).length) { setErrors(e); return; }
     setSaving(true);
+    const filledEmails = form.emails.filter(e => e.value.trim());
     const filledPhones = form.phones.filter(p => p.value.trim());
+    const filledWhatsapps = form.whatsapps.filter(w => w.value.trim());
     const filledAddresses = form.addresses.filter(a => a.value.trim());
     const filledNotes = form.notes.filter(n => n.text.trim());
     const saved = {
       id: customer?.id ?? generateId(allCustomers),
-       isNew: !isEdit,
+      isNew: !isEdit,
       name: form.fullName.trim(),
       company: form.company.trim(),
-      email: form.email.trim(),
+      email: filledEmails[0]?.value ?? "",
+      emails: filledEmails,
       phone: filledPhones[0]?.value ?? "",
       phones: filledPhones,
       supportNumber: form.supportNumber.trim(),
+      whatsapp: filledWhatsapps[0]?.value ?? "",
+      whatsapps: filledWhatsapps,
       address: filledAddresses[0]?.value ?? "",
       addresses: filledAddresses,
+      city: form.city.trim(),
+      state: form.state.trim(),
+      country: form.country.trim(),
+      gstNumber: form.gstNumber.trim(),
+      customerType: form.customerType,
       status: form.status,
-      type: customer?.type ?? "Business",
+      type: form.customerType || customer?.type || "Business",
       since: customer?.since ?? new Date().toISOString().split("T")[0],
       totalBilled: customer?.totalBilled ?? 0,
       notes: filledNotes.map(n => n.text),
@@ -431,15 +485,14 @@ export default function CustomerForm({ customer, allCustomers = [], onSave, onBa
 
         {/* ══ LEFT: Form ══ */}
         <div className={`cf-form-side${showPreview ? " cf-half" : ""}`}>
-
-          {/* Top Bar */}
+          {/* Top Bar — plain (no sticky bg bar) */}
           <div className="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
             <button
               onClick={onBack}
-              className="d-flex align-items-center gap-2 border-0 rounded-3 fw-semibold px-3 py-2"
-              style={{ backgroundColor: "#f1f5f9", color: "#475569", cursor: "pointer", fontSize: "0.85rem" }}
+              className="d-flex align-items-center gap-1 border-0 rounded-3 fw-semibold px-2 py-1"
+              style={{ backgroundColor: "#f1f5f9", color: "#475569", cursor: "pointer", fontSize: "0.75rem" }}
             >
-              <FaArrowLeft size={12} /> Back
+              <FaArrowLeft size={10} /> Back
             </button>
             <h4 className="fw-bold mb-0" style={{ color: "#0f172a", fontSize: "1.2rem" }}>
               {isEdit ? "Edit Customer" : "New Customer"}
@@ -460,6 +513,7 @@ export default function CustomerForm({ customer, allCustomers = [], onSave, onBa
             </button>
           </div>
 
+       
           {/* Draft recovery banner */}
           <DraftBanner draft={pendingDraft} onRestore={handleRestoreDraft} onDiscard={handleDiscardDraft} />
 
@@ -482,25 +536,42 @@ export default function CustomerForm({ customer, allCustomers = [], onSave, onBa
                       placeholder="e.g. Mehta Enterprises" style={styles.input} autoComplete="off" />
                   </Field>
                 </div>
-                <div className="col-12">
-                  <Field label="Email Address">
-                    <input type="email" name="email" value={form.email} onChange={handleChange}
-                      placeholder="client@example.com"
-                      style={{ ...styles.input, ...(errors.email ? styles.inputError : {}) }} autoComplete="off" />
-                    {errors.email && <div style={styles.errorMsg}>{errors.email}</div>}
-                  </Field>
-                </div>
               </div>
             </SectionRow>
 
-            <SectionRow icon={<FaPhone size={12} />} title="Phone Numbers">
+            <SectionRow icon={<FaEnvelope size={12} />} title="Email Addresses">
+              <div className="d-flex flex-column gap-2">
+                {form.emails.map((em) => (
+                  <div key={em.id} className="d-flex align-items-center gap-2">
+                    <select value={em.type} onChange={e => updateEmail(em.id, "type", e.target.value)}
+                      style={{ ...styles.select, width: 110, flexShrink: 0 }}>
+                      {emailTypes.map(t => <option key={t} value={t}>{t}</option>)}
+                    </select>
+                    <input type="email" value={em.value} onChange={e => updateEmail(em.id, "value", e.target.value)}
+                      placeholder="client@example.com"
+                      style={{ ...styles.input, ...(errors.emails ? styles.inputError : {}) }} autoComplete="off" />
+                    {form.emails.length > 1 && (
+                      <button onClick={() => removeEmail(em.id)}
+                        className="border-0 bg-transparent d-flex align-items-center justify-content-center"
+                        style={{ color: "#ef4444", cursor: "pointer", flexShrink: 0, width: 26, height: 26 }}>
+                        <FaTimes size={12} />
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+              {errors.emails && <div style={styles.errorMsg}>{errors.emails}</div>}
+              <button onClick={addEmail}
+                className="d-flex align-items-center gap-2 border-0 fw-semibold mt-2"
+                style={{ background: "none", color: BRAND, cursor: "pointer", fontSize: "0.78rem", padding: 0 }}>
+                <FaPlus size={10} /> Add another email
+              </button>
+            </SectionRow>
+
+                     <SectionRow icon={<FaPhone size={12} />} title="Phone Numbers">
               <div className="d-flex flex-column gap-2">
                 {form.phones.map((p) => (
                   <div key={p.id} className="d-flex align-items-center gap-2">
-                    <select value={p.type} onChange={e => updatePhone(p.id, "type", e.target.value)}
-                      style={{ ...styles.select, width: 100, flexShrink: 0 }}>
-                      {phoneTypes.map(t => <option key={t} value={t}>{t}</option>)}
-                    </select>
                     <input type="tel" value={p.value} onChange={e => updatePhone(p.id, "value", e.target.value)}
                       placeholder="9876543210" maxLength={10}
                       style={{ ...styles.input, ...(errors.phones ? styles.inputError : {}) }} autoComplete="off" />
@@ -520,13 +591,37 @@ export default function CustomerForm({ customer, allCustomers = [], onSave, onBa
                 style={{ background: "none", color: BRAND, cursor: "pointer", fontSize: "0.78rem", padding: 0 }}>
                 <FaPlus size={10} /> Add another number
               </button>
+            </SectionRow>
 
-              <div className="mt-3" style={{ maxWidth: 320 }}>
-                <Field label="Support Number">
-                  <input type="tel" value={form.supportNumber}
-                    onChange={e => setForm(f => ({ ...f, supportNumber: e.target.value }))}
-                    placeholder="1800-123-4567" style={styles.input} autoComplete="off" />
-                </Field>
+                  <SectionRow icon={<FaWhatsapp size={12} />} title="WhatsApp Numbers">
+              <div className="d-flex flex-column gap-2">
+                {form.whatsapps.map((w) => (
+                  <div key={w.id} className="d-flex align-items-center gap-2">
+                    <input type="tel" value={w.value} onChange={e => updateWhatsapp(w.id, "value", e.target.value)}
+                      placeholder="9876543210" maxLength={10}
+                      style={styles.input} autoComplete="off" />
+                    {form.whatsapps.length > 1 && (
+                      <button onClick={() => removeWhatsapp(w.id)}
+                        className="border-0 bg-transparent d-flex align-items-center justify-content-center"
+                        style={{ color: "#ef4444", cursor: "pointer", flexShrink: 0, width: 26, height: 26 }}>
+                        <FaTimes size={12} />
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+              <button onClick={addWhatsapp}
+                className="d-flex align-items-center gap-2 border-0 fw-semibold mt-2"
+                style={{ background: "none", color: BRAND, cursor: "pointer", fontSize: "0.78rem", padding: 0 }}>
+                <FaPlus size={10} /> Add another number
+              </button>
+            </SectionRow>
+
+            <SectionRow icon={<FaHeadset size={12} />} title="Support Number">
+              <div style={{ maxWidth: 320 }}>
+                <input type="tel" value={form.supportNumber}
+                  onChange={e => setForm(f => ({ ...f, supportNumber: e.target.value }))}
+                  placeholder="1800-123-4567" style={styles.input} autoComplete="off" />
               </div>
             </SectionRow>
 
@@ -539,7 +634,7 @@ export default function CustomerForm({ customer, allCustomers = [], onSave, onBa
                       {addressTypes.map(t => <option key={t} value={t}>{t}</option>)}
                     </select>
                     <input type="text" value={a.value} onChange={e => updateAddress(a.id, "value", e.target.value)}
-                      placeholder="Street, City, State, PIN" style={styles.input} autoComplete="off" />
+                      placeholder="Street, area" style={styles.input} autoComplete="off" />
                     {form.addresses.length > 1 && (
                       <button onClick={() => removeAddress(a.id)}
                         className="border-0 bg-transparent d-flex align-items-center justify-content-center"
@@ -551,13 +646,37 @@ export default function CustomerForm({ customer, allCustomers = [], onSave, onBa
                 ))}
               </div>
               <button onClick={addAddress}
-                className="d-flex align-items-center gap-2 border-0 fw-semibold mt-2"
+                className="d-flex align-items-center gap-2 border-0 fw-semibold mt-2 mb-3"
                 style={{ background: "none", color: BRAND, cursor: "pointer", fontSize: "0.78rem", padding: 0 }}>
                 <FaPlus size={10} /> Add another address
               </button>
+
+              <div className="row g-3">
+                <div className="col-12 col-md-4">
+                  <Field label="City">
+                    <input type="text" value={form.city}
+                      onChange={e => setForm(f => ({ ...f, city: e.target.value }))}
+                      placeholder="e.g. Chennai" style={styles.input} autoComplete="off" />
+                  </Field>
+                </div>
+                <div className="col-12 col-md-4">
+                  <Field label="State">
+                    <input type="text" value={form.state}
+                      onChange={e => setForm(f => ({ ...f, state: e.target.value }))}
+                      placeholder="e.g. Tamil Nadu" style={styles.input} autoComplete="off" />
+                  </Field>
+                </div>
+                <div className="col-12 col-md-4">
+                  <Field label="Country">
+                    <input type="text" value={form.country}
+                      onChange={e => setForm(f => ({ ...f, country: e.target.value }))}
+                      placeholder="e.g. India" style={styles.input} autoComplete="off" />
+                  </Field>
+                </div>
+              </div>
             </SectionRow>
 
-            <SectionRow icon={<FaCircle size={9} />} title="Status">
+                        <SectionRow icon={<FaCircle size={9} />} title="Status">
               <select name="status" value={form.status} onChange={handleChange} style={{ ...styles.select, maxWidth: 200 }}>
                 <option value="Active">Active</option>
                 <option value="Inactive">Inactive</option>
@@ -589,33 +708,33 @@ export default function CustomerForm({ customer, allCustomers = [], onSave, onBa
                   <FaPlus size={10} /> Add
                 </button>
               </div>
-             {customerTags.filter(t => !form.tags.includes(t)).length > 0 && (
-  <div className="d-flex flex-wrap gap-2 mt-2">
-    {customerTags.filter(t => !form.tags.includes(t)).map(tag => {
-      const { icon: Icon, bg, color, border } = tagStyleFor(tag);
-      return (
-        <button key={tag} onClick={() => addTag(tag)}
-          className="d-flex align-items-center gap-2 rounded-pill fw-semibold"
-          style={{
-            padding: "6px 14px", fontSize: "0.75rem", cursor: "pointer",
-            border: `1.5px solid ${border}`, backgroundColor: bg, color: color,
-            transition: "transform 0.15s ease, box-shadow 0.15s ease",
-          }}
-          onMouseEnter={e => {
-            e.currentTarget.style.transform = "translateY(-2px)";
-            e.currentTarget.style.boxShadow = `0 4px 10px ${color}33`;
-          }}
-          onMouseLeave={e => {
-            e.currentTarget.style.transform = "translateY(0)";
-            e.currentTarget.style.boxShadow = "none";
-          }}
-        >
-          <Icon size={11} /> {tag}
-        </button>
-      );
-    })}
-  </div>
-)}
+              {customerTags.filter(t => !form.tags.includes(t)).length > 0 && (
+                <div className="d-flex flex-wrap gap-2 mt-2">
+                  {customerTags.filter(t => !form.tags.includes(t)).map(tag => {
+                    const { icon: Icon, bg, color, border } = tagStyleFor(tag);
+                    return (
+                      <button key={tag} onClick={() => addTag(tag)}
+                        className="d-flex align-items-center gap-2 rounded-pill fw-semibold"
+                        style={{
+                          padding: "6px 14px", fontSize: "0.75rem", cursor: "pointer",
+                          border: `1.5px solid ${border}`, backgroundColor: bg, color: color,
+                          transition: "transform 0.15s ease, box-shadow 0.15s ease",
+                        }}
+                        onMouseEnter={e => {
+                          e.currentTarget.style.transform = "translateY(-2px)";
+                          e.currentTarget.style.boxShadow = `0 4px 10px ${color}33`;
+                        }}
+                        onMouseLeave={e => {
+                          e.currentTarget.style.transform = "translateY(0)";
+                          e.currentTarget.style.boxShadow = "none";
+                        }}
+                      >
+                        <Icon size={11} /> {tag}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             </SectionRow>
 
             <SectionRow icon={<FaStickyNote size={12} />} title="Notes">
@@ -741,4 +860,5 @@ const styles = {
     display: "flex", alignItems: "center", justifyContent: "center",
     width: 30, height: 30, borderRadius: 8, background: "#fde68a", color: "#92400e", flexShrink: 0,
   },
+
 };

@@ -4,14 +4,35 @@ import axiosInstance from '../../api/axiosInstance';
 
 const emptyForm = {
   invoicePrefix: '', quotationPrefix: '', proformaPrefix: '', gstPercent: 18,
-  currency: 'INR', defaultPaymentTerms: '', defaultNotes: '',
+  defaultNotes: '',
+  quotationNumberLength: 4,
+  quotationYearlyReset: true,
+  quotationCurrentSequence: 0,
+  quotationCurrentYear: new Date().getFullYear(),
 };
+
+const GST_PRESETS = [0, 5, 12, 18, 28];
+const ADD_CUSTOM_GST_VALUE = '__add_custom_gst__';
+
+function buildPreview(settings) {
+  const prefix = (settings.quotationPrefix || 'QT').trim().replace(/-+$/, '');
+  const len = Math.max(1, Number(settings.quotationNumberLength) || 4);
+  const nextSeq = (Number(settings.quotationCurrentSequence) || 0) + 1;
+  const seqStr = String(nextSeq).padStart(len, '0');
+  if (settings.quotationYearlyReset) {
+    const year = settings.quotationCurrentYear || new Date().getFullYear();
+    return `${prefix}-${year}-${seqStr}`;
+  }
+  return `${prefix}-${seqStr}`;
+}
 
 export default function InvoiceQuotationSettings() {
   const [form, setForm] = useState(emptyForm);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [status, setStatus] = useState('idle');
+  const [addingCustomGst, setAddingCustomGst] = useState(false);
+  const [customGstDraft, setCustomGstDraft] = useState('');
 
   useEffect(() => {
     let cancelled = false;
@@ -24,10 +45,32 @@ export default function InvoiceQuotationSettings() {
 
   const update = (field, value) => setForm((prev) => ({ ...prev, [field]: value }));
 
+  const confirmCustomGst = () => {
+    const val = Number(customGstDraft);
+    if (!isNaN(val) && val >= 0 && val <= 100) {
+      update('gstPercent', val);
+    }
+    setAddingCustomGst(false);
+    setCustomGstDraft('');
+  };
+  const cancelCustomGst = () => {
+    setAddingCustomGst(false);
+    setCustomGstDraft('');
+  };
+
   const handleSave = async () => {
     setStatus('saving');
     try {
-      const res = await axiosInstance.put('/settings/invoice', form);
+      const payload = {
+        invoicePrefix: form.invoicePrefix,
+        quotationPrefix: form.quotationPrefix,
+        proformaPrefix: form.proformaPrefix,
+        gstPercent: form.gstPercent,
+        defaultNotes: form.defaultNotes,
+        quotationNumberLength: Number(form.quotationNumberLength) || 4,
+        quotationYearlyReset: Boolean(form.quotationYearlyReset),
+      };
+      const res = await axiosInstance.put('/settings/invoice', payload);
       setForm({ ...emptyForm, ...res.data });
       setStatus('saved');
       setTimeout(() => setStatus('idle'), 2000);
@@ -39,22 +82,24 @@ export default function InvoiceQuotationSettings() {
 
   if (loading) return <div className="text-muted small">Loading invoice settings…</div>;
 
+  const preview = buildPreview(form);
+
   return (
     <div>
-    <div className="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-4">
+      <div className="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-4">
         <div>
           <h4 className="fw-bold mb-1">Invoice & Quotation</h4>
           <p className="text-muted small mb-0">Manage your invoice & quotation preferences</p>
         </div>
       </div>
-      
+
       {error && <div className="alert alert-danger py-2 small">{error}</div>}
 
       <div className="mb-1 fw-bold">Numbering</div>
       <p className="text-muted small mb-3">Prefixes used when generating invoice and quotation numbers</p>
 
       <div className="row g-3 mb-2">
-       <div className="col-md-3">
+        <div className="col-md-3">
           <label className="form-label small fw-bold text-uppercase text-muted">Invoice prefix</label>
           <input className="form-control" value={form.invoicePrefix} onChange={(e) => update('invoicePrefix', e.target.value)} />
           <div className="form-text">e.g. {form.invoicePrefix}001</div>
@@ -62,7 +107,7 @@ export default function InvoiceQuotationSettings() {
         <div className="col-md-3">
           <label className="form-label small fw-bold text-uppercase text-muted">Quotation prefix</label>
           <input className="form-control" value={form.quotationPrefix} onChange={(e) => update('quotationPrefix', e.target.value)} />
-          <div className="form-text">e.g. {form.quotationPrefix}001</div>
+          <div className="form-text">e.g. {preview}</div>
         </div>
         <div className="col-md-3">
           <label className="form-label small fw-bold text-uppercase text-muted">Proforma invoice prefix</label>
@@ -71,10 +116,105 @@ export default function InvoiceQuotationSettings() {
         </div>
         <div className="col-md-3">
           <label className="form-label small fw-bold text-uppercase text-muted">GST %</label>
-          <select className="form-select" value={form.gstPercent} onChange={(e) => update('gstPercent', Number(e.target.value))}>
-            {[0, 5, 12, 18, 28].map((v) => <option key={v} value={v}>{v}%</option>)}
-          </select>
+          {addingCustomGst ? (
+            <div className="d-flex gap-2">
+              <input
+                type="number"
+                min={0}
+                max={100}
+                step="0.01"
+                autoFocus
+                className="form-control"
+                value={customGstDraft}
+                onChange={(e) => setCustomGstDraft(e.target.value)}
+                placeholder="Enter GST %"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') { e.preventDefault(); confirmCustomGst(); }
+                  if (e.key === 'Escape') { e.preventDefault(); cancelCustomGst(); }
+                }}
+              />
+              <button type="button" className="btn btn-success btn-sm" onClick={confirmCustomGst}>Save</button>
+              <button type="button" className="btn btn-outline-secondary btn-sm" onClick={cancelCustomGst}>Cancel</button>
+            </div>
+          ) : (
+            <select
+              className="form-select"
+              value={form.gstPercent}
+              onChange={(e) => {
+                if (e.target.value === ADD_CUSTOM_GST_VALUE) { setAddingCustomGst(true); setCustomGstDraft(''); return; }
+                update('gstPercent', Number(e.target.value));
+              }}
+            >
+              {[...GST_PRESETS, ...(GST_PRESETS.includes(Number(form.gstPercent)) ? [] : [Number(form.gstPercent)])]
+                .sort((a, b) => a - b)
+                .map((v) => <option key={v} value={v}>{v}%</option>)}
+              <option value={ADD_CUSTOM_GST_VALUE}>+ Add Custom GST %</option>
+            </select>
+          )}
         </div>
+      </div>
+
+      <hr />
+
+      <div className="mb-1 fw-bold">Quotation Numbering</div>
+      <p className="text-muted small mb-3">
+        Quotation numbers are generated automatically and assigned by the
+        server when a quotation is saved, so they're always unique — even
+        with multiple people creating quotations at the same time.
+      </p>
+
+      <div className="row g-3 align-items-end mb-3">
+        <div className="col-md-3">
+          <label className="form-label small fw-bold text-uppercase text-muted">Number length</label>
+          <input
+            type="number"
+            min={1}
+            max={10}
+            className="form-control"
+            value={form.quotationNumberLength}
+            onChange={(e) => update('quotationNumberLength', e.target.value)}
+          />
+          <div className="form-text">Digits in the sequence, e.g. 4 → 0001</div>
+        </div>
+
+        <div className="col-md-4">
+          <label className="form-label small fw-bold text-uppercase text-muted d-block">
+            Yearly reset
+          </label>
+          <div className="form-check form-switch mt-1">
+            <input
+              className="form-check-input"
+              type="checkbox"
+              role="switch"
+              id="yearlyResetSwitch"
+              checked={form.quotationYearlyReset}
+              onChange={(e) => update('quotationYearlyReset', e.target.checked)}
+            />
+            <label className="form-check-label small" htmlFor="yearlyResetSwitch">
+              {form.quotationYearlyReset ? 'On — resets to 0001 every new year' : 'Off — sequence never resets'}
+            </label>
+          </div>
+        </div>
+
+        <div className="col-md-5">
+          <label className="form-label small fw-bold text-uppercase text-muted">Next quotation number</label>
+          <input className="form-control" value={preview} disabled />
+          <div className="form-text">Preview only — confirmed by the server when saved</div>
+        </div>
+      </div>
+
+      <div className="row g-3 mb-2">
+        <div className="col-md-4">
+          <label className="form-label small fw-bold text-uppercase text-muted">Current sequence</label>
+          <input className="form-control" value={form.quotationCurrentSequence} disabled />
+          <div className="form-text">Read-only — last number issued by the server</div>
+        </div>
+        {form.quotationYearlyReset && (
+          <div className="col-md-4">
+            <label className="form-label small fw-bold text-uppercase text-muted">Current year</label>
+            <input className="form-control" value={form.quotationCurrentYear} disabled />
+          </div>
+        )}
       </div>
 
       <hr />
@@ -82,19 +222,7 @@ export default function InvoiceQuotationSettings() {
       <p className="text-muted small mb-3">Pre-filled values when creating new documents</p>
 
       <div className="row g-3">
-        <div className="col-md-6">
-          <label className="form-label small fw-bold text-uppercase text-muted">Currency</label>
-          <select className="form-select" value={form.currency} onChange={(e) => update('currency', e.target.value)}>
-            <option value="INR">INR — Indian Rupee (₹)</option>
-            <option value="USD">USD — US Dollar ($)</option>
-            <option value="EUR">EUR — Euro (€)</option>
-          </select>
-        </div>
-        <div className="col-md-6">
-          <label className="form-label small fw-bold text-uppercase text-muted">Payment terms</label>
-          <input className="form-control" value={form.defaultPaymentTerms} onChange={(e) => update('defaultPaymentTerms', e.target.value)} />
-        </div>
-       <div className="col-12">
+        <div className="col-12">
           <label className="form-label small fw-bold text-uppercase text-muted">Default invoice notes</label>
           <textarea className="form-control" rows={3} value={form.defaultNotes} onChange={(e) => update('defaultNotes', e.target.value)} />
         </div>

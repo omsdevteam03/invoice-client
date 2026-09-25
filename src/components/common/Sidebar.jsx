@@ -2,7 +2,7 @@ import { useState } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import {
   FiHome, FiUsers, FiFileText, FiFile,
-  FiSettings, FiLogOut
+  FiSettings, FiLogOut, FiZap
 } from "react-icons/fi";
 import useAuth from "../../hooks/useAuth";
 
@@ -20,6 +20,7 @@ const mainLinks = [
   { to: "/customers", icon: FiUsers, label: "Customers" },
   { to: "/quotations", icon: FiFileText, label: "Quotations" },
   { to: "/invoices", icon: FiFile, label: "Invoices" },
+  { to: "/ai", icon: FiZap, label: "AI Assistant" },
 ];
 
 const generalLinks = [
@@ -303,7 +304,7 @@ export default function Sidebar() {
               Logout?
             </h5>
             <p style={{ color: "#64748b", fontSize: "0.875rem", marginBottom: 24, lineHeight: 1.6 }}>
-              do u want to logout
+              Do u want to logout
             </p>
 
             <div style={{ display: "flex", gap: 10 }}>

@@ -3,8 +3,28 @@ import {
   FaArrowLeft, FaPrint, FaEdit, FaSave, FaTimes, FaPlus, FaTrash, FaCheck,
 } from "react-icons/fa";
 import { FiMapPin, FiPhone, FiMail, FiUser } from "react-icons/fi";
+import DOMPurify from "dompurify";
+import ClassicLayout from "./Classiclayout";
+import CreativeLayout from "./Creativelayout";
+import BoldLayout from "./Boldlayout";
+import ModernLayout from "./Modernlayout";
+import CorporateLayout from "./Corporatelayout";
+import MinimalLayout from "./Minimallayout";
+import { CompanySelectField, CostItemsTable } from "./EditableField";
+import { getCostItems, getCostLines, computeCostTotals, getGstMode } from "./quotationLayoutUtils";
+import QuotationTemplate from "./QuotationTemplate";
+import { templates } from "./QuotationTable";
+import TinyMCEEditor from "./TinyMCEEditor";
 
-/* ── Design tokens: navy headings, orange accent, thin borders, Inter ── */
+const QUOTATION_LAYOUTS = {
+  classic: ClassicLayout,
+  creative: CreativeLayout,
+  bold: BoldLayout,
+  modern: ModernLayout,
+  corporate: CorporateLayout,
+  minimal: MinimalLayout,
+};
+
 const T = {
   navy: "#0F172A",
   slate: "#334155",
@@ -23,7 +43,6 @@ const T = {
   font: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
 };
 
-// ── Auto-saved quotation drafts (crash/navigate-away recovery) ─────────────
 const QUOTE_DRAFT_PREFIX = "quotation_draft_";
 function saveDraft(key, data, meta = {}) {
   if (!key) return;
@@ -37,10 +56,141 @@ function removeDraft(key) {
   catch (err) { console.error("Failed to remove autosaved quotation draft:", err); }
 }
 
+// ── HTML helpers ────────────────────────────────────────────────────────
+// Multi-line fields are now rich HTML. These helpers convert legacy plain
+// text ("line1\nline2") into HTML, and detect whether a value is already
+// HTML so we don't double-wrap it.
+const HTML_RE = /<[a-z][\s\S]*>/i;
+function isHtml(v) { return typeof v === "string" && HTML_RE.test(v); }
+function plainTextToHtml(text) {
+  if (!text) return "";
+  return String(text)
+    .split(/\n{2,}/)
+    .map((para) => para.trim())
+    .filter(Boolean)
+    .map((para) => `<p>${para.replace(/\n/g, "<br/>")}</p>`)
+    .join("");
+}
+// Lines like "Item one\nItem two" become a bulleted list; paragraphs become <p>.
+function linesToHtmlList(text) {
+  if (!text) return "";
+  const lines = String(text).split("\n").map((l) => l.trim()).filter(Boolean);
+  if (lines.length === 0) return "";
+  return `<ul>${lines.map((l) => `<li>${l}</li>`).join("")}</ul>`;
+}
+
+// Normalizes the incoming `quotation` for the form: every rich-text field
+// that arrives as plain text gets converted to HTML once, so TinyMCE always
+// receives HTML.
+function normalizeFormQuotation(quotation) {
+  const initial = { ...quotation, customSections: quotation.customSections || [] };
+
+  // Canonicalize GST mode the moment data enters the form, so a stale or
+  // missing `gstMode` on the saved record (e.g. from before this field
+  // existed, or a save that only persisted the old `includeGst` boolean)
+  // doesn't cause the GST% selector to reappear after a reload.
+  initial.gstMode = getGstMode(initial);
+
+  const paraFields = ["terms", "description", "notes"];
+
+  paraFields.forEach((f) => {
+    if (initial[f] && !isHtml(initial[f])) initial[f] = plainTextToHtml(initial[f]);
+  });
+
+  const listFields = ["scopeOfWork", "deliverables", "technologyUsed", "timelineDesc"];
+  listFields.forEach((f) => {
+    if (initial[f] && !isHtml(initial[f])) initial[f] = linesToHtmlList(initial[f]);
+  });
+
+  initial.customSections = initial.customSections.map((s) => ({
+    ...s,
+    // AI-created quotations save the heading as `title`; the manual editor
+    // has always used `heading`. Normalize once here so the rest of this
+    // file only ever has to read `heading`.
+    heading: s.heading || s.title || "",
+    content: s.type === "table"
+      ? (s.content || "")
+      : (s.content && !isHtml(s.content) ? plainTextToHtml(s.content) : (s.content || "")),
+  }));
+
+  return initial;
+}
+
 const TERMS_TEMPLATES = [
   { label: "Standard", text: "50% advance payment required to begin work, balance due on delivery.\nDelivery timelines are estimates and may shift with scope changes.\nRevisions beyond the agreed scope will be billed separately.\nThis quotation is valid for 15 days from the date of issue." },
   { label: "Project-based", text: "This quotation is valid for 30 days from the date of issue.\nAny additional work outside the agreed scope will be charged separately.\n50% advance payment is required before project commencement.\nFinal deliverables handed over after full payment is received." },
   { label: "Retainer / Service", text: "This agreement covers services rendered on a monthly retainer basis.\nInvoices are due within 15 days of receipt.\nEither party may terminate this agreement with 30 days' written notice.\nUnused hours do not roll over to the following month." },
+  {
+    label: "Full Legal Agreement",
+    text:
+      `1. Parties
+This Agreement is entered into between the Service Provider and the Client named in this quotation.
+
+2. Project Scope
+The Service Provider will design and develop the work as per the agreed project proposal. Any changes to the initial scope may incur additional charges and must be confirmed in writing by both parties.
+
+3. Fees and Payment
+The Client agrees to pay all fees as outlined in the approved quotation. Payments shall follow the schedule mentioned in the proposal. All charges are exclusive of applicable taxes, which will be added as required by law.
+
+4. Intellectual Property & Source Code Access
+The Client will have full rights to use the final deliverable as delivered. However, the source code and underlying development files will remain with the Service Provider and are not included as part of the project delivery, unless otherwise agreed in writing.
+
+5. Usage Restrictions
+The Client agrees to use the deliverables solely for lawful and intended purposes. Any misuse, including unethical, unauthorized, or illegal use, is strictly prohibited.
+
+6. Confidentiality
+Both parties agree to treat all shared information as confidential. The Service Provider will not disclose any business, strategic, or proprietary information shared by the Client without prior consent, unless required by law.
+
+7. Warranty and Support
+A one-year warranty period is provided from the date of delivery. During this time, any functional bugs or code issues identified will be resolved at no additional cost to the Client.
+
+8. Termination
+Either party may terminate this Agreement with written notice if the other party commits a material breach. Upon termination, the Client retains rights to the delivered work as-is. Future updates or support will not be included post-termination unless agreed separately.
+
+9. Governing Law and Jurisdiction
+This Agreement shall be governed by applicable local laws. Any disputes arising under this Agreement shall fall under the exclusive jurisdiction of the courts local to the Service Provider.
+
+ACCEPTANCE OF TERMS
+By confirming, the Client acknowledges that they have read, understood, and agree to be bound by these terms and conditions. The Client can confirm their acceptance by responding to this quotation.`
+  },
+  {
+    label: "Simple Freelance",
+    text:
+      `Scope: Work will proceed strictly as described in this quotation. Anything outside this scope will be quoted separately.
+
+Payment: 50% upfront, 50% on completion. Late payments beyond 7 days of the due date may incur a 2% monthly late fee.
+
+Revisions: Up to 2 rounds of revisions are included. Additional revisions are billed at the standard hourly rate.
+
+Ownership: Full ownership of final files transfers to the Client upon receipt of full payment.
+
+Cancellation: If the Client cancels after work has begun, the advance payment is non-refundable and covers work completed to date.
+
+Validity: This quotation is valid for 15 days from the date of issue.`
+  },
+];
+
+const SCOPE_TEMPLATES = [
+  {
+    label: "Website Development",
+    text: "Responsive Website Design\n5 Website Pages\nContact Form Integration\nMobile Optimization\nBasic SEO Setup",
+  },
+  {
+    label: "App Development",
+    text: "Cross-platform Mobile App (iOS & Android)\nUser Authentication\nAPI Integration\nPush Notifications\nApp Store Submission Support",
+  },
+  {
+    label: "Digital Marketing",
+    text: "Social Media Strategy & Management\nPaid Ad Campaigns (Google/Meta)\nMonthly Performance Reports\nContent Calendar Planning\nAudience Targeting & Optimization",
+  },
+  {
+    label: "UI/UX Design",
+    text: "User Research & Persona Mapping\nWireframes & Prototypes\nHigh-fidelity UI Design\nDesign System / Style Guide\nUsability Testing",
+  },
+  {
+    label: "Branding & Identity",
+    text: "Logo Design\nBrand Color Palette & Typography\nBrand Guidelines Document\nBusiness Card & Letterhead Design\nSocial Media Kit",
+  },
 ];
 
 function shadeColor(hex, percent) {
@@ -63,7 +213,6 @@ function useIsMobile(breakpoint = 1100) {
   return isMobile;
 }
 
-// ── Toggle switch (Live Preview) ────────────────────────────────────────
 function ToggleSwitch({ checked, onChange, accent, label }) {
   return (
     <label className="no-print" style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer", userSelect: "none" }}>
@@ -75,7 +224,6 @@ function ToggleSwitch({ checked, onChange, accent, label }) {
   );
 }
 
-// ── Logo box ─────────────────────────────────────────────────────────────
 function LogoBox({ form, editMode, accent, onUpload, onRemove }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6, flexShrink: 0 }}>
@@ -97,8 +245,7 @@ function LogoBox({ form, editMode, accent, onUpload, onRemove }) {
   );
 }
 
-// ── From / To cards ─────────────────────────────────────────────────────
-function PartyCard({ heading, accent, editMode, compact, name, onNameChange, namePlaceholder, lines }) {
+function PartyCard({ heading, accent, editMode, compact, name, onNameChange, namePlaceholder, lines, useCompanySelect }) {
   const cardPad = compact ? "10px 12px" : "14px 16px";
   const lineGap = compact ? 3 : 5;
   const fontBase = compact ? "10.5px" : "13.5px";
@@ -111,7 +258,16 @@ function PartyCard({ heading, accent, editMode, compact, name, onNameChange, nam
       </div>
       <div style={{ padding: cardPad, backgroundColor: "#fff" }}>
         {editMode ? (
-          <input style={{ ...cellInp, fontWeight: 700, fontSize: compact ? "11px" : "14px", marginBottom: lineGap + 2 }} value={name ?? ""} placeholder={namePlaceholder} onChange={(e) => onNameChange(e.target.value)} />
+          useCompanySelect ? (
+            <CompanySelectField
+              value={name}
+              onChange={onNameChange}
+              placeholder={namePlaceholder}
+              style={{ fontWeight: 700, fontSize: compact ? "11px" : "14px", marginBottom: lineGap + 2 }}
+            />
+          ) : (
+            <input style={{ ...cellInp, fontWeight: 700, fontSize: compact ? "11px" : "14px", marginBottom: lineGap + 2 }} value={name ?? ""} placeholder={namePlaceholder} onChange={(e) => onNameChange(e.target.value)} />
+          )
         ) : (
           <div style={{ fontWeight: 700, fontSize: compact ? "11.5px" : "14.5px", color: T.navy, marginBottom: lineGap + 2 }}>{name || namePlaceholder}</div>
         )}
@@ -132,32 +288,6 @@ function PartyCard({ heading, accent, editMode, compact, name, onNameChange, nam
   );
 }
 
-function PartyCards({ form, editMode, accent, updateField, compact }) {
-  return (
-    <div style={{ display: "flex", gap: compact ? 10 : 20, flexWrap: "wrap" }}>
-      <PartyCard heading="From" accent={accent} editMode={editMode} compact={compact}
-        name={form.issuerName} namePlaceholder="Your Company LLC" onNameChange={(v) => updateField("issuerName", v)}
-        lines={[
-          { icon: <FiMapPin size={12} />, value: form.issuerAddress, placeholder: "Company address", onChange: (v) => updateField("issuerAddress", v) },
-          { icon: <FiPhone size={12} />, value: form.issuerPhone, placeholder: "Phone", onChange: (v) => updateField("issuerPhone", v) },
-          { icon: <FiMail size={12} />, value: form.issuerEmail, placeholder: "Email", onChange: (v) => updateField("issuerEmail", v) },
-          { icon: <FiUser size={12} />, value: form.issuerContact, placeholder: "Contact person", onChange: (v) => updateField("issuerContact", v) },
-        ]}
-      />
-      <PartyCard heading="To" accent={accent} editMode={editMode} compact={compact}
-        name={form.company} namePlaceholder="Client Company Name" onNameChange={(v) => updateField("company", v)}
-        lines={[
-          { icon: <FiMapPin size={12} />, value: form.clientAddress, placeholder: "Client address", onChange: (v) => updateField("clientAddress", v) },
-          { icon: <FiPhone size={12} />, value: form.phone, placeholder: "Phone", onChange: (v) => updateField("phone", v) },
-          { icon: <FiMail size={12} />, value: form.email, placeholder: "Email", onChange: (v) => updateField("email", v) },
-          { icon: <FiUser size={12} />, value: form.name, placeholder: "Contact person", onChange: (v) => updateField("name", v) },
-        ]}
-      />
-    </div>
-  );
-}
-
-// ── Theme color picker ──────────────────────────────────────────────────
 const THEME_COLORS = ["#F97316", "#2563EB", "#16A34A", "#DC2626", "#0F172A", "#8b5cf6", "#14b8a6", "#ec4899", "#6366f1", "#92400e", "#84cc16", "#06b6d4", "#f59e0b", "#f43f5e"];
 
 function ThemeColorPicker({ accent, onChange }) {
@@ -187,11 +317,54 @@ function ThemeColorPicker({ accent, onChange }) {
   );
 }
 
+function ConfirmEditApprovedModal({ show, onCancel, onConfirm, accent = "#F97316" }) {
+  if (!show) return null;
+  return (
+    <div style={{
+      position: "fixed", top: 0, left: 0, width: "100%", height: "100%",
+      backgroundColor: "rgba(0,0,0,0.5)", zIndex: 9999,
+      display: "flex", alignItems: "center", justifyContent: "center", padding: "16px",
+    }}>
+      <div style={{
+        backgroundColor: "#fff", borderRadius: 16, boxShadow: "0 20px 60px rgba(0,0,0,0.3)",
+        maxWidth: 400, width: "90%", padding: 32, textAlign: "center",
+      }}>
+        <div style={{
+          width: 60, height: 60, borderRadius: "50%", background: `${accent}18`,
+          display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 16px",
+          fontSize: 26, color: accent,
+        }}>
+          ⚠️
+        </div>
+        <h5 style={{ color: "#0f172a", fontWeight: 700, marginBottom: 10 }}>Edit approved quotation?</h5>
+        <p style={{ color: "#64748b", fontSize: 14, marginBottom: 20 }}>
+          This quotation has already been approved. Editing it will require client approval again.
+        </p>
+        <div style={{ display: "flex", gap: 12, justifyContent: "center" }}>
+          <button onClick={onCancel} style={{
+            border: "none", fontWeight: 600, padding: "10px 20px",
+            backgroundColor: "#f1f5f9", color: "#475569", borderRadius: 10, cursor: "pointer", fontSize: 14,
+          }}>
+            Cancel
+          </button>
+          <button onClick={onConfirm} style={{
+            border: "none", fontWeight: 600, padding: "10px 20px",
+            backgroundColor: accent, color: "#fff", borderRadius: 10, cursor: "pointer", fontSize: 14,
+          }}>
+            Continue
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function QuotationDetail({
-  quotation, companyInfo, isNew, editMode, isNewTemplate,
+  quotation, companyInfo, docSettings, customers = [], isNew, editMode, isNewTemplate,
   onBack, onEdit, onSave, onCancelEdit,
 }) {
-  const [form, setForm] = useState({ ...quotation, customSections: quotation.customSections || [] });
+  const [form, setForm] = useState(() => normalizeFormQuotation(quotation));
+  const [showApprovedEditConfirm, setShowApprovedEditConfirm] = useState(false);
 
   const draftKeyRef = useRef(
     !isNew && quotation.id ? quotation.id : quotation._draftId || `draft_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`
@@ -200,14 +373,32 @@ export default function QuotationDetail({
 
   useEffect(() => {
     if (!isNew) return;
-    setForm((prev) => ({
-      ...prev,
-      logo: prev.logo || companyInfo?.logo || null,
-      issuerName: prev.issuerName || companyInfo?.companyName || "",
-      issuerAddress: prev.issuerAddress || companyInfo?.companyAddress || "",
-      issuerPhone: prev.issuerPhone || companyInfo?.companyPhone || "",
-      issuerEmail: prev.issuerEmail || companyInfo?.companyEmail || "",
-    }));
+    setForm((prev) => {
+      const issuer = prev.issuerName || companyInfo?.companyName || "your company";
+      return {
+        ...prev,
+        logo: prev.logo || companyInfo?.logo || null,
+        issuerName: prev.issuerName || companyInfo?.companyName || "",
+        issuerAddress: prev.issuerAddress || companyInfo?.companyAddress || "",
+        issuerPhone: prev.issuerPhone || companyInfo?.companyPhone || "",
+        issuerEmail: prev.issuerEmail || companyInfo?.companyEmail || "",
+
+        description: prev.description || plainTextToHtml(
+          `This proposal outlines the scope of work agreed upon between ${issuer} and ${prev.company || "the client"}.`
+        ),
+        scopeOfWork: prev.scopeOfWork || linesToHtmlList(SCOPE_TEMPLATES[0].text),
+        deliverables: prev.deliverables || linesToHtmlList(
+          "Fully responsive website\nSource code delivery\nAdmin panel access\nDocumentation\n30 days support"
+        ),
+        technologyUsed: prev.technologyUsed || linesToHtmlList(
+          "React.js / Next.js (Frontend)\nNode.js & Express.js (Backend)\nMongoDB (Database)\nCloud Hosting (Deployment)"
+        ),
+        timelineDesc: prev.timelineDesc || linesToHtmlList(
+          "Completed within 7–14 working days from project confirmation\nDevelopment carried out in phases\nRegular progress updates shared with client"
+        ),
+        terms: prev.terms || plainTextToHtml(TERMS_TEMPLATES[0].text),
+      };
+    });
   }, [companyInfo, isNew]);
 
   useEffect(() => {
@@ -222,19 +413,94 @@ export default function QuotationDetail({
     return () => clearTimeout(timer);
   }, [form, editMode]);
 
+  // Force-disable all scrolling for a few seconds after entering edit mode,
+  // so nothing (our code or the TinyMCE library) can jump the page.
+  useEffect(() => {
+    if (!editMode) return;
+
+    const patchIframe = (win) => {
+      try {
+        if (!win || !win.HTMLElement || win.HTMLElement.prototype.__focusBlocked) return;
+        win.HTMLElement.prototype.__focusBlocked = true;
+        win.HTMLElement.prototype.focus = function () { }; // no-op inside this iframe
+      } catch (e) { /* cross-origin, ignore */ }
+    };
+
+    const scanIframes = () => {
+      document.querySelectorAll("iframe").forEach((f) => {
+        try { patchIframe(f.contentWindow); } catch (e) { }
+        f.addEventListener("load", () => { try { patchIframe(f.contentWindow); } catch (e) { } });
+      });
+    };
+
+    const observer = new MutationObserver(scanIframes);
+    observer.observe(document.body, { childList: true, subtree: true });
+    scanIframes();
+
+    window.scrollTo(0, 0);
+    const t = setTimeout(() => window.scrollTo(0, 0), 500);
+
+    const stop = setTimeout(() => observer.disconnect(), 4000);
+
+    return () => { observer.disconnect(); clearTimeout(t); clearTimeout(stop); };
+  }, [editMode]);
+
   const [showPreview, setShowPreview] = useState(true);
+  const [showTemplateSwitcher, setShowTemplateSwitcher] = useState(false);
   const isMobile = useIsMobile(1100);
   const accent = form.accentColor || T.orange;
   const accentBg = form.accentBg || `linear-gradient(135deg, ${accent}, ${shadeColor(accent, -25)})`;
   const accentSoftBg = `${accent}0d`;
   const accentBorder = `${accent}55`;
   const issuerName = form.issuerName || companyInfo?.companyName || "Your Company";
+  const defaultGstPercent = docSettings?.gstPercent ?? 18;
+  const computeProjectCostFields = (state) => {
+    const { total } = computeCostTotals(state, defaultGstPercent);
+    return { amount: total };
+  };
 
-  const updateField = (field, value) => { dirtyRef.current = true; setForm((prev) => ({ ...prev, [field]: value })); };
+const updateField = (field, value) => {
+  dirtyRef.current = true;
+  setForm((prev) => {
+    let next = { ...prev, [field]: value };
+
+    // Legacy layouts (Classic/Creative/Bold/Modern/Corporate/Minimal) still use
+    // the old boolean `includeGst` toggle via CostCalculatorBar. The newer
+    // CostItemsTable / getCostLines / getGstMode logic reads the string
+    // `gstMode` instead, and getGstMode() prefers `gstMode` when it's set.
+    // Without this sync, switching the old toggle to "No GST" left a stale
+    // `gstMode: "with"` in place, so GST kept being added to the total even
+    // though the toggle showed off.
+    if (field === "includeGst") {
+      next = { ...next, gstMode: value ? "with" : "without" };
+    }
+
+    if (field === "includeGst" || field === "gstMode" || field === "gstPercent" || field === "costItems") {
+      return { ...next, ...computeProjectCostFields(next) };
+    }
+    return next;
+  });
+};
 
   const handleThemeColorChange = (color) => {
     dirtyRef.current = true;
     setForm((prev) => ({ ...prev, accentColor: color, accentBg: `linear-gradient(135deg, ${color}, ${shadeColor(color, -25)})` }));
+  };
+
+  const handleTemplateSwitch = (tpl) => {
+    dirtyRef.current = true;
+    updateField("templateStyle", tpl?.templateStyle || "default");
+    setShowTemplateSwitcher(false);
+
+    const scrollToTop = () => {
+      const mainContent = document.querySelector(".main-content");
+      if (mainContent) mainContent.scrollTop = 0;
+      window.scrollTo(0, 0);
+    };
+
+    scrollToTop();
+    requestAnimationFrame(scrollToTop);
+    setTimeout(scrollToTop, 200);
   };
 
   const addCustomSection = () => { dirtyRef.current = true; setForm((prev) => ({ ...prev, customSections: [...prev.customSections, { heading: "", content: "" }] })); };
@@ -244,21 +510,60 @@ export default function QuotationDetail({
     sections[i] = { ...sections[i], [field]: value };
     setForm((prev) => ({ ...prev, customSections: sections }));
   };
+  const updateCustomSectionTable = (i, updated) => {
+    dirtyRef.current = true;
+    const sections = [...form.customSections];
+    sections[i] = { ...sections[i], ...updated };
+    setForm((prev) => ({ ...prev, customSections: sections }));
+  };
   const removeCustomSection = (i) => { dirtyRef.current = true; setForm((prev) => ({ ...prev, customSections: prev.customSections.filter((_, idx) => idx !== i) })); };
 
   const handleLogoUpload = (e) => {
     const file = e.target.files[0];
     if (file) { const reader = new FileReader(); reader.onloadend = () => updateField("logo", reader.result); reader.readAsDataURL(file); }
   };
+  const handleSignatureUpload = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => updateField("signature", reader.result);
+      reader.readAsDataURL(file);
+    }
+  };
 
   const handleSaveClick = () => {
-    const { _draftId, ...cleanForm } = form;
-    onSave(cleanForm);
+    const { _draftId, _isNewQuotation, ...cleanForm } = form;
+
+    const wasApproved = !isNew && quotation.status === "Approved";
+
+    let payload = { ...cleanForm, _isNewQuotation: isNew };
+
+    if (wasApproved) {
+      const previousVersion = {
+        status: quotation.status,
+        amount: quotation.amount,
+        savedAt: new Date().toISOString(),
+        snapshot: { ...quotation },
+      };
+      payload = {
+        ...payload,
+        status: "Sent",
+        versionHistory: [...(quotation.versionHistory || []), previousVersion],
+      };
+    }
+
+    onSave(payload);
     removeDraft(draftKeyRef.current);
+
+    if (wasApproved) {
+      window.alert(
+        "Quotation updated. Since this quotation was previously approved, its status has been changed to Sent and requires approval again."
+      );
+    }
   };
   const handleCancelClick = () => {
     removeDraft(draftKeyRef.current);
-    setForm({ ...quotation, customSections: quotation.customSections || [] });
+    setForm(normalizeFormQuotation(quotation));
     onCancelEdit();
     onBack();
   };
@@ -267,256 +572,580 @@ export default function QuotationDetail({
   const headingInp = { ...inp, fontWeight: 700, fontSize: 15, color: T.navy, backgroundColor: accentSoftBg, border: `1px solid ${accentBorder}` };
   const sectionTitle = { fontWeight: 700, fontSize: 15, color: T.navy, marginBottom: 8, fontFamily: T.font };
   const sectionText = { fontSize: 13.5, color: T.slate, lineHeight: 1.85, fontFamily: T.font, margin: 0 };
+  const cellStyle = { border: `1px solid ${T.border}`, padding: "10px 14px", verticalAlign: "top", fontSize: 13.5, color: T.slate };
+  const cellLabel = { fontWeight: 700, color: T.navy };
+  const cellInput = { border: `1px solid ${T.border}`, borderRadius: 6, padding: "4px 8px", fontSize: 13, width: "100%", outline: "none", backgroundColor: T.bgSoft, fontFamily: T.font, marginTop: 4 };
+
+  // Renders read-only HTML content safely.
+  const RichView = ({ html, style }) => (
+    <div
+      className="quotation-rich-text"
+      style={{ ...sectionText, ...style }}
+      dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(html || "") }}
+    />
+  );
+
+  const printBannerBlock = (
+    <div style={{
+      display: "flex", alignItems: "center", justifyContent: "center", gap: 16,
+      borderTop: `4px solid ${accent}`, borderBottom: `4px solid ${accent}`,
+      padding: "8px 10px", marginBottom: 10,
+    }}>
+      <LogoBox form={form} editMode={editMode} accent={accent} onUpload={handleLogoUpload} onRemove={() => updateField("logo", null)} />
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, minWidth: 0 }}>
+        {editMode ? (
+          <CompanySelectField
+            value={form.issuerName}
+            onChange={(val) => updateField("issuerName", val)}
+            placeholder="Your Company Name"
+            style={{ ...inp, fontSize: isMobile ? 18 : 22, fontWeight: 700, color: T.navy, maxWidth: 360, border: `1px solid ${accentBorder}`, backgroundColor: accentSoftBg, textAlign: "center" }}
+          />
+        ) : (
+          <div style={{ fontSize: isMobile ? 18 : 22, fontWeight: 700, color: T.navy, textAlign: "center" }}>{form.issuerName || "Your Company Name"}</div>
+        )}
+        {editMode ? (
+          <input value={form.issuerAddress || ""} onChange={(e) => updateField("issuerAddress", e.target.value)} placeholder="Company address"
+            style={{ ...inp, fontSize: 12.5, color: T.muted, maxWidth: 360, textAlign: "center" }} />
+        ) : (
+          form.issuerAddress && <div style={{ fontSize: 12.5, color: T.muted, textAlign: "center" }}>{form.issuerAddress}</div>
+        )}
+      </div>
+    </div>
+  );
+  const printFooterBlock = (
+    <div style={{ marginTop: 16 }}>
+      <div style={{ display: "flex", height: 6 }}>
+        <div style={{ flex: 1, backgroundColor: accent }} />
+        <div style={{ flex: 1, backgroundColor: shadeColor(accent, -40) }} />
+      </div>
+      <div style={{ textAlign: "center", fontSize: 11, color: T.slate, padding: "4px 0" }}>
+        {editMode ? (
+          <div style={{ display: "flex", gap: 8, justifyContent: "center", flexWrap: "wrap" }}>
+            <input value={form.issuerWebsite || ""} onChange={(e) => updateField("issuerWebsite", e.target.value)} placeholder="Website" style={{ ...cellInput, width: 160, marginTop: 0 }} />
+            <input value={form.issuerEmail || ""} onChange={(e) => updateField("issuerEmail", e.target.value)} placeholder="Email" style={{ ...cellInput, width: 200, marginTop: 0 }} />
+            <input value={form.issuerPhone || ""} onChange={(e) => updateField("issuerPhone", e.target.value)} placeholder="Mob" style={{ ...cellInput, width: 160, marginTop: 0 }} />
+          </div>
+        ) : (
+          <>
+            {form.issuerWebsite && <>Web: {form.issuerWebsite}</>}
+            {form.issuerWebsite && (form.issuerEmail || form.issuerPhone) && ",  "}
+            {form.issuerEmail && <>Email: {form.issuerEmail}</>}
+            {form.issuerEmail && form.issuerPhone && ",  "}
+            {form.issuerPhone && <>Mob: {form.issuerPhone}</>}
+          </>
+        )}
+      </div>
+    </div>
+  );
 
   const printHeaderBlock = (
     <div style={{ marginBottom: 18 }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 14, marginBottom: 10 }}>
-        <LogoBox form={form} editMode={editMode} accent={accent} onUpload={handleLogoUpload} onRemove={() => updateField("logo", null)} />
-        {editMode ? (
-          <input value={form.issuerName || ""} onChange={(e) => updateField("issuerName", e.target.value)} placeholder="Your Company Name"
-            style={{ ...inp, fontSize: isMobile ? 18 : 22, fontWeight: 700, color: T.navy, maxWidth: 360, border: `1px solid ${accentBorder}`, backgroundColor: accentSoftBg }} />
-        ) : (
-          <div style={{ fontSize: isMobile ? 18 : 22, fontWeight: 700, color: T.navy }}>{form.issuerName || "Your Company Name"}</div>
-        )}
-      </div>
+      <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 24, tableLayout: "fixed" }}>
+        <tbody>
+          <tr>
+            <td style={{ ...cellStyle, width: "50%" }}>
+              <span style={cellLabel}>Quotation:</span>{" "}
+              {editMode ? <input value={form.id} onChange={(e) => updateField("id", e.target.value)} style={{ ...cellInput, display: "inline-block", width: "auto", marginTop: 0 }} /> : form.id}
+            </td>
+            <td style={{ ...cellStyle, width: "50%" }}>
+              <span style={cellLabel}>Date:</span>{" "}
+              {editMode ? <input type="date" value={form.date} onChange={(e) => updateField("date", e.target.value)} style={{ ...cellInput, display: "inline-block", width: "auto", marginTop: 0 }} /> : form.date}
+            </td>
+          </tr>
+          <tr>
+            <td style={cellStyle}><span style={cellLabel}>To:</span></td>
+            <td style={cellStyle}><span style={cellLabel}>From:</span></td>
+          </tr>
+          <tr>
+            <td style={cellStyle}>
+              {editMode ? (
+                <>
+                  <input value={form.name || ""} onChange={(e) => updateField("name", e.target.value)} placeholder="Client contact name" style={cellInput} />
+                  <input value={form.company || ""} onChange={(e) => updateField("company", e.target.value)} placeholder="Client Company Name" style={cellInput} />
+                  <input value={form.clientAddress || ""} onChange={(e) => updateField("clientAddress", e.target.value)} placeholder="Client address" style={cellInput} />
+                  <input value={form.phone || ""} onChange={(e) => updateField("phone", e.target.value)} placeholder="Mob / Phone" style={cellInput} />
+                  <input value={form.email || ""} onChange={(e) => updateField("email", e.target.value)} placeholder="Email" style={cellInput} />
+                </>
+              ) : (
+                <>
+                  {form.name && <div><span style={{ fontWeight: 600, color: T.navy }}>Name:</span> {form.name}</div>}
+                  {form.company && <div style={{ fontWeight: 600, color: T.navy }}><span>Company:</span> {form.company}</div>}
+                  {form.clientAddress && <div><span style={{ fontWeight: 600, color: T.navy }}>Address:</span> {form.clientAddress}</div>}
+                  {form.phone && <div><span style={{ fontWeight: 600, color: T.navy }}>Mob:</span> {form.phone}</div>}
+                  {form.email && <div><span style={{ fontWeight: 600, color: T.navy }}>Email:</span> {form.email}</div>}
+                </>
+              )}
+            </td>
+            <td style={{ ...cellStyle, width: "50%" }}>
+              {editMode ? (
+                <>
+                  <CompanySelectField value={form.issuerName} onChange={(val) => updateField("issuerName", val)} placeholder="Your Company Name" style={cellInput} />
+                  <input value={form.issuerAddress || ""} onChange={(e) => updateField("issuerAddress", e.target.value)} placeholder="Company address" style={cellInput} />
+                  <input value={form.issuerPhone || ""} onChange={(e) => updateField("issuerPhone", e.target.value)} placeholder="Phone" style={cellInput} />
+                  <input value={form.issuerEmail || ""} onChange={(e) => updateField("issuerEmail", e.target.value)} placeholder="Email" style={cellInput} />
+                </>
+              ) : (
+                <>
+                  {form.issuerName && <div style={{ fontWeight: 600, color: T.navy }}><span>Company:</span> {form.issuerName}</div>}
+                  {form.issuerAddress && <div><span style={{ fontWeight: 600, color: T.navy }}>Address:</span> {form.issuerAddress}</div>}
+                  {form.issuerPhone && <div><span style={{ fontWeight: 600, color: T.navy }}>Mob:</span> {form.issuerPhone}</div>}
+                  {form.issuerEmail && <div><span style={{ fontWeight: 600, color: T.navy }}>Email:</span> {form.issuerEmail}</div>}
+                </>
+              )}
+            </td>
+          </tr>
+        </tbody>
+      </table>
 
-      <div style={{ textAlign: "center", fontSize: isMobile ? 28 : 36, fontWeight: 700, color: T.navy, letterSpacing: "-0.5px", marginBottom: 4 }}>QUOTATION</div>
+      <div style={{ fontSize: isMobile ? 28 : 36, fontWeight: 700, color: T.navy, letterSpacing: "-0.5px", marginBottom: 4 }}>QUOTATION</div>
 
-      <div style={{ fontSize: 13, color: T.muted, marginTop: 4, display: "flex", flexWrap: "wrap", justifyContent: "center", gap: "4px 16px" }}>
-        <span>
-          <strong style={{ color: T.navy }}>Quotation No:</strong>{" "}
-          {editMode ? <input value={form.id} onChange={(e) => updateField("id", e.target.value)} style={{ ...inp, width: 130, display: "inline-block", fontSize: 13, padding: "3px 8px" }} /> : form.id}
-        </span>
-        <span>
-          <strong style={{ color: T.navy }}>Status:</strong>{" "}
-          {editMode ? (
-            <select value={form.status} onChange={(e) => updateField("status", e.target.value)} style={{ border: `1px solid ${T.border}`, borderRadius: 6, padding: "3px 6px", fontSize: 13, backgroundColor: T.bgSoft }}>
-              <option value="Draft">Draft</option>
-              <option value="Pending">Pending</option>
-              <option value="Approved">Approved</option>
-            </select>
-          ) : (
-            <span style={{
-              padding: "1px 9px", borderRadius: 20, fontSize: 12, fontWeight: 600,
-              backgroundColor: form.status === "Approved" ? T.greenSoft : form.status === "Pending" ? T.amberSoft : T.bgSoft,
-              color: form.status === "Approved" ? T.green : form.status === "Pending" ? T.amber : T.muted,
-            }}>{form.status}</span>
-          )}
-        </span>
-      </div>
-
-      <div style={{ textAlign: "center", fontSize: 17, fontWeight: 700, color: accent, marginTop: 10 }}>
+      <div style={{ fontSize: 17, fontWeight: 700, color: accent }}>
         {editMode
-          ? <input value={form.projectTitle || ""} onChange={(e) => updateField("projectTitle", e.target.value)} style={{ ...inp, fontSize: 17, fontWeight: 700, color: accent, maxWidth: 340, textAlign: "center", margin: "0 auto" }} placeholder="Project / Quotation Title" />
+          ? <input value={form.projectTitle || ""} onChange={(e) => updateField("projectTitle", e.target.value)} style={{ ...inp, fontSize: 17, fontWeight: 700, color: accent, maxWidth: 340 }} placeholder="Project / Quotation Title" />
           : form.projectTitle}
       </div>
     </div>
   );
 
-  const docContent = (
-    <div className="bg-white print-doc" style={{ borderRadius: 16, boxShadow: "0 1px 2px rgba(15,23,42,0.04), 0 8px 24px rgba(15,23,42,0.04)", border: `1px solid ${T.border}`, padding: isMobile ? "24px 18px" : "48px 56px", fontFamily: T.font }}>
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
-        @media print {
-          .qt-print-table { display: table; width: 100%; }
-          .qt-print-header { display: table-header-group; }
-          .qt-print-body { display: table-row-group; }
-          .qt-avoid-break { page-break-inside: avoid; }
-          .no-print { display: none !important; }
-        }
-      `}</style>
+  const renderDocContent = (isEditable) => (<div className="bg-white print-doc" style={{ borderRadius: 16, boxShadow: "0 1px 2px rgba(15,23,42,0.04), 0 8px 24px rgba(15,23,42,0.04)", padding: isMobile ? "24px 18px" : "48px 56px", fontFamily: T.font, overflowAnchor: "none" }}>    <style>{`
 
-      <div className="qt-print-table">
-        <div className="qt-print-header">{printHeaderBlock}</div>
+  @media print {
+    @page { size: A4; margin: 8mm 12mm 12mm 12mm; }
+    html, body { margin: 0 !important; padding: 0 !important; }
+    .print-doc { padding: 16px 30px !important; box-shadow: none !important; border-radius: 0 !important; margin: 0 !important; font-size: 92% !important; }
 
-        <div className="qt-print-body">
-          <div className="qt-avoid-break" style={{ marginBottom: 24 }}>
-            <PartyCards form={form} editMode={editMode} accent={accent} updateField={updateField} />
-          </div>
 
-          <div className="qt-avoid-break" style={{ display: "flex", flexDirection: isMobile ? "column" : "row", gap: isMobile ? 10 : 32, marginBottom: 24, fontSize: 14, color: T.muted }}>
-            <span>
-              <strong style={{ color: T.navy }}>Issue Date: </strong>
-              {editMode ? <input type="date" value={form.date} onChange={(e) => updateField("date", e.target.value)} style={{ ...inp, width: "auto", display: "inline-block" }} /> : form.date}
-            </span>
-          </div>
+    .qt-heading-avoid { break-after: avoid; page-break-after: avoid; }
+    .print-doc table thead { display: table-header-group; }
+    .print-doc table tr { break-inside: avoid; page-break-inside: avoid; }
+    .qt-print-body p,
+    .qt-print-body li { break-inside: avoid; page-break-inside: avoid; }
+  }
+`}</style>
+  <style>{`
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+    @media print {
+      .no-print { display: none !important; }
+    }
+    .quotation-rich-text p { margin: 0 0 8px; line-height: 1.85; }
+    .quotation-rich-text ul,
+    .quotation-rich-text ol { padding-left: 20px; margin: 0 0 8px; }
+    .quotation-rich-text li { margin-bottom: 4px; }
+    .quotation-rich-text strong { color: #0f172a; }
+    .quotation-rich-text a { color: inherit; text-decoration: underline; }
+  `}</style>
 
-          <div className="qt-avoid-break" style={{ marginBottom: 24 }}>
-            <div style={sectionTitle}>Project Description</div>
-            {editMode
-              ? <textarea rows={4} value={form.description || `This proposal outlines the scope of work agreed upon between ${issuerName} and ${form.company || "the client"}.`} onChange={(e) => updateField("description", e.target.value)} style={{ ...inp, resize: "vertical" }} />
-              : <div style={sectionText}>{form.description || `This proposal outlines the scope of work agreed upon between ${issuerName} and ${form.company || "the client"}.`}</div>}
-          </div>
+    <div className="qt-print-body">
+      {printBannerBlock}
+      {printHeaderBlock}
 
-          {(editMode || form.scopeOfWork?.trim()) && (
-            <div className="qt-avoid-break" style={{ marginBottom: 24 }}>
-              <div style={sectionTitle}>Scope of Work</div>
-              {editMode ? (
-                <textarea rows={5} value={form.scopeOfWork || ""} onChange={(e) => updateField("scopeOfWork", e.target.value)} style={{ ...inp, resize: "vertical" }} />
-              ) : (
-                <div style={sectionText}>{form.scopeOfWork?.split("\n").filter((l) => l.trim()).map((line, i) => <div key={i} style={{ display: "flex", gap: 8, marginBottom: 4 }}><span>•</span><span>{line}</span></div>)}</div>
-              )}
-            </div>
-          )}
+      {/* Project Description */}
+     <div style={{ marginBottom: 18 }}>
+  <div className="qt-heading-avoid" style={sectionTitle}>Project Description</div>
 
-          {(editMode || form.deliverables?.trim()) && (
-            <div className="qt-avoid-break" style={{ marginBottom: 24 }}>
-              <div style={sectionTitle}>Deliverables</div>
-              {editMode ? (
-                <textarea rows={5} value={form.deliverables || ""} onChange={(e) => updateField("deliverables", e.target.value)} style={{ ...inp, resize: "vertical" }} placeholder="Enter deliverables..." />
-              ) : (
-                <div style={sectionText}>{form.deliverables?.split("\n").filter((l) => l.trim()).map((line, i) => <div key={i} style={{ display: "flex", gap: 8, marginBottom: 4 }}><span>•</span><span>{line}</span></div>)}</div>
-              )}
-            </div>
-          )}
+        {isEditable
+          ? <TinyMCEEditor
+            key={`qt-editor-description-${form.templateStyle}`}
+            id="qt-editor-description"
+            value={form.description || plainTextToHtml(`This proposal outlines the scope of work agreed upon between ${issuerName} and ${form.company || "the client"}.`)}
+            onChange={(html) => updateField("description", html)}
+            accent={accent}
+            height={200}
+            placeholder="Describe the project..."
+          />
+          : <RichView html={form.description || `<p>This proposal outlines the scope of work agreed upon between ${issuerName} and ${form.company || "the client"}.</p>`} />}
+      </div>
 
-          {(editMode || form.technologyUsed?.trim()) && (
-            <div className="qt-avoid-break" style={{ marginBottom: 24 }}>
-              <div style={sectionTitle}>Technology Used</div>
-              {editMode ? (
-                <textarea rows={5} value={form.technologyUsed || ""} onChange={(e) => updateField("technologyUsed", e.target.value)} style={{ ...inp, resize: "vertical" }} />
-              ) : (
-                <div style={sectionText}>{form.technologyUsed?.split("\n").filter((l) => l.trim()).map((line, i) => <div key={i} style={{ display: "flex", gap: 8, marginBottom: 4 }}><span>•</span><span>{line}</span></div>)}</div>
-              )}
-            </div>
-          )}
-
-          {(editMode || form.projectCost?.trim()) && (
-            <div className="qt-avoid-break" style={{ marginBottom: 24 }}>
-              <div style={sectionTitle}>Project Cost</div>
-              {editMode ? (
-                <textarea rows={5} value={form.projectCost || ""} onChange={(e) => updateField("projectCost", e.target.value)} style={{ ...inp, resize: "vertical" }} placeholder={"One cost line per line, e.g.\nWebsite Development: ₹25,000\nGST (18%): ₹4,500\nTotal Project Cost: ₹29,500"} />
-              ) : (
-                <div style={sectionText}>{form.projectCost?.split("\n").filter((l) => l.trim()).map((line, i) => <div key={i} style={{ display: "flex", gap: 8, marginBottom: 4 }}><span>•</span><span>{line}</span></div>)}</div>
-              )}
-            </div>
-          )}
-
-          {(editMode || form.timelineDesc?.trim()) && (
-            <div className="qt-avoid-break" style={{ marginBottom: 24 }}>
-              <div style={sectionTitle}>Project Timeline</div>
-              {editMode ? (
-                <textarea rows={5} value={form.timelineDesc || ""} onChange={(e) => updateField("timelineDesc", e.target.value)} style={{ ...inp, resize: "vertical" }} />
-              ) : (
-                <div style={sectionText}>{form.timelineDesc?.split("\n").filter((l) => l.trim()).map((line, i) => <div key={i} style={{ display: "flex", gap: 8, marginBottom: 4 }}><span>•</span><span>{line}</span></div>)}</div>
-              )}
-            </div>
-          )}
-
-          {(editMode || form.terms?.trim()) && (
-            <div className="qt-avoid-break" style={{ marginBottom: 24 }}>
-              <div style={{ ...sectionTitle, marginBottom: 6 }}>Terms &amp; Conditions</div>
-              {editMode && (
-                <div className="no-print" style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 10 }}>
-                  {TERMS_TEMPLATES.map((tpl) => (
-                    <button key={tpl.label} onClick={() => updateField("terms", tpl.text)} title={`Use "${tpl.label}" terms template`} style={{
-                      border: form.terms === tpl.text ? `1.5px solid ${accent}` : `1px solid ${T.border}`, borderRadius: 20, padding: "4px 12px",
-                      backgroundColor: form.terms === tpl.text ? accentSoftBg : "#fff", color: form.terms === tpl.text ? accent : T.muted,
+      {/* Scope of Work */}
+      {(isEditable || (form.scopeOfWork && form.scopeOfWork.trim())) && (
+        <div style={{ marginBottom: 24 }}>
+<div className="qt-heading-avoid" style={sectionTitle}>Scope of Work</div>          {isEditable ? (
+            <>
+              <div className="no-print" style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 10 }}>
+                {SCOPE_TEMPLATES.map((tpl) => {
+                  const tplHtml = linesToHtmlList(tpl.text);
+                  return (
+                    <button key={tpl.label} onClick={() => updateField("scopeOfWork", tplHtml)} title={`Use "${tpl.label}" scope template`} style={{
+                      border: form.scopeOfWork === tplHtml ? `1.5px solid ${accent}` : `1px solid ${T.border}`, borderRadius: 20, padding: "4px 12px",
+                      backgroundColor: form.scopeOfWork === tplHtml ? accentSoftBg : "#fff", color: form.scopeOfWork === tplHtml ? accent : T.muted,
                       fontSize: 12, fontWeight: 600, cursor: "pointer",
                     }}>
                       {tpl.label}
                     </button>
-                  ))}
-                </div>
-              )}
-              {editMode ? (
-                <textarea rows={6} value={form.terms || ""} onChange={(e) => updateField("terms", e.target.value)} style={{ ...inp, resize: "vertical" }} placeholder="One term per line, or pick a template above... (leave empty to remove this section)" />
-              ) : (
-                <div style={sectionText}>{(form.terms || "").split("\n").filter((l) => l.trim()).map((line, i) => <div key={i} style={{ display: "flex", gap: 8, marginBottom: 4 }}><span>•</span><span>{line}</span></div>)}</div>
-              )}
-            </div>
+                  );
+                })}
+                <button onClick={() => updateField("scopeOfWork", "")} title="Write your own custom scope" style={{
+                  border: form.scopeOfWork === "" ? `1.5px dashed ${accent}` : `1px dashed ${T.border}`, borderRadius: 20, padding: "4px 12px",
+                  backgroundColor: form.scopeOfWork === "" ? accentSoftBg : "#fff", color: form.scopeOfWork === "" ? accent : T.muted,
+                  fontSize: 12, fontWeight: 600, cursor: "pointer",
+                }}>
+                  + Custom
+                </button>
+              </div>
+              <TinyMCEEditor
+                key={`qt-editor-scope-${form.templateStyle}`}
+                id="qt-editor-scope"
+                value={form.scopeOfWork || ""}
+                onChange={(html) => updateField("scopeOfWork", html)}
+                accent={accent}
+                height={220}
+                placeholder="Add scope items (use the bullet list button), or pick a template above..."
+              />
+            </>
+          ) : (
+            <RichView html={form.scopeOfWork} />
           )}
+        </div>
+      )}
 
-          {(form.notes || editMode) && (
-            <div className="qt-avoid-break" style={{ marginBottom: 24, paddingTop: 16, borderTop: `1px solid ${T.border}` }}>
-              <div style={sectionTitle}>Note:</div>
-              {editMode
-                ? <textarea rows={2} value={form.notes} onChange={(e) => updateField("notes", e.target.value)} style={{ ...inp, resize: "vertical" }} placeholder="Additional notes..." />
-                : <div style={sectionText}>{form.notes}</div>}
-            </div>
+      {/* Deliverables */}
+      {(isEditable || (form.deliverables && form.deliverables.trim())) && (
+        <div style={{ marginBottom: 24 }}>
+<div className="qt-heading-avoid" style={sectionTitle}>Deliverables</div>          {isEditable ? (
+            <TinyMCEEditor
+              id="qt-editor-deliverables"
+              value={form.deliverables || ""}
+              onChange={(html) => updateField("deliverables", html)}
+              accent={accent}
+              height={220}
+              placeholder="Add deliverables (use the bullet list button)..."
+            />
+          ) : (
+            <RichView html={form.deliverables} />
           )}
+        </div>
+      )}
 
-          {form.customSections.map((sec, i) => (
-            <div key={i} className="qt-avoid-break" style={{ marginBottom: 24, paddingTop: 16, borderTop: `1px solid ${T.border}`, position: "relative" }}>
-              {editMode ? (
-                <div style={{ display: "flex", alignItems: isMobile ? "stretch" : "center", flexDirection: isMobile ? "column" : "row", gap: 8, marginBottom: 8 }}>
-                  <input value={sec.heading} onChange={(e) => updateCustomSection(i, "heading", e.target.value)} placeholder="Section Heading (e.g. Payment Terms)" style={headingInp} />
-                  <button onClick={() => removeCustomSection(i)} title="Remove this section" style={{
-                    flexShrink: 0, width: isMobile ? "100%" : 30, height: 30, border: "none", borderRadius: 6,
-                    backgroundColor: T.redSoft, color: T.red, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
-                  }}>
-                    <FaTrash size={12} />
-                  </button>
-                </div>
-              ) : (
-                sec.heading && <div style={sectionTitle}>{sec.heading}</div>
-              )}
-              {editMode ? (
-                <textarea rows={4} value={sec.content} onChange={(e) => updateCustomSection(i, "content", e.target.value)} placeholder="Type section content here..." style={{ ...inp, resize: "vertical" }} />
-              ) : (
-                <div style={sectionText}>{sec.content?.split("\n").filter((l) => l.trim()).map((line, j) => <div key={j} style={{ display: "flex", gap: 8, marginBottom: 4 }}><span>•</span><span>{line}</span></div>)}</div>
-              )}
-            </div>
-          ))}
+      {/* Technology Used */}
+      {(isEditable || (form.technologyUsed && form.technologyUsed.trim())) && (
+        <div style={{ marginBottom: 24 }}>
+<div className="qt-heading-avoid" style={sectionTitle}>Technology Used</div>
+          {isEditable ? (
+            <TinyMCEEditor
+              id="qt-editor-technology"
+              value={form.technologyUsed || ""}
+              onChange={(html) => updateField("technologyUsed", html)}
+              accent={accent}
+              height={200}
+              placeholder="List technologies used (use the bullet list button)..."
+            />
+          ) : (
+            <RichView html={form.technologyUsed} />
+          )}
+        </div>
+      )}
 
-          {editMode && (
-            <div className="no-print" style={{ marginBottom: 24 }}>
-              <button onClick={addCustomSection} style={{
-                display: "flex", alignItems: "center", gap: 8, padding: "10px 18px", border: `2px dashed ${accent}`, borderRadius: 10,
-                backgroundColor: accentSoftBg, color: accent, fontWeight: 600, fontSize: 14, cursor: "pointer", width: "100%", justifyContent: "center",
-              }}
-                onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = `${accent}20`; }}
-                onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = accentSoftBg; }}>
-                <FaPlus size={12} /> Add Custom Section
+      {/* Custom Sections */}
+  {form.customSections.map((sec, i) => (
+  <div key={i} style={{ marginBottom: 24, paddingTop: 16, borderTop: `1px solid ${T.border}`, position: "relative" }}>
+    {isEditable ? (
+            <div style={{ display: "flex", alignItems: isMobile ? "stretch" : "center", flexDirection: isMobile ? "column" : "row", gap: 8, marginBottom: 8 }}>
+              <input value={sec.heading} onChange={(e) => updateCustomSection(i, "heading", e.target.value)} placeholder="Section Heading (e.g. Payment Terms)" style={headingInp} />
+              <button onClick={() => removeCustomSection(i)} title="Remove this section" style={{
+                flexShrink: 0, width: isMobile ? "100%" : 30, height: 30, border: "none", borderRadius: 6,
+                backgroundColor: T.redSoft, color: T.red, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
+              }}>
+                <FaTrash size={12} />
               </button>
             </div>
+          ) : (
+      sec.heading && <div className="qt-heading-avoid" style={sectionTitle}>{sec.heading}</div>
+    )}
+          {isEditable ? (
+            sec.type === "table" ? (
+              <EditableSectionTable
+                section={sec}
+                onChange={(updated) => updateCustomSectionTable(i, updated)}
+                accent={accent}
+              />
+            ) : (
+              <TinyMCEEditor
+                key={`qt-editor-custom-${i}-${form.templateStyle}`}
+                id={`qt-editor-custom-${i}`}
+                value={sec.content || ""}
+                onChange={(html) => updateCustomSection(i, "content", html)}
+                accent={accent}
+                height={180}
+                placeholder="Type section content here..."
+              />
+            )
+          ) : sec.type === "table" ? (
+            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+              <thead>
+                <tr>
+                  {(sec.columns || []).map((col, ci) => (
+                    <th key={ci} style={{ textAlign: "left", fontSize: 12, fontWeight: 700, color: "#fff", backgroundColor: accent, padding: "8px 12px", border: "none" }}>
+                      {col}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {(sec.rows || []).map((row, ri) => (
+                  <tr key={ri}>
+                    {row.map((cell, ci) => (
+                      <td key={ci} style={{ ...cellStyle, border: "none", borderBottom: `1px solid ${T.border}` }}>{cell}</td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : (
+            <RichView html={sec.content} />
           )}
+        </div>
+      ))}
 
-          <div className="qt-avoid-break" style={{ borderTop: `1px solid ${T.border}`, paddingTop: 32, marginTop: 32 }}>
-            <div style={{ display: "flex", gap: 24, flexWrap: "nowrap" }}>
-              <div style={{ flex: "1 1 50%", minWidth: 0 }}>
-                <div style={{ fontSize: 13, color: T.faint, marginBottom: 8 }}>Client Signature</div>
-                <div style={{ height: 60, marginBottom: 8 }} />
-                <div style={{ borderTop: `1px solid ${T.border}`, paddingTop: 6, fontSize: 14, color: T.slate, wordBreak: "break-word" }}>{form.name}</div>
+      {isEditable && (
+        <div className="no-print" style={{ marginBottom: 24 }}>
+          <button onClick={addCustomSection} style={{
+            display: "flex", alignItems: "center", gap: 8, padding: "10px 18px", border: `2px dashed ${accent}`, borderRadius: 10,
+            backgroundColor: accentSoftBg, color: accent, fontWeight: 600, fontSize: 14, cursor: "pointer", width: "100%", justifyContent: "center",
+          }}
+            onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = `${accent}20`; }}
+            onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = accentSoftBg; }}>
+            <FaPlus size={12} /> Add Custom Section
+          </button>
+        </div>
+      )}
+
+      {/* Project Cost */}
+      {(isEditable || getCostItems(form).length > 0) && (
+      <div style={{ marginBottom: 24 }}>
+  <div className="qt-heading-avoid" style={sectionTitle}>Project Cost</div>
+
+          {isEditable ? (
+        <CostItemsTable
+  items={getCostItems(form)}
+  onChange={(items) => updateField("costItems", items)}
+  gstMode={form.gstMode || (form.includeGst === true ? "with" : "without")}
+  gstPercent={form.gstPercent}
+  defaultGstPercent={defaultGstPercent}
+  onGstChange={updateField}
+  accent={accent}
+/>
+          ) : (
+            <table style={{ width: "100%", borderCollapse: "collapse" }}>
+              <thead>
+                <tr>
+                  <th style={{ textAlign: "left", fontSize: 12, fontWeight: 700, color: "#fff", backgroundColor: accent, padding: "8px 12px", border: "none" }}>
+                    Description
+                  </th>
+                  <th style={{ textAlign: "right", fontSize: 12, fontWeight: 700, color: "#fff", backgroundColor: accent, padding: "8px 12px", border: "none" }}>
+                    Line Total
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {getCostLines(form, defaultGstPercent).lines.map((line, i) => {
+                  const [label, value] = line.includes(":") ? line.split(/:(.+)/).map((s) => s.trim()) : [line, ""];
+                  return (
+                    <tr key={i}>
+                      <td style={{ ...cellStyle, border: "none", borderBottom: `1px solid ${T.border}` }}>{label}</td>
+                      <td style={{ ...cellStyle, border: "none", borderBottom: `1px solid ${T.border}`, textAlign: "right" }}>{value}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+              {getCostLines(form, defaultGstPercent).grandLine && (() => {
+                const grandLine = getCostLines(form, defaultGstPercent).grandLine;
+                const [label, value] = grandLine.includes(":") ? grandLine.split(/:(.+)/).map((s) => s.trim()) : [grandLine, ""];
+                return (
+                  <tfoot>
+                    <tr>
+                      <td style={{ padding: "10px 12px", fontSize: 13.5, fontWeight: 700, color: T.navy, borderTop: `2px solid ${T.navy}` }}>{label}</td>
+                      <td style={{ padding: "10px 12px", fontSize: 13.5, fontWeight: 700, color: T.navy, borderTop: `2px solid ${T.navy}`, textAlign: "right" }}>{value}</td>
+                    </tr>
+                  </tfoot>
+                );
+              })()}
+            </table>
+          )}
+        </div>
+      )}
+
+      {/* Project Timeline */}
+      {(isEditable || (form.timelineDesc && form.timelineDesc.trim())) && (
+        <div style={{ marginBottom: 24 }}>
+<div className="qt-heading-avoid" style={sectionTitle}>Project Timeline</div>
+          {isEditable ? (
+            <TinyMCEEditor
+              id="qt-editor-timeline"
+              value={form.timelineDesc || ""}
+              onChange={(html) => updateField("timelineDesc", html)}
+              accent={accent}
+              height={200}
+              placeholder="Describe the project timeline..."
+            />
+          ) : (
+            <RichView html={form.timelineDesc} />
+          )}
+        </div>
+      )}
+
+      {/* Terms & Conditions */}
+      {(isEditable || (form.terms && form.terms.trim())) && (
+        <div style={{ marginBottom: 24 }}>
+<div className="qt-heading-avoid" style={{ ...sectionTitle, marginBottom: 6 }}>Terms &amp; Conditions</div>
+          {isEditable && (
+            <div className="no-print" style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 10 }}>
+              {TERMS_TEMPLATES.map((tpl) => {
+                const tplHtml = plainTextToHtml(tpl.text);
+                return (
+                  <button
+                    key={tpl.label}
+                    onClick={() => updateField("terms", tplHtml)}
+                    title={`Use "${tpl.label}" terms template`}
+                    style={{
+                      border: form.terms === tplHtml ? `1.5px solid ${accent}` : `1px solid ${T.border}`,
+                      borderRadius: 20, padding: "4px 12px",
+                      backgroundColor: form.terms === tplHtml ? accentSoftBg : "#fff",
+                      color: form.terms === tplHtml ? accent : T.muted,
+                      fontSize: 12, fontWeight: 600, cursor: "pointer",
+                    }}
+                  >
+                    {tpl.label}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+          {isEditable ? (
+            <TinyMCEEditor
+              id="qt-editor-terms"
+              value={form.terms || ""}
+              onChange={(html) => updateField("terms", html)}
+              accent={accent}
+              height={300}
+              placeholder="Add your terms & conditions here, or pick a template above..."
+            />
+          ) : (
+            <RichView html={form.terms} />
+          )}
+        </div>
+      )}
+
+      {/* Note */}
+      {(form.notes || isEditable) && (
+        <div style={{ marginBottom: 24, paddingTop: 16, borderTop: `1px solid ${T.border}` }}>
+  <div className="qt-heading-avoid" style={sectionTitle}>Note:</div>
+  
+          {isEditable ? (
+            <TinyMCEEditor
+              id="qt-editor-notes"
+              value={form.notes || ""}
+              onChange={(html) => updateField("notes", html)}
+              accent={accent}
+              height={160}
+              placeholder="Additional notes..."
+            />
+          ) : (
+            <RichView html={form.notes} />
+          )}
+        </div>
+      )}
+
+      {/* Signatures */}
+      <div style={{ borderTop: `1px solid ${T.border}`, paddingTop: 16, marginTop: 16, marginBottom: 0 }}>
+        <div style={{ display: "flex", gap: 24, flexWrap: "nowrap" }}>
+          <div style={{ flex: "1 1 50%", minWidth: 0 }}>
+            <div style={{ height: 60, marginBottom: 8, display: "flex", alignItems: "flex-end" }} />
+            <div style={{ borderTop: `1px solid ${T.border}`, paddingTop: 6 }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: T.navy, wordBreak: "break-word" }}>{form.name}</div>
+              <div style={{ fontSize: 12.5, color: T.faint, marginTop: 2 }}>Client Signature</div>
+            </div>
+          </div>
+
+          <div style={{ flex: "1 1 50%", minWidth: 0, textAlign: "end" }}>
+            {isEditable ? (
+              <div className={`d-flex flex-column gap-2 mb-2 ${isMobile ? "align-items-start" : "align-items-end"}`}>
+                <div style={{ width: isMobile ? "100%" : 220, maxWidth: 220, height: 90, border: `1px solid ${T.border}`, borderRadius: 8, backgroundColor: T.bgSoft, display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
+                  {form.signature ? (
+                    <img
+                      src={form.signature}
+                      alt="Signature"
+                      style={{
+                        maxWidth: "92%",
+                        maxHeight: "92%",
+                        objectFit: "contain",
+                        mixBlendMode: "multiply",
+                      }}
+                    />
+                  ) : <span style={{ fontSize: 10.5, color: T.faint }}>No signature</span>}
+                </div>
+                <div className="d-flex gap-2">
+                  <label htmlFor="qt-sig-upload" style={{ fontSize: 11.5, fontWeight: 600, color: accent, border: `1px solid ${accent}`, borderRadius: 6, padding: "4px 10px", cursor: "pointer" }}>
+                    {form.signature ? "Change" : "Upload Signature"}
+                  </label>
+                  <input id="qt-sig-upload" type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => {
+                    const file = e.target.files[0];
+                    if (file) { const reader = new FileReader(); reader.onloadend = () => updateField("signature", reader.result); reader.readAsDataURL(file); }
+                  }} />
+                  {form.signature && (
+                    <button onClick={() => updateField("signature", null)} className="border-0 rounded-3 px-2 py-1" style={{ backgroundColor: T.redSoft, color: T.red, fontSize: 11, cursor: "pointer" }}>Remove</button>
+                  )}
+                </div>
               </div>
-
-              <div style={{ flex: "1 1 50%", minWidth: 0, textAlign: "end" }}>
-                <div style={{ fontSize: 13, color: T.faint, marginBottom: 8 }}>Authorized Signature</div>
-
-                {editMode ? (
-                  <div className={`d-flex flex-column gap-2 mb-2 ${isMobile ? "align-items-start" : "align-items-end"}`}>
-                    <div style={{ width: isMobile ? "100%" : 180, maxWidth: 180, height: 60, border: `1px solid ${T.border}`, borderRadius: 8, backgroundColor: T.bgSoft, display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
-                      {form.signature ? <img src={form.signature} alt="Signature" style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }} /> : <span style={{ fontSize: 10.5, color: T.faint }}>No signature</span>}
-                    </div>
-                    <div className="d-flex gap-2">
-                      <label htmlFor="qt-sig-upload" style={{ fontSize: 11.5, fontWeight: 600, color: accent, border: `1px solid ${accent}`, borderRadius: 6, padding: "4px 10px", cursor: "pointer" }}>
-                        {form.signature ? "Change" : "Upload Signature"}
-                      </label>
-                      <input id="qt-sig-upload" type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => {
-                        const file = e.target.files[0];
-                        if (file) { const reader = new FileReader(); reader.onloadend = () => updateField("signature", reader.result); reader.readAsDataURL(file); }
-                      }} />
-                      {form.signature && (
-                        <button onClick={() => updateField("signature", null)} className="border-0 rounded-3 px-2 py-1" style={{ backgroundColor: T.redSoft, color: T.red, fontSize: 11, cursor: "pointer" }}>Remove</button>
-                      )}
-                    </div>
-                  </div>
+            ) : (
+              <div style={{ height: 60, display: "flex", justifyContent: isMobile ? "flex-start" : "flex-end", alignItems: "flex-end", marginBottom: 8, overflow: "visible" }}>
+                {form.signature ? (
+                  <img
+                    src={form.signature}
+                    alt="Signature"
+                    style={{
+                      maxHeight: 60,
+                      maxWidth: 240,
+                      objectFit: "contain",
+                      mixBlendMode: "multiply",
+                      transform: "rotate(-1.5deg)",
+                      filter: "contrast(1.15)",
+                    }}
+                  />
                 ) : (
-                  <div style={{ minHeight: 60, display: "flex", justifyContent: isMobile ? "flex-start" : "flex-end", alignItems: "center", marginBottom: 8 }}>
-                    {form.signature ? <img src={form.signature} alt="Signature" style={{ maxHeight: 60, maxWidth: 180, objectFit: "contain" }} /> : <div style={{ width: 180, height: 52 }} />}
-                  </div>
+                  <div style={{ width: 180, height: 52 }} />
                 )}
-
-                <div style={{ borderTop: `1px solid ${T.border}`, paddingTop: 6, fontSize: 14, color: T.slate, textAlign: isMobile ? "left" : "right", wordBreak: "break-word" }}>{issuerName}</div>
               </div>
+            )}
+
+            <div style={{ borderTop: `1px solid ${T.border}`, paddingTop: 6, textAlign: isMobile ? "left" : "right" }}>
+              <div style={{ fontSize: 14, fontWeight: 700, color: T.navy, wordBreak: "break-word" }}>{issuerName}</div>
+              <div style={{ fontSize: 12.5, color: T.faint, marginTop: 2 }}>Authorized Signature</div>
             </div>
           </div>
         </div>
       </div>
+      {printFooterBlock}
     </div>
+  </div>
   );
 
-  // ── Live preview: mirrors every section of docContent in compact form ──
+  const docContent = renderDocContent(editMode);
+
+  const activeDocument = (form.templateStyle === "default" || !form.templateStyle)
+    ? renderDocContent(false)
+    : (() => {
+      const Layout = QUOTATION_LAYOUTS[form.templateStyle];
+      return Layout ? (
+        <Layout
+          quotation={form}
+          companyInfo={companyInfo}
+          customers={customers}
+          editMode={false}
+          onChange={() => { }}
+          onCustomSectionChange={() => { }}
+          onAddCustomSection={() => { }}
+          onRemoveCustomSection={() => { }}
+          onLogoUpload={() => { }}
+          onRemoveLogo={() => { }}
+          onSignatureUpload={() => { }}
+          onRemoveSignature={() => { }}
+          defaultGstPercent={defaultGstPercent}
+        />
+      ) : docContent;
+    })();
+
+  const PREVIEW_SCALE = 0.42;
+
   const previewPanel = (
     <div style={isMobile ? { ...styles.previewPanel, width: "100%", position: "static", maxHeight: "80vh" } : styles.previewPanel}>
       <div style={styles.previewHeader}>
@@ -525,105 +1154,16 @@ export default function QuotationDetail({
       </div>
 
       <div style={{ padding: 16, overflowY: "auto", flex: 1, backgroundColor: T.bgSoft }}>
-        <div style={{ backgroundColor: "#fff", borderRadius: 10, padding: "18px 18px", fontFamily: T.font, boxShadow: "0 2px 10px rgba(0,0,0,0.06)" }}>
-
-          <div style={{ fontSize: 13, fontWeight: 700, color: T.navy, marginBottom: 10 }}>
-            {form.issuerName || <span style={{ color: T.faint }}>Your Company Name</span>}
-          </div>
-
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10, marginBottom: 12 }}>
-            <div style={{ minWidth: 0 }}>
-              <div style={{ fontSize: 20, fontWeight: 700, color: T.navy, letterSpacing: "-0.3px" }}>QUOTATION</div>
-              <div style={{ fontSize: 10.5, color: T.muted, marginTop: 2 }}>
-                Quotation No: {form.id} · <span style={{
-                  padding: "1px 7px", borderRadius: 20, fontWeight: 600,
-                  backgroundColor: form.status === "Approved" ? T.greenSoft : form.status === "Pending" ? T.amberSoft : T.bgSoft,
-                  color: form.status === "Approved" ? T.green : form.status === "Pending" ? T.amber : T.muted,
-                }}>{form.status}</span>
-              </div>
-              <div style={{ fontSize: 13, fontWeight: 700, color: accent, marginTop: 6 }}>
-                {form.projectTitle || <span style={{ color: T.faint }}>Project / Quotation Title</span>}
-              </div>
-            </div>
-            <div style={{ width: 52, height: 36, borderRadius: 6, flexShrink: 0, border: form.logo ? "none" : `1px dashed ${T.border}`, backgroundColor: form.logo ? "transparent" : T.bgSoft, display: "flex", alignItems: "center", justifyContent: "center" }}>
-              {form.logo ? <img src={form.logo} alt="Logo" style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }} /> : <span style={{ fontSize: 9, color: T.faint }}>Logo</span>}
-            </div>
-          </div>
-
-          <div style={{ marginBottom: 12 }}>
-            <PartyCards form={form} editMode={false} accent={accent} updateField={updateField} compact />
-          </div>
-
-          <div style={{ marginBottom: 12, fontSize: 10.5, color: T.muted, display: "flex", gap: 14 }}>
-            <span><strong style={{ color: T.navy }}>Issue:</strong> {form.date}</span>
-          </div>
-
-          <div style={{ marginBottom: 12 }}>
-            <div style={{ fontWeight: 700, fontSize: 12, color: T.navy, marginBottom: 4 }}>Project Description</div>
-            <div style={{ fontSize: 11, color: T.slate, lineHeight: 1.6 }}>
-              {form.description || `This proposal outlines the scope of work agreed upon between ${issuerName} and ${form.company || "the client"}.`}
-            </div>
-          </div>
-
-          {form.scopeOfWork?.trim() && (
-            <div style={{ marginBottom: 12 }}>
-              <div style={{ fontWeight: 700, fontSize: 12, color: T.navy, marginBottom: 4 }}>Scope of Work</div>
-              <div style={{ fontSize: 11, color: T.slate, lineHeight: 1.6 }}>{form.scopeOfWork.split("\n").filter((l) => l.trim()).map((line, i) => <div key={i}>• {line}</div>)}</div>
-            </div>
-          )}
-
-          {form.deliverables?.trim() && (
-            <div style={{ marginBottom: 12 }}>
-              <div style={{ fontWeight: 700, fontSize: 12, color: T.navy, marginBottom: 4 }}>Deliverables</div>
-              <div style={{ fontSize: 11, color: T.slate, lineHeight: 1.6 }}>{form.deliverables.split("\n").filter((l) => l.trim()).map((line, i) => <div key={i}>• {line}</div>)}</div>
-            </div>
-          )}
-
-          {form.technologyUsed?.trim() && (
-            <div style={{ marginBottom: 12 }}>
-              <div style={{ fontWeight: 700, fontSize: 12, color: T.navy, marginBottom: 4 }}>Technology Used</div>
-              <div style={{ fontSize: 11, color: T.slate, lineHeight: 1.6 }}>{form.technologyUsed.split("\n").filter((l) => l.trim()).map((line, i) => <div key={i}>• {line}</div>)}</div>
-            </div>
-          )}
-
-          {form.projectCost?.trim() && (
-            <div style={{ marginBottom: 12 }}>
-              <div style={{ fontWeight: 700, fontSize: 12, color: T.navy, marginBottom: 4 }}>Project Cost</div>
-              <div style={{ fontSize: 11, color: T.slate, lineHeight: 1.6 }}>{form.projectCost.split("\n").filter((l) => l.trim()).map((line, i) => <div key={i}>• {line}</div>)}</div>
-            </div>
-          )}
-
-          {form.timelineDesc?.trim() && (
-            <div style={{ marginBottom: 12 }}>
-              <div style={{ fontWeight: 700, fontSize: 12, color: T.navy, marginBottom: 4 }}>Project Timeline</div>
-              <div style={{ fontSize: 11, color: T.slate, lineHeight: 1.6 }}>{form.timelineDesc.split("\n").filter((l) => l.trim()).map((line, i) => <div key={i}>• {line}</div>)}</div>
-            </div>
-          )}
-
-          {form.terms?.trim() && (
-            <div style={{ marginBottom: 12 }}>
-              <div style={{ fontWeight: 700, fontSize: 12, color: T.navy, marginBottom: 4 }}>Terms &amp; Conditions</div>
-              <div style={{ fontSize: 11, color: T.slate, lineHeight: 1.6 }}>{form.terms.split("\n").filter((l) => l.trim()).map((line, i) => <div key={i}>• {line}</div>)}</div>
-            </div>
-          )}
-
-          {form.notes && (
-            <div style={{ marginBottom: 12 }}>
-              <div style={{ fontWeight: 700, fontSize: 12, color: T.navy, marginBottom: 4 }}>Note:</div>
-              <div style={{ fontSize: 11, color: T.slate, lineHeight: 1.6 }}>{form.notes}</div>
-            </div>
-          )}
-
-          {form.customSections?.map((sec, i) => (sec.heading || sec.content ? (
-            <div key={i} style={{ marginBottom: 12 }}>
-              {sec.heading && <div style={{ fontWeight: 700, fontSize: 12, color: T.navy, marginBottom: 4 }}>{sec.heading}</div>}
-              <div style={{ fontSize: 11, color: T.slate, lineHeight: 1.6 }}>{sec.content?.split("\n").filter((l) => l.trim()).map((line, j) => <div key={j}>• {line}</div>)}</div>
-            </div>
-          ) : null))}
-
-          <div style={{ textAlign: "center", padding: 6, fontSize: 10, color: T.faint, fontStyle: "italic", borderTop: `1px solid ${T.border}`, marginTop: 10 }}>
-            Live preview — actual document may paginate differently
-          </div>
+        <div style={{
+          transform: `scale(${PREVIEW_SCALE})`,
+          transformOrigin: "top left",
+          width: `${100 / PREVIEW_SCALE}%`,
+          pointerEvents: "none",
+        }}>
+          {activeDocument}
+        </div>
+        <div style={{ textAlign: "center", padding: "10px 6px 0", fontSize: 10, color: T.faint, fontStyle: "italic" }}>
+          Live preview — actual document may paginate differently
         </div>
       </div>
     </div>
@@ -633,53 +1173,234 @@ export default function QuotationDetail({
     <div style={{ fontFamily: T.font, ...(editMode ? (isMobile ? styles.splitContainerMobile : styles.splitContainer) : { maxWidth: 900 }) }}>
 
       <div style={editMode ? styles.formSide : {}}>
-        <div className="d-flex justify-content-between align-items-center mb-4 no-print" style={{ flexWrap: "wrap", gap: 10 }}>
-          <button onClick={onBack} className="d-flex align-items-center gap-2 border-0 rounded-3 fw-semibold px-3 py-2"
-            style={{ backgroundColor: T.bgSoft, color: T.slate, cursor: "pointer", fontSize: 14 }}
+        <div className="d-flex align-items-center no-print"
+          style={{
+            flexWrap: "nowrap", gap: 6,
+            backgroundColor: "#fff",
+            padding: "8px 12px",
+            marginBottom: 8,
+            borderBottom: `1px solid ${T.border}`,
+          }}>
+          <button onClick={onBack} title="Back" aria-label="Back"
+            className="d-flex align-items-center justify-content-center border-0 rounded-3"
+            style={{ backgroundColor: T.bgSoft, color: T.slate, cursor: "pointer", width: 30, height: 30, padding: 0, flexShrink: 0 }}
             onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#e2e8f0")}
             onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = T.bgSoft)}>
-            <FaArrowLeft size={12} /> Back
+            <FaArrowLeft size={12} />
           </button>
 
-          <div className="d-flex align-items-center gap-3">
-            {editMode && <ToggleSwitch checked={showPreview} onChange={setShowPreview} accent={accent} label="Live Preview" />}
-            {!editMode && (
-              <button onClick={onEdit} className="d-flex align-items-center gap-2 border-0 rounded-3 fw-semibold px-3 py-2"
-                style={{ backgroundColor: T.bgSoft, color: T.slate, cursor: "pointer", fontSize: 14 }}
-                onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = accent; e.currentTarget.style.color = "#fff"; }}
-                onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = T.bgSoft; e.currentTarget.style.color = T.slate; }}>
-                <FaEdit size={12} /> Edit
-              </button>
-            )}
-          </div>
-        </div>
-
-        {editMode && <ThemeColorPicker accent={accent} onChange={handleThemeColorChange} />}
-
-        {docContent}
-
-        {editMode && (
-          <div className="no-print mt-3 d-flex justify-content-end gap-2" style={{ flexWrap: "wrap" }}>
-            <button onClick={handleCancelClick} className="d-flex align-items-center gap-2 border-0 rounded-3 fw-semibold px-3 py-2" style={{ backgroundColor: T.bgSoft, color: T.slate, cursor: "pointer", fontSize: 14 }}>
-              <FaTimes size={12} /> Cancel
+          {!editMode && (
+            <button
+              onClick={() => {
+                if (quotation.status === "Approved") {
+                  setShowApprovedEditConfirm(true);
+                  return;
+                }
+                onEdit();
+              }}
+              title="Edit" aria-label="Edit"
+              className="d-flex align-items-center justify-content-center border-0 rounded-3"
+              style={{ backgroundColor: T.bgSoft, color: T.slate, cursor: "pointer", width: 30, height: 30, padding: 0, flexShrink: 0 }}
+              onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = accent; e.currentTarget.style.color = "#fff"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = T.bgSoft; e.currentTarget.style.color = T.slate; }}>
+              <FaEdit size={12} />
             </button>
-            <button onClick={handleSaveClick} className="d-flex align-items-center gap-2 border-0 rounded-3 fw-semibold px-3 py-2" style={{ backgroundColor: T.green, color: "#fff", cursor: "pointer", fontSize: 14 }}>
+          )}
+
+          {editMode && (
+            <button onClick={handleCancelClick} title="Cancel" aria-label="Cancel"
+              className="d-flex align-items-center justify-content-center border-0 rounded-3"
+              style={{ backgroundColor: T.bgSoft, color: T.slate, cursor: "pointer", width: 30, height: 30, padding: 0, flexShrink: 0 }}>
+              <FaTimes size={12} />
+            </button>
+          )}
+
+          {!editMode && (
+           <button
+  onClick={() => {
+    const seenKey = "qt_print_tip_seen";
+    if (!localStorage.getItem(seenKey)) {
+      window.alert(
+        "For a clean PDF: in the print dialog, click 'More settings' and turn OFF 'Headers and footers'.\n\nThis removes the URL, date, and page numbers the browser normally adds."
+      );
+      try { localStorage.setItem(seenKey, "1"); } catch (err) { console.error("Failed to save print tip flag:", err); }
+    }
+    window.print();
+  }}
+  title="In the print dialog, open 'More settings' and turn OFF 'Headers and footers' for a clean PDF"
+  aria-label="Print / Download PDF"
+              className="d-flex align-items-center justify-content-center border-0 rounded-3"
+              style={{ background: accentBg, color: "#fff", cursor: "pointer", height: 30, padding: "0 14px", gap: 7, boxShadow: `0 4px 12px ${accent}4d`, flexShrink: 0, fontSize: 13, fontWeight: 600, fontFamily: T.font }}>
+              <FaPrint size={12} /> Print
+            </button>
+          )}
+
+          {editMode && (
+            <button
+              onClick={() => setShowTemplateSwitcher(true)}
+              title="Change Template" aria-label="Change Template"
+              className="d-flex align-items-center justify-content-center border-0 rounded-3"
+              style={{
+                backgroundColor: T.bgSoft, color: T.slate, cursor: "pointer",
+                height: 30, padding: "0 12px", gap: 6, fontSize: 12.5, fontWeight: 600,
+                fontFamily: T.font, flexShrink: 0, marginLeft: 4,
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = accent; e.currentTarget.style.color = "#fff"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = T.bgSoft; e.currentTarget.style.color = T.slate; }}
+            >
+              Change Template
+            </button>
+          )}
+
+          {editMode && (
+            <div style={{ marginLeft: 4 }}>
+              <ToggleSwitch checked={showPreview} onChange={setShowPreview} accent={accent} label="Live Preview" />
+            </div>
+          )}
+
+          {editMode && (
+            <button onClick={handleSaveClick} title="Save" aria-label="Save"
+              className="d-flex align-items-center justify-content-center border-0 rounded-3"
+              style={{ backgroundColor: T.green, color: "#fff", cursor: "pointer", height: 30, padding: "0 16px", gap: 7, fontSize: 13, fontWeight: 600, fontFamily: T.font, flexShrink: 0, marginLeft: "auto" }}>
               <FaSave size={12} /> Save
             </button>
-          </div>
-        )}
+          )}
+        </div>
 
-        {!editMode && (
-          <div className="no-print mt-3 d-flex justify-content-end">
-            <button onClick={() => window.print()} className="d-flex align-items-center gap-2 border-0 rounded-3 fw-semibold px-4 py-2"
-              style={{ background: accentBg, color: "#fff", cursor: "pointer", fontSize: 14, boxShadow: `0 4px 12px ${accent}4d` }}>
-              <FaPrint size={12} /> Print / Download PDF
-            </button>
-          </div>
-        )}
+        {(form.templateStyle === "default" || !form.templateStyle) ? docContent : (() => {
+          const Layout = QUOTATION_LAYOUTS[form.templateStyle];
+          return Layout ? (
+            <Layout
+              quotation={form}
+              companyInfo={companyInfo}
+              customers={customers}
+              editMode={editMode}
+              onChange={updateField}
+              onCustomSectionChange={updateCustomSection}
+              onAddCustomSection={addCustomSection}
+              onRemoveCustomSection={removeCustomSection}
+              onLogoUpload={handleLogoUpload}
+              onRemoveLogo={() => updateField("logo", null)}
+              onSignatureUpload={handleSignatureUpload}
+              onRemoveSignature={() => updateField("signature", null)}
+              defaultGstPercent={defaultGstPercent}
+            />
+          ) : docContent;
+        })()}
+
       </div>
 
       {editMode && showPreview && previewPanel}
+
+      {showTemplateSwitcher && (
+        <QuotationTemplate
+          templates={templates}
+          currentTemplateStyle={form.templateStyle}
+          onClose={() => setShowTemplateSwitcher(false)}
+          onSelect={handleTemplateSwitch}
+          onCustom={() => handleTemplateSwitch(null)}
+        />
+      )}
+
+      <ConfirmEditApprovedModal
+        show={showApprovedEditConfirm}
+        onCancel={() => setShowApprovedEditConfirm(false)}
+        onConfirm={() => { setShowApprovedEditConfirm(false); onEdit(); }}
+      />
+    </div>
+  );
+}
+function EditableSectionTable({ section, onChange, accent }) {
+  const columns = section.columns && section.columns.length ? section.columns : ["Column 1", "Column 2"];
+  const rows = section.rows && section.rows.length ? section.rows : [columns.map(() => "")];
+
+  const updateColumn = (ci, value) => {
+    const next = [...columns];
+    next[ci] = value;
+    onChange({ ...section, columns: next });
+  };
+  const updateCell = (ri, ci, value) => {
+    const next = rows.map((r) => [...r]);
+    next[ri][ci] = value;
+    onChange({ ...section, columns, rows: next });
+  };
+  const addRow = () => onChange({ ...section, columns, rows: [...rows, columns.map(() => "")] });
+  const removeRow = (ri) => onChange({ ...section, columns, rows: rows.filter((_, idx) => idx !== ri) });
+  const addColumn = () =>
+    onChange({
+      ...section,
+      columns: [...columns, `Column ${columns.length + 1}`],
+      rows: rows.map((r) => [...r, ""]),
+    });
+  const removeColumn = (ci) => {
+    if (columns.length <= 1) return;
+    onChange({
+      ...section,
+      columns: columns.filter((_, idx) => idx !== ci),
+      rows: rows.map((r) => r.filter((_, idx) => idx !== ci)),
+    });
+  };
+
+  const cellInputStyle = { width: "100%", border: "none", background: "transparent", fontSize: 12.5, padding: 4, fontFamily: T.font, outline: "none" };
+
+  return (
+    <div className="no-print" style={{ overflowX: "auto" }}>
+      <table style={{ width: "100%", borderCollapse: "collapse" }}>
+        <thead>
+          <tr>
+            {columns.map((col, ci) => (
+              <th key={ci} style={{ padding: 4, border: `1px solid ${T.border}`, backgroundColor: `${accent}0d`, position: "relative" }}>
+                <input
+                  value={col}
+                  onChange={(e) => updateColumn(ci, e.target.value)}
+                  placeholder={`Column ${ci + 1}`}
+                  style={{ ...cellInputStyle, fontWeight: 700, paddingRight: 18 }}
+                />
+                {columns.length > 1 && (
+                  <button
+                    onClick={() => removeColumn(ci)}
+                    title="Remove column"
+                    style={{ position: "absolute", top: 4, right: 4, border: "none", background: "transparent", color: T.red, cursor: "pointer" }}
+                  >
+                    <FaTrash size={9} />
+                  </button>
+                )}
+              </th>
+            ))}
+            <th style={{ width: 32, border: "none" }}>
+              <button onClick={addColumn} title="Add column" style={{ border: "none", background: "transparent", color: accent, cursor: "pointer" }}>
+                <FaPlus size={11} />
+              </button>
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row, ri) => (
+            <tr key={ri}>
+              {columns.map((_, ci) => (
+                <td key={ci} style={{ padding: 4, border: `1px solid ${T.border}` }}>
+                  <input value={row[ci] ?? ""} onChange={(e) => updateCell(ri, ci, e.target.value)} style={cellInputStyle} />
+                </td>
+              ))}
+              <td style={{ border: "none", textAlign: "center" }}>
+                <button onClick={() => removeRow(ri)} title="Remove row" style={{ border: "none", background: "transparent", color: T.red, cursor: "pointer" }}>
+                  <FaTrash size={11} />
+                </button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <button
+        onClick={addRow}
+        style={{
+          marginTop: 8, display: "flex", alignItems: "center", gap: 6,
+          border: `1.5px dashed ${accent}`, borderRadius: 8, padding: "6px 12px",
+          backgroundColor: `${accent}0d`, color: accent, fontWeight: 600, fontSize: 12.5, cursor: "pointer",
+        }}
+      >
+        <FaPlus size={10} /> Add Row
+      </button>
     </div>
   );
 }
@@ -693,5 +1414,5 @@ const styles = {
     boxShadow: "0 4px 20px rgba(0,0,0,0.08)", border: "1.5px solid #f1f5f9", display: "flex", flexDirection: "column",
     maxHeight: "calc(100vh - 48px)", overflow: "hidden",
   },
-  previewHeader: { display: "flex", alignItems: "center", gap: 8, padding: "14px 16px", borderBottom: "1px solid #f1f5f9", backgroundColor: "#fafafa", borderRadius: "16px 16px 0 0" },
+  previewHeader: { display: "flex", alignItems: "center", gap: 8, padding: "14px 20px", borderBottom: "1px solid #f1f5f9", backgroundColor: "#fafafa", borderRadius: "16px 16px 0 0" },
 };

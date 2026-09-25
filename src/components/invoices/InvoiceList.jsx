@@ -15,6 +15,8 @@ import {
   FaAddressBook,
   FaFileAlt,
   FaFileSignature,
+  FaMoneyBillWave,
+  FaFilter,
 } from "react-icons/fa";
 
 const statusConfig = {
@@ -52,11 +54,61 @@ const invoiceStyles = `
 .inv-action-edit { background: #fff2e0 !important; color: #ea580c !important; box-shadow: none !important; }
 .inv-action-delete { background: #fee2e2 !important; color: #ef4444 !important; box-shadow: none !important; }
 .inv-action-convert { background: #ede9fe !important; color: #7c3aed !important; box-shadow: none !important; }
+.inv-action-payment { background: #fef3c7 !important; color: #b45309 !important; box-shadow: none !important; }
+
+/* ---------- Quotation-linked reference chip under invoice number ---------- */
+.inv-quote-ref {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 3px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: #7c3aed;
+  background: #f5f3ff;
+  border: 1px solid #ddd6fe;
+  border-radius: 999px;
+  padding: 1px 8px;
+  cursor: pointer;
+  white-space: nowrap;
+  width: fit-content;
+}
+.inv-quote-ref:hover { background: #ede9fe; text-decoration: underline; }
+
+/* ---------- "Related to Quotation" result banner ---------- */
+.inv-quote-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  background: #f5f3ff;
+  border: 1.5px solid #ddd6fe;
+  border-radius: 12px;
+  padding: 12px 16px;
+  margin-bottom: 14px;
+}
+.inv-quote-clear-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1.5px solid #ddd6fe;
+  background: #fff;
+  color: #7c3aed;
+  font-weight: 700;
+  font-size: 0.78rem;
+  border-radius: 999px;
+  padding: 6px 14px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.inv-quote-clear-btn:hover { background: #7c3aed; color: #fff; border-color: #7c3aed; }
 
 /* ---------- Tablet (~761px–1024px) ---------- */
 @media (max-width: 1024px) {
   .inv-table th, .inv-table td { padding: 10px 12px !important; font-size: 0.8rem !important; }
-  .inv-stat-card { flex: 1 1 calc(50% - 6px) !important; max-width: none !important; }
+  .inv-stats-grid { gap: 10px !important; }
+  .inv-stat-card { flex: 1 1 calc(50% - 5px) !important; max-width: none !important; }
   .inv-search-box { flex: 1 1 200px; min-width: 180px; }
 }
 
@@ -107,18 +159,40 @@ const invoiceStyles = `
 /* ---------- Phones ---------- */
 @media (max-width: 640px) {
   .inv-header-row { flex-direction: column; align-items: stretch !important; }
-  .inv-header-actions { flex-direction: column; width: 100%; }
-  .inv-new-btn { width: 100%; justify-content: center; }
+
+  /* CHANGED: Choose Customer + New Invoice now sit side-by-side (2 in one line) */
+  .inv-header-actions {
+    flex-direction: row !important;
+    width: 100%;
+    gap: 8px;
+  }
+  .inv-new-btn {
+    flex: 1 1 0 !important;
+    width: auto !important;
+    justify-content: center;
+    padding-left: 8px !important;
+    padding-right: 8px !important;
+    font-size: 0.76rem !important;
+    white-space: nowrap;
+  }
+
   .inv-toolbar { justify-content: stretch !important; }
   .inv-toolbar > * { width: 100%; }
   .inv-search-box { min-width: 0 !important; width: 100%; }
   .inv-bulk-btn { justify-content: center !important; }
-  .inv-stat-card { flex: 1 1 calc(50% - 6px) !important; max-width: none !important; }
+
+  /* Stat cards: 2 per line on phones */
+  .inv-stats-grid { gap: 8px !important; }
+  .inv-stat-card { flex: 1 1 calc(50% - 4px) !important; max-width: none !important; }
+
+  .inv-quote-banner { flex-direction: column; align-items: flex-start !important; }
+  .inv-quote-clear-btn { width: 100%; justify-content: center; }
 }
 
-@media (max-width: 420px) {
-  .inv-stat-card { flex: 1 1 100% !important; }
-}
+/* REMOVED: the old @media (max-width: 420px) block that forced
+   .inv-stat-card to flex: 1 1 100% (1 per line) on small phones.
+   Deleting it lets the 640px rule above (2 per line) keep applying
+   at all phone widths. */
 
 /* ---------- Modals ---------- */
 .inv-modal-card { width: 90%; max-width: 340px; }
@@ -145,20 +219,22 @@ function isDueDatePast(dueDate, status) {
   return due < today;
 }
 
-function StatCard({ icon, iconBg, iconColor, count, label }) {
+function StatCard({ icon, iconBg, iconColor, count, label, onClick, active }) {
   return (
     <div
       className="inv-stat-card"
+      onClick={onClick}
       style={{
         borderRadius: "12px",
         background: "#fff",
-        boxShadow: "0 2px 8px rgba(15,23,42,0.06)",
+        boxShadow: active ? `0 0 0 2px ${iconColor}` : "0 2px 8px rgba(15,23,42,0.06)",
         padding: "10px 14px",
         display: "flex",
         alignItems: "center",
         gap: 10,
         flex: "0 1 200px",
         maxWidth: 220,
+        cursor: onClick ? "pointer" : "default",
       }}
     >
       <div
@@ -175,16 +251,36 @@ function StatCard({ icon, iconBg, iconColor, count, label }) {
   );
 }
 
-export default function InvoiceList({ invoices, search, setSearch, onNew, onView, onEdit, onDelete, onStatusChange, onChooseCustomer, approvedQuotations = [], onChooseQuotation, onConvertToFinal }) {  const navigate = useNavigate();
+export default function InvoiceList({
+  invoices,
+  search,
+  setSearch,
+  onNew,
+  onView,
+  onEdit,
+  onDelete,
+  onStatusChange,
+  onChooseCustomer,
+  approvedQuotations = [],
+  onChooseQuotation,
+  onConvertToFinal,
+  onReceivePayment,
+}) {
+  const navigate = useNavigate();
 
   const [deleteTarget, setDeleteTarget] = useState(null); // single invoice pending delete confirmation
   const [bulkDeleteIds, setBulkDeleteIds] = useState(null); // array of ids pending bulk delete confirmation
 
-// Row selection state
+ // Row selection state
   const [selectedIds, setSelectedIds] = useState([]);
   const headerCheckboxRef = useRef(null);
 
-// Customer picker state
+ // Which tab is active: "all" | "final" | "proforma"
+  const [activeTab, setActiveTab] = useState("all");
+
+  // Which status filter is active: "all" | "Paid" | "Unpaid" | "Overdue"
+  const [statusFilter, setStatusFilter] = useState("all");
+  // Customer picker state
   const [showCustomerPicker, setShowCustomerPicker] = useState(false);
   const [customers, setCustomers] = useState([]);
   const [customersLoading, setCustomersLoading] = useState(false);
@@ -192,7 +288,8 @@ export default function InvoiceList({ invoices, search, setSearch, onNew, onView
   // Which source the picker modal is showing: saved Customers, or
   // Approved Quotations (so an invoice can be started from either).
   const [pickerTab, setPickerTab] = useState("customers");
-useEffect(() => {
+
+  useEffect(() => {
     if (!showCustomerPicker) return;
     setPickerTab("customers");
     setCustomersLoading(true);
@@ -205,7 +302,7 @@ useEffect(() => {
 
   const activeCustomers = customers.filter(c => (c.status ?? "Active") === "Active");
 
- const filteredCustomers = activeCustomers.filter(c => {
+  const filteredCustomers = activeCustomers.filter(c => {
     const q = customerSearch.trim().toLowerCase();
     if (!q) return true;
     const digitsOnly = q.replace(/\D/g, "");
@@ -255,9 +352,9 @@ useEffect(() => {
   };
 
   // Proforma invoices are drafts/quotes, not real revenue — excluded from money stats
- const isProformaInvoice = (i) => i.invoiceType === "Proforma" || (i.invoiceNo || "").startsWith("PI-");
-const finalInvoices = invoices.filter(i => !isProformaInvoice(i));
-const proformaCount = invoices.filter(isProformaInvoice).length;
+  const isProformaInvoice = (i) => i.invoiceType === "Proforma" || (i.invoiceNo || "").startsWith("PI-");
+  const finalInvoices = invoices.filter(i => !isProformaInvoice(i));
+  const proformaCount = invoices.filter(isProformaInvoice).length;
 
   const totalInvoices = finalInvoices.length;
   const paidCount = finalInvoices.filter(i => i.status === "Paid").length;
@@ -265,19 +362,54 @@ const proformaCount = invoices.filter(isProformaInvoice).length;
   const overdueCount = finalInvoices.filter(i => i.status === "Overdue").length;
   const totalDue = finalInvoices.reduce((sum, inv) => sum + calcTotals(inv).due, 0);
   const totalRevenue = finalInvoices.reduce((sum, inv) => sum + calcTotals(inv).total, 0);
-  const q = search.trim().toLowerCase();
-  const filtered = invoices.filter(inv => {
-    if (!q) return true;
-    return (
-      (inv.buyerName || "").toLowerCase().includes(q) ||
-      (inv.invoiceNo || "").toLowerCase().includes(q) ||
-      (inv.status || "").toLowerCase().includes(q)
-    );
-  });
 
-const handleStatusSelect = (inv, newStatus) => {
+  const q = search.trim().toLowerCase();
+
+  // ── Quotation-number search ──────────────────────────────────────────
+  // If the search text exactly matches a known quotation number (either a
+  // quotation that has invoices linked to it via `fromQuotationId`, or an
+  // Approved quotation that doesn't have any invoices yet), we switch into
+  // "quotation result" mode: the table is narrowed to just that
+  // quotation's invoices and a small banner is shown above it. This is on
+  // top of — not instead of — the normal buyer/invoice/status search below.
+  const matchingInvoicesForQuote = q
+    ? invoices.filter(inv => (inv.fromQuotationId || "").toLowerCase() === q)
+    : [];
+  const matchingApprovedQuotation = q
+    ? approvedQuotations.find(qt => (qt.id || "").toLowerCase() === q)
+    : null;
+  const isQuotationSearch = Boolean(q) && (matchingInvoicesForQuote.length > 0 || matchingApprovedQuotation);
+  const quotationSearchId = isQuotationSearch
+    ? (matchingInvoicesForQuote[0]?.fromQuotationId || matchingApprovedQuotation?.id)
+    : null;
+
+  const filtered = isQuotationSearch
+    ? matchingInvoicesForQuote
+    : invoices.filter(inv => {
+        const isProformaInv = isProformaInvoice(inv);
+        if (activeTab === "final" && isProformaInv) return false;
+        if (activeTab === "proforma" && !isProformaInv) return false;
+        if (statusFilter !== "all" && inv.status !== statusFilter) return false;
+        if (!q) return true;
+        return (
+          (inv.buyerName || "").toLowerCase().includes(q) ||
+          (inv.invoiceNo || "").toLowerCase().includes(q) ||
+          (inv.status || "").toLowerCase().includes(q) ||
+          (inv.fromQuotationId || "").toLowerCase().includes(q)
+        );
+      });
+
+  const handleStatusSelect = (inv, newStatus) => {
     if (onStatusChange) onStatusChange(inv, newStatus);
   };
+
+  // Clicking a quotation reference chip (or the "Create Invoice" flow)
+  // jumps straight into quotation-result mode for that quote number.
+  const handleQuoteRefClick = (quotationId) => {
+    setSearch(quotationId);
+  };
+
+  const clearQuotationSearch = () => setSearch("");
 
   const allSelected = filtered.length > 0 && selectedIds.length === filtered.length;
   const someSelected = selectedIds.length > 0 && !allSelected;
@@ -329,7 +461,23 @@ const handleStatusSelect = (inv, newStatus) => {
           </div>
         </div>
 
-      <div className="d-flex gap-2 inv-header-actions">
+        <div className="d-flex gap-2 inv-header-actions">
+          <button
+            onClick={() => navigate("/trash?tab=invoices")}
+            title="Trash"
+            aria-label="Trash"
+            className="d-flex align-items-center justify-content-center border-0"
+            style={{
+              background: "#fff", color: "#64748b", cursor: "pointer",
+              borderRadius: "10px", border: "1.5px solid #e2e8f0",
+              width: 38, height: 38, padding: 0, flexShrink: 0,
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = "#fef2f2"; e.currentTarget.style.color = "#dc2626"; e.currentTarget.style.borderColor = "#fecaca"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = "#fff"; e.currentTarget.style.color = "#64748b"; e.currentTarget.style.borderColor = "#e2e8f0"; }}
+          >
+            <FaTrash size={13} />
+          </button>
+
           <button
             onClick={() => setShowCustomerPicker(true)}
             className="inv-new-btn d-flex align-items-center gap-2 fw-semibold px-3 py-2"
@@ -347,23 +495,23 @@ const handleStatusSelect = (inv, newStatus) => {
             <FaAddressBook size={12} /> Choose Customer
           </button>
 
-        <button
-          onClick={() => onNew("Final")}
-          className="inv-new-btn d-flex align-items-center gap-2 border-0 fw-semibold px-3 py-2"
-          style={{
-            background: "linear-gradient(135deg,#1F6F5C,#134A3E)",
-            color: "#fff",
-            fontSize: "0.82rem",
-            cursor: "pointer",
-            borderRadius: "10px",
-            boxShadow: "0 4px 12px rgba(31,111,92,0.35)",
-            whiteSpace: "nowrap",
-            flexShrink: 0,
-          }}
-        >
-          <FaPlus size={12} /> New Invoice
-        </button>
-      </div>
+          <button
+            onClick={() => onNew("Final")}
+            className="inv-new-btn d-flex align-items-center gap-2 border-0 fw-semibold px-3 py-2"
+            style={{
+              background: "linear-gradient(135deg,#1F6F5C,#134A3E)",
+              color: "#fff",
+              fontSize: "0.82rem",
+              cursor: "pointer",
+              borderRadius: "10px",
+              boxShadow: "0 4px 12px rgba(31,111,92,0.35)",
+              whiteSpace: "nowrap",
+              flexShrink: 0,
+            }}
+          >
+            <FaPlus size={12} /> New Invoice
+          </button>
+        </div>
       </div>
 
       {/* Toolbar: Delete selected (only when rows are checked) / Search — right-aligned, above stats */}
@@ -395,27 +543,123 @@ const handleStatusSelect = (inv, newStatus) => {
           <input
             value={search}
             onChange={e => setSearch(e.target.value)}
-            placeholder="Search by buyer name, invoice no or status..."
+            placeholder="Search by buyer name, invoice no, quotation no or status..."
             style={{ border: "none", outline: "none", fontSize: "0.85rem", color: "#0f172a", width: "100%", backgroundColor: "transparent" }}
           />
         </div>
       </div>
 
       {/* Stat cards */}
-      <div className="d-flex flex-wrap gap-3 mb-4">
+      <div className="d-flex flex-wrap inv-stats-grid mb-4" style={{ gap: 12 }}>
         <StatCard icon={<FaFileInvoiceDollar size={14} />} iconBg="#E6F1EC" iconColor="#1F6F5C" count={totalInvoices} label="Total Invoices" />
-        <StatCard icon={<FaCheckCircle size={14} />} iconBg="#ecfdf5" iconColor="#059669" count={paidCount} label="Paid" />
-        <StatCard icon={<FaClock size={14} />} iconBg="#fff7ed" iconColor="#ea580c" count={unpaidCount} label="Unpaid" />
-        <StatCard icon={<FaExclamationCircle size={14} />} iconBg="#fef2f2" iconColor="#dc2626" count={overdueCount} label="Overdue" />
-      <StatCard icon={<FaRupeeSign size={14} />} iconBg="#E6F1EC" iconColor="#1F6F5C" count={`₹${totalDue.toLocaleString()}`} label="Total Due" />
+       <StatCard icon={<FaCheckCircle size={14} />} iconBg="#ecfdf5" iconColor="#059669" count={paidCount} label="Paid" onClick={() => setStatusFilter("Paid")} active={statusFilter === "Paid"} />
+        <StatCard icon={<FaClock size={14} />} iconBg="#fff7ed" iconColor="#ea580c" count={unpaidCount} label="Unpaid" onClick={() => setStatusFilter("Unpaid")} active={statusFilter === "Unpaid"} />
+        <StatCard icon={<FaExclamationCircle size={14} />} iconBg="#fef2f2" iconColor="#dc2626" count={overdueCount} label="Overdue" onClick={() => setStatusFilter("Overdue")} active={statusFilter === "Overdue"} />
+        <StatCard icon={<FaRupeeSign size={14} />} iconBg="#E6F1EC" iconColor="#1F6F5C" count={`₹${totalDue.toLocaleString()}`} label="Total Due" />
         <StatCard icon={<FaFileAlt size={14} />} iconBg="#f5f3ff" iconColor="#7c3aed" count={proformaCount} label="Proforma" />
       </div>
+
+      {/* "Related to Quotation" result banner — only shown when the search
+          text matches a known quotation number */}
+      {isQuotationSearch && (
+        <div className="inv-quote-banner">
+          <div className="d-flex align-items-center gap-2">
+            <div
+              className="d-flex align-items-center justify-content-center rounded-3 flex-shrink-0"
+              style={{ width: 34, height: 34, background: "#ede9fe", color: "#7c3aed" }}
+            >
+              <FaFileInvoiceDollar size={14} />
+            </div>
+            <div>
+              <div style={{ fontWeight: 800, fontSize: "0.9rem", color: "#0f172a" }}>
+                Related to Quotation {quotationSearchId}
+              </div>
+              <div style={{ fontSize: "0.78rem", color: "#7c3aed", fontWeight: 600 }}>
+                {filtered.length} {filtered.length === 1 ? "invoice" : "invoices"} found
+              </div>
+            </div>
+          </div>
+          <button className="inv-quote-clear-btn" onClick={clearQuotationSearch}>
+            <FaTimes size={11} /> Clear
+          </button>
+        </div>
+      )}
+
+      {/* Tabs: All / Invoices / Proforma — hidden while viewing a
+          quotation's invoices, since that's already a fixed result set */}
+      {!isQuotationSearch && (
+        <div className="d-flex gap-2 mb-3 flex-wrap justify-content-between">
+          <div className="d-flex gap-2 flex-wrap">
+            {[
+              { key: "all", label: "All", count: invoices.length },
+              { key: "final", label: "Invoices", count: finalInvoices.length },
+              { key: "proforma", label: "Proforma", count: proformaCount },
+            ].map(tab => (
+              <button
+                key={tab.key}
+                onClick={() => setActiveTab(tab.key)}
+                className="border-0 fw-semibold d-flex align-items-center gap-2"
+                style={{
+                  padding: "8px 16px",
+                  borderRadius: 10,
+                  fontSize: "0.82rem",
+                  cursor: "pointer",
+                  backgroundColor: activeTab === tab.key ? "#1F6F5C" : "#fff",
+                  color: activeTab === tab.key ? "#fff" : "#475569",
+                  boxShadow: activeTab === tab.key ? "0 4px 12px rgba(31,111,92,0.3)" : "0 1px 4px rgba(15,23,42,0.06)",
+                }}
+              >
+                {tab.label}
+                <span
+                  style={{
+                    backgroundColor: activeTab === tab.key ? "rgba(255,255,255,0.25)" : "#f1f5f9",
+                    color: activeTab === tab.key ? "#fff" : "#64748b",
+                    borderRadius: 999,
+                    fontSize: "0.7rem",
+                    fontWeight: 700,
+                    padding: "2px 8px",
+                  }}
+                >
+                  {tab.count}
+                </span>
+              </button>
+            ))}
+          </div>
+
+          {/* Status filter: All / Paid / Unpaid / Overdue */}
+          <div className="d-flex align-items-center gap-2" style={{ backgroundColor: "#fff", border: "1.5px solid #e2e8f0", borderRadius: 10, padding: "4px 6px" }}>
+            <FaFilter size={11} color="#94a3b8" style={{ marginLeft: 6 }} />
+            <select
+              value={statusFilter}
+              onChange={e => setStatusFilter(e.target.value)}
+              className="fw-semibold"
+              style={{
+                border: "none",
+                outline: "none",
+                backgroundColor: "transparent",
+                fontSize: "0.8rem",
+                color: "#0f172a",
+                padding: "6px 4px",
+                cursor: "pointer",
+              }}
+            >
+              <option value="all">All Status</option>
+              <option value="Paid">Paid</option>
+              <option value="Unpaid">Unpaid</option>
+              <option value="Overdue">Overdue</option>
+              <option value="Draft">Draft</option>
+              <option value="Sent">Sent</option>
+              <option value="Converted">Converted</option>
+            </select>
+          </div>
+        </div>
+      )}
 
       {/* Table */}
       <div className="bg-white" style={{ borderRadius: 14, boxShadow: "0 2px 10px rgba(0,0,0,0.06)", overflow: "hidden" }}>
         <div className="inv-table-scroll table-responsive">
           <table className="inv-table">
-         <thead>
+            <thead>
               <tr style={{ borderBottom: "1px solid #f1f5f9" }}>
                 <th style={{ padding: "14px 16px", width: 40 }}>
                   <input
@@ -451,7 +695,8 @@ const handleStatusSelect = (inv, newStatus) => {
                 const sc = statusConfig[inv.status] || statusConfig.Draft;
                 const { total, due } = calcTotals(inv);
                 const overdue = isDueDatePast(inv.dueDate, inv.status);
-             return (
+                const isProforma = inv.invoiceType === "Proforma" || (inv.invoiceNo || "").startsWith("PI-");
+                return (
                   <tr key={inv.id} style={{ borderBottom: "1px solid #f1f5f9" }}>
                     <td className="inv-checkbox-cell" style={{ padding: "14px 16px" }} onClick={e => e.stopPropagation()}>
                       <span className="inv-cell-label">Select</span>
@@ -462,16 +707,27 @@ const handleStatusSelect = (inv, newStatus) => {
                         style={{ width: 16, height: 16, accentColor: "#059669", cursor: "pointer" }}
                       />
                     </td>
-                   <td style={{ padding: "14px 16px", fontSize: "0.85rem", fontWeight: 700, color: "#1F6F5C" }}>
+                    <td style={{ padding: "14px 16px", fontSize: "0.85rem", fontWeight: 700, color: "#1F6F5C" }}>
                       <span className="inv-cell-label">Invoice</span>
-                      {inv.invoiceNo}
-                    {(inv.invoiceType === "Proforma" || (inv.invoiceNo || "").startsWith("PI-")) && (
-                        <span style={{
-                          marginLeft: 8, fontSize: "0.62rem", fontWeight: 700, color: "#7c3aed",
-                          backgroundColor: "#f5f3ff", border: "1px solid #ddd6fe", borderRadius: 999,
-                          padding: "2px 8px", verticalAlign: "middle",
-                        }}>
-                          PROFORMA
+                      <div>
+                        {inv.invoiceNo}
+                        {isProforma && (
+                          <span style={{
+                            marginLeft: 8, fontSize: "0.62rem", fontWeight: 700, color: "#7c3aed",
+                            backgroundColor: "#f5f3ff", border: "1px solid #ddd6fe", borderRadius: 999,
+                            padding: "2px 8px", verticalAlign: "middle",
+                          }}>
+                            PROFORMA
+                          </span>
+                        )}
+                      </div>
+                      {inv.fromQuotationId && (
+                        <span
+                          className="inv-quote-ref"
+                          title={`Show all invoices from ${inv.fromQuotationId}`}
+                          onClick={(e) => { e.stopPropagation(); handleQuoteRefClick(inv.fromQuotationId); }}
+                        >
+                          From {inv.fromQuotationId}
                         </span>
                       )}
                     </td>
@@ -496,12 +752,11 @@ const handleStatusSelect = (inv, newStatus) => {
                       <span className="inv-cell-label" style={{ color: overdue ? "#ef4444" : undefined }}>Due Date</span>
                       {inv.dueDate}
                     </td>
-                   <td style={{ padding: "14px 16px" }} onClick={e => e.stopPropagation()}>
+                    <td style={{ padding: "14px 16px" }} onClick={e => e.stopPropagation()}>
                       <span className="inv-cell-label">Status</span>
-                   {(() => {
+                      {(() => {
                         // Fall back to checking the invoice number prefix (PI-xxx) in case
                         // invoiceType wasn't saved correctly on older/edited records.
-                        const isProforma = inv.invoiceType === "Proforma" || (inv.invoiceNo || "").startsWith("PI-");
                         const opts = isProforma ? proformaStatusOptions : finalStatusOptions;
                         return (
                           <select
@@ -538,16 +793,16 @@ const handleStatusSelect = (inv, newStatus) => {
                       <span className="inv-cell-label" style={{ color: due > 0 ? "#ef4444" : "#059669" }}>Due</span>
                       ₹{due.toLocaleString()}
                     </td>
-                  <td className="inv-actions-cell" style={{ padding: "14px 16px" }}>
+                    <td className="inv-actions-cell" style={{ padding: "14px 16px" }}>
                       <span className="inv-cell-label">Action</span>
-                      <div className="d-flex gap-2 justify-content-end flex-wrap">
-                        {(inv.invoiceType === "Proforma" || (inv.invoiceNo || "").startsWith("PI-")) && inv.status !== "Converted" && (
+                     <div className="d-flex gap-2 justify-content-end flex-wrap">
+                        {!isProforma && due > 0 && (
                           <button
-                            onClick={() => onConvertToFinal && onConvertToFinal(inv)}
-                            title="Convert to Final Invoice"
-                            className="inv-action-btn inv-action-convert border-0"
+                            onClick={() => onReceivePayment && onReceivePayment(inv)}
+                            title="Receive Payment"
+                            className="inv-action-btn inv-action-payment border-0"
                           >
-                            <FaFileInvoiceDollar size={13} />
+                            <FaMoneyBillWave size={13} />
                           </button>
                         )}
                         <button
@@ -576,10 +831,12 @@ const handleStatusSelect = (inv, newStatus) => {
                   </tr>
                 );
               })}
-             {filtered.length === 0 && (
+              {filtered.length === 0 && (
                 <tr>
                   <td colSpan={9} className="text-center" style={{ padding: "40px 16px", color: "#94a3b8", fontSize: "0.88rem" }}>
-                    No invoices found.
+                    {isQuotationSearch
+                      ? `No invoices found for ${quotationSearchId}.`
+                      : "No invoices found."}
                   </td>
                 </tr>
               )}
@@ -649,7 +906,7 @@ const handleStatusSelect = (inv, newStatus) => {
               >
                 Delete
               </button>
-           </div>
+            </div>
           </div>
         </div>
       )}
@@ -702,7 +959,7 @@ const handleStatusSelect = (inv, newStatus) => {
               >
                 Cancel
               </button>
-            <button
+              <button
                 onClick={confirmBulkDelete}
                 className="flex-fill fw-semibold border-0"
                 style={{
@@ -719,7 +976,8 @@ const handleStatusSelect = (inv, newStatus) => {
           </div>
         </div>
       )}
-{/* Choose Customer modal */}
+
+      {/* Choose Customer modal */}
       {showCustomerPicker && (
         <div
           style={{
@@ -750,7 +1008,7 @@ const handleStatusSelect = (inv, newStatus) => {
               </button>
             </div>
 
-         {/* Tabs: Customers vs Approved Quotations */}
+            {/* Tabs: Customers vs Approved Quotations */}
             <div className="d-flex gap-2 px-4 pt-3">
               <button
                 onClick={() => setPickerTab("customers")}

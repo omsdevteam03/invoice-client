@@ -1,39 +1,178 @@
 import { useState, useEffect } from 'react';
-import { FaCamera, FaTrash, FaSave } from 'react-icons/fa';
+import { FaCamera, FaTrash, FaSave, FaPlus, FaChevronDown, FaCheckCircle, FaRegEdit } from 'react-icons/fa';
 import axiosInstance from '../../api/axiosInstance';
 
 const emptyForm = {
+  id: null,
   companyName: '', companyEmail: '', companyPhone: '',
   companyAddress: '', gstin: '', website: '', logo: null,
+  status: 'draft',
+};
+
+const GREEN = '#1F6F5C';
+const LAST_SELECTED_KEY = 'companySettings:lastSelectedId';
+
+const rememberSelection = (id) => {
+  try {
+    if (id == null) window.localStorage.removeItem(LAST_SELECTED_KEY);
+    else window.localStorage.setItem(LAST_SELECTED_KEY, String(id));
+  } catch {
+    // localStorage can be unavailable (private browsing, etc.) — safe to ignore,
+    // it just means the selection won't survive a refresh.
+  }
+};
+
+const getRememberedSelection = () => {
+  try {
+    return window.localStorage.getItem(LAST_SELECTED_KEY);
+  } catch {
+    return null;
+  }
 };
 
 export default function CompanySettings() {
+  const [companies, setCompanies] = useState([]);
+  const [selectedId, setSelectedId] = useState(null);
   const [form, setForm] = useState(emptyForm);
-  const [loading, setLoading] = useState(true);
+  const [mode, setMode] = useState('edit'); // 'edit' | 'add'
+  const [loadingList, setLoadingList] = useState(true);
   const [error, setError] = useState(null);
   const [status, setStatus] = useState('idle'); // idle | saving | saved
+  const [pickerOpen, setPickerOpen] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
-    axiosInstance.get('/settings/company')
-      .then((res) => { if (!cancelled) setForm({ ...emptyForm, ...res.data }); })
+    axiosInstance.get('/settings/companies')
+      .then((res) => {
+        if (cancelled) return;
+        const list = res.data || [];
+        setCompanies(list);
+        const remembered = getRememberedSelection();
+        const rememberedCompany = remembered != null
+          ? list.find((c) => String(c.id) === remembered)
+          : null;
+        const toShow = rememberedCompany || list.find((c) => c.status === 'active') || list[0];
+        if (toShow) {
+          setForm({ ...emptyForm, ...toShow });
+          setSelectedId(toShow.id);
+          setMode('edit');
+        } else {
+          setMode('add');
+        }
+      })
       .catch((err) => { if (!cancelled) setError(err.response?.data?.message || err.message); })
-      .finally(() => { if (!cancelled) setLoading(false); });
+      .finally(() => { if (!cancelled) setLoadingList(false); });
     return () => { cancelled = true; };
   }, []);
 
   const update = (field, value) => setForm((prev) => ({ ...prev, [field]: value }));
 
-  const handleSave = async () => {
+  const selectCompany = (company) => {
+    setForm({ ...emptyForm, ...company });
+    setSelectedId(company.id);
+    rememberSelection(company.id);
+    setMode('edit');
+    setStatus('idle');
+    setError(null);
+    setPickerOpen(false);
+  };
+
+  const startAddCompany = () => {
+    setForm(emptyForm);
+    setSelectedId(null);
+    rememberSelection(null);
+    setMode('add');
+    setStatus('idle');
+    setError(null);
+    setPickerOpen(false);
+  };
+
+  const cancelAdd = () => {
+    const active = companies.find((c) => c.status === 'active') || companies[0];
+    if (active) selectCompany(active);
+    else { setForm(emptyForm); setMode('add'); }
+  };
+
+  const upsertInList = (saved) => {
+    setCompanies((prev) => {
+      const exists = prev.some((c) => c.id === saved.id);
+      return exists ? prev.map((c) => (c.id === saved.id ? saved : c)) : [...prev, saved];
+    });
+  };
+
+  const saveAsDraft = async () => {
     setStatus('saving');
+    setError(null);
     try {
-      const res = await axiosInstance.put('/settings/company', form);
-      setForm({ ...emptyForm, ...res.data });
+      const payload = { ...form, status: 'draft' };
+      const res = form.id
+        ? await axiosInstance.put(`/settings/companies/${form.id}`, payload)
+        : await axiosInstance.post('/settings/companies', payload);
+      const saved = { ...emptyForm, ...res.data };
+      upsertInList(saved);
+      setForm(saved);
+      setSelectedId(saved.id);
+      rememberSelection(saved.id);
+      setMode('edit');
       setStatus('saved');
       setTimeout(() => setStatus('idle'), 2000);
     } catch (err) {
       setError(err.response?.data?.message || err.message);
       setStatus('idle');
+    }
+  };
+
+  const saveChanges = async () => {
+    setStatus('saving');
+    setError(null);
+    try {
+      const payload = { ...form, status: form.status || 'active' };
+      const res = await axiosInstance.put(`/settings/companies/${form.id}`, payload);
+      const saved = { ...emptyForm, ...res.data };
+      upsertInList(saved);
+      setForm(saved);
+      setStatus('saved');
+      setTimeout(() => setStatus('idle'), 2000);
+    } catch (err) {
+      setError(err.response?.data?.message || err.message);
+      setStatus('idle');
+    }
+  };
+
+  const activateCompany = async () => {
+    setStatus('saving');
+    setError(null);
+    try {
+      const res = await axiosInstance.put(`/settings/companies/${form.id}/activate`);
+      const saved = { ...emptyForm, ...res.data };
+      // Mark every other company as no longer active in local state
+      setCompanies((prev) => prev.map((c) => (
+        c.id === saved.id ? saved : (c.status === 'active' ? { ...c, status: 'draft' } : c)
+      )));
+      setForm(saved);
+      setStatus('saved');
+      setTimeout(() => setStatus('idle'), 2000);
+    } catch (err) {
+      setError(err.response?.data?.message || err.message);
+      setStatus('idle');
+    }
+  };
+
+  const deleteDraft = async (company, e) => {
+    e.stopPropagation();
+    if (!window.confirm(`Delete the draft "${company.companyName || 'Untitled company'}"?`)) return;
+    try {
+      await axiosInstance.delete(`/settings/companies/${company.id}`);
+      setCompanies((prev) => prev.filter((c) => c.id !== company.id));
+      if (getRememberedSelection() === String(company.id)) rememberSelection(null);
+      if (selectedId === company.id) {
+        const remaining = companies.filter((c) => c.id !== company.id);
+        const active = remaining.find((c) => c.status === 'active') || remaining[0];
+        if (active) selectCompany(active);
+        else startAddCompany();
+      }
+    } catch (err) {
+      setError(err.response?.data?.message || err.message);
     }
   };
 
@@ -46,16 +185,103 @@ export default function CompanySettings() {
     }
   };
 
-  if (loading) return <div className="text-muted small">Loading company settings…</div>;
+  const StatusBadge = ({ value }) => (
+    <span
+      className="badge rounded-pill"
+      style={{
+        backgroundColor: value === 'active' ? '#e6f4ef' : '#f1f0ef',
+        color: value === 'active' ? GREEN : '#6b7280',
+        fontWeight: 600,
+        fontSize: 11,
+        padding: '4px 10px',
+      }}
+    >
+      {value === 'active' ? 'Active' : 'Draft'}
+    </span>
+  );
+
+  if (loadingList) return <div className="text-muted small">Loading company settings…</div>;
+
+  const currentCompany = companies.find((c) => c.id === selectedId);
 
   return (
     <div>
-    <div className="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-4">
+      <div className="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-3">
         <div>
-          <h4 className="fw-bold mb-1">Company</h4>
+          <h4 className="fw-bold mb-1">Company Profile</h4>
           <p className="text-muted small mb-0">Manage your company preferences</p>
         </div>
+        <button
+          className="btn btn-sm d-flex align-items-center gap-2 text-white"
+          style={{ backgroundColor: GREEN }}
+          onClick={startAddCompany}
+        >
+          <FaPlus size={11} /> Add Company Profile
+        </button>
       </div>
+
+      {/* Company selector */}
+      {companies.length > 0 && (
+        <div className="position-relative mb-4" style={{ maxWidth: 420 }}>
+          <button
+            type="button"
+            className="btn btn-outline-secondary w-100 d-flex align-items-center justify-content-between"
+            onClick={() => setPickerOpen((o) => !o)}
+          >
+            <span className="d-flex align-items-center gap-2 text-truncate">
+              {mode === 'add'
+                ? <span className="fw-semibold">New company profile</span>
+                : (
+                  <>
+                    <span className="fw-semibold text-truncate">{form.companyName || 'Untitled company'}</span>
+                    <StatusBadge value={form.status} />
+                  </>
+                )}
+            </span>
+            <FaChevronDown size={11} className="text-muted flex-shrink-0" />
+          </button>
+
+          {pickerOpen && (
+            <div
+              className="position-absolute w-100 mt-1 bg-white border rounded-3 shadow-sm"
+              style={{ zIndex: 20, maxHeight: 280, overflowY: 'auto' }}
+            >
+              {companies.map((c) => (
+                <div
+                  key={c.id}
+                  className="d-flex align-items-center justify-content-between px-3 py-2"
+                  style={{
+                    cursor: 'pointer',
+                    backgroundColor: c.id === selectedId && mode === 'edit' ? '#f5fbf9' : 'transparent',
+                  }}
+                  onClick={() => selectCompany(c)}
+                >
+                  <div className="d-flex align-items-center gap-2 text-truncate">
+                    {c.id === selectedId && mode === 'edit' && <FaCheckCircle size={12} color={GREEN} />}
+                    <span className="text-truncate">{c.companyName || 'Untitled company'}</span>
+                    <StatusBadge value={c.status} />
+                  </div>
+                  {c.status === 'draft' && (
+                    <button
+                      className="btn btn-sm btn-link text-danger p-0"
+                      title="Delete draft"
+                      onClick={(e) => deleteDraft(c, e)}
+                    >
+                      <FaTrash size={11} />
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {mode === 'add' && (
+        <div className="alert alert-light border small mb-4">
+          You're creating a new company profile. Save it as a draft and come back to finish it anytime.
+        </div>
+      )}
 
       {error && <div className="alert alert-danger py-2 small">{error}</div>}
 
@@ -65,7 +291,7 @@ export default function CompanySettings() {
       <div className="d-flex align-items-center gap-3 p-3 mb-4 border border-1 rounded-3" style={{ borderStyle: 'dashed', backgroundColor: '#fafafa' }}>
         <div
           className="d-flex align-items-center justify-content-center rounded-3 flex-shrink-0"
-          style={{ width: 64, height: 64, backgroundColor: form.logo ? 'transparent' : '#1F6F5C', overflow: 'hidden' }}
+          style={{ width: 64, height: 64, backgroundColor: form.logo ? 'transparent' : GREEN, overflow: 'hidden' }}
         >
           {form.logo
             ? <img src={form.logo} alt="Logo" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
@@ -74,7 +300,7 @@ export default function CompanySettings() {
         <div>
           <div className="text-muted small mb-2">PNG, JPG up to 2MB · 200×200px recommended</div>
           <div className="d-flex gap-2 flex-wrap">
-            <label htmlFor="logo-up" className="btn btn-sm btn-outline-success d-flex align-items-center gap-1" style={{ color: '#1F6F5C', borderColor: '#1F6F5C' }}>
+            <label htmlFor="logo-up" className="btn btn-sm btn-outline-success d-flex align-items-center gap-1" style={{ color: GREEN, borderColor: GREEN }}>
               <FaCamera size={10} /> {form.logo ? 'Change' : 'Upload'}
             </label>
             <input id="logo-up" type="file" accept="image/*" className="d-none" onChange={handleLogoUpload} />
@@ -118,15 +344,54 @@ export default function CompanySettings() {
         </div>
       </div>
 
-      <div className="d-flex justify-content-end mt-4">
-        <button
-          className="btn text-white d-flex align-items-center gap-2"
-          style={{ backgroundColor: status === 'saved' ? '#198754' : '#1F6F5C' }}
-          onClick={handleSave}
-          disabled={status === 'saving'}
-        >
-          <FaSave size={12} /> {status === 'saving' ? 'Saving...' : status === 'saved' ? 'Saved!' : 'Save changes'}
-        </button>
+      <div className="d-flex justify-content-end align-items-center gap-2 mt-4">
+        {mode === 'add' && (
+          <>
+            <button className="btn btn-outline-secondary" onClick={cancelAdd} disabled={status === 'saving'}>
+              Cancel
+            </button>
+            <button
+              className="btn text-white d-flex align-items-center gap-2"
+              style={{ backgroundColor: status === 'saved' ? '#198754' : GREEN }}
+              onClick={saveAsDraft}
+              disabled={status === 'saving'}
+            >
+              <FaSave size={12} /> {status === 'saving' ? 'Saving...' : status === 'saved' ? 'Saved!' : 'Save as Draft'}
+            </button>
+          </>
+        )}
+
+        {mode === 'edit' && form.status === 'draft' && (
+          <>
+            <button
+              className="btn btn-outline-success d-flex align-items-center gap-2"
+              style={{ color: GREEN, borderColor: GREEN }}
+              onClick={activateCompany}
+              disabled={status === 'saving'}
+            >
+              <FaCheckCircle size={12} /> Set as Active
+            </button>
+            <button
+              className="btn text-white d-flex align-items-center gap-2"
+              style={{ backgroundColor: status === 'saved' ? '#198754' : GREEN }}
+              onClick={saveAsDraft}
+              disabled={status === 'saving'}
+            >
+              <FaSave size={12} /> {status === 'saving' ? 'Saving...' : status === 'saved' ? 'Saved!' : 'Save Draft'}
+            </button>
+          </>
+        )}
+
+        {mode === 'edit' && form.status === 'active' && (
+          <button
+            className="btn text-white d-flex align-items-center gap-2"
+            style={{ backgroundColor: status === 'saved' ? '#198754' : GREEN }}
+            onClick={saveChanges}
+            disabled={status === 'saving'}
+          >
+            <FaSave size={12} /> {status === 'saving' ? 'Saving...' : status === 'saved' ? 'Saved!' : 'Save changes'}
+          </button>
+        )}
       </div>
     </div>
   );

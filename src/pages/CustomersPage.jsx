@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import CustomerList from "../components/customers/CustomerList.jsx";
 import CustomerForm from "../components/customers/CustomerForm.jsx";
 import CustomerDetail from "../components/customers/CustomerDetail.jsx";
@@ -8,23 +9,42 @@ const QUOTATIONS_API = `${import.meta.env.VITE_API_URL}/quotations`;
 const INVOICES_API = `${import.meta.env.VITE_API_URL}/invoices`;
 
 export default function CustomersPage() {
-  
+  const location = useLocation();
+  const navigate = useNavigate();
+  const { id } = useParams();
+
   const [customers, setCustomers] = useState([]);
+  const [customersLoaded, setCustomersLoaded] = useState(false);
   const [quotations, setQuotations] = useState([]);
   const [invoices, setInvoices] = useState([]);
-  const [view, setView] = useState("list");
-  const [selected, setSelected] = useState(null);
   const [search, setSearch] = useState("");
   const [filterStatus, setFilterStatus] = useState("All");
-  const [draftId, setDraftId] = useState(null);
+   const [draftId, setDraftId] = useState(null);
+
+  // ── Derive which screen to show from the URL, not from local state ──────
+  const isNewRoute = location.pathname === "/customers/new";
+  const isEditRoute = Boolean(id) && location.pathname.endsWith("/edit");
+  const isDetailRoute = Boolean(id) && !isEditRoute;
+  const selected = id ? customers.find((c) => c.id === id) : null;
 
   // Load from DB
   useEffect(() => {
     fetch(API)
       .then(res => res.json())
       .then(data => setCustomers(data))
-      .catch(err => console.error('Failed to load customers:', err));
+      .catch(err => console.error('Failed to load customers:', err))
+      .finally(() => setCustomersLoaded(true));
   }, []);
+
+  // If someone lands on /customers/:id (detail or edit) for a customer that
+  // doesn't exist once loading has finished, send them back to the list
+  // instead of showing a blank/broken screen.
+  useEffect(() => {
+    if (!customersLoaded || !id) return;
+    if (!customers.find((c) => c.id === id)) {
+      navigate("/customers", { replace: true });
+    }
+  }, [customersLoaded, id, customers, navigate]);
 
   // Load quotations & invoices — used on the Customer Detail page to show
   // how many of each belong to the customer being viewed.
@@ -40,19 +60,17 @@ export default function CustomersPage() {
       .catch(err => console.error('Failed to load invoices:', err));
   }, []);
 
-  const handleNew = (existingDraftId) => {
-    setSelected(null);
+   const handleNew = (existingDraftId) => {
     setDraftId(typeof existingDraftId === "string" ? existingDraftId : null);
-    setView("form");
+    navigate("/customers/new");
   };
 
-  const handleEdit = (customer) => {
-    setSelected(customer);
+   const handleEdit = (customer) => {
     setDraftId(null); // editing an existing customer never uses a "new" draft id
-    setView("form");
+    navigate(`/customers/${customer.id}/edit`);
   };
 
-  const handleView = (customer) => { setSelected(customer); setView("detail"); };
+    const handleView = (customer) => navigate(`/customers/${customer.id}`);
 
   // ── Recompute "Billed" from real invoices, excluding proformas ─────────────
   // Proformas are draft/dummy invoices, not actual revenue — once converted,
@@ -84,24 +102,31 @@ export default function CustomersPage() {
     return { ...cust, totalBilled, totalReceived };
   });
 
-  // Save to DB
+    // Save to DB
   const handleSave = async (updated) => {
     const isNew = !customers.find(c => c.id === updated.id);
     try {
-      await fetch(API, {
+      const saveRes = await fetch(API, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...updated, isNew }),
       });
+
+      // 🔽 NEW: check the response before assuming it worked
+      if (!saveRes.ok) {
+        const errBody = await saveRes.json().catch(() => ({}));
+        throw new Error(errBody.error || `Save failed (${saveRes.status})`);
+      }
+
       const res = await fetch(API);
       const freshData = await res.json();
       setCustomers(freshData);
-      const freshSelected = freshData.find(c => c.id === updated.id);
-      setSelected(freshSelected);
+          const freshSelected = freshData.find(c => c.id === updated.id);
       setDraftId(null);
-      setView("detail");
+      navigate(freshSelected ? `/customers/${freshSelected.id}` : "/customers", { replace: true });
     } catch (err) {
       console.error('Save failed:', err);
+      alert(`Couldn't save customer: ${err.message}`); // 🔽 NEW: surfaces the failure to you instead of failing silently
     }
   };
 
@@ -137,16 +162,15 @@ export default function CustomersPage() {
   };
 
   const handleBack = () => {
-    setSelected(null);
     setDraftId(null);
-    setView("list");
+    navigate("/customers");
   };
 
-  if (view === "form") {
+  if (isNewRoute) {
     return (
       <CustomerForm
-        key={selected?.id ?? draftId ?? "new"}
-        customer={selected}
+        key={draftId ?? "new"}
+        customer={null}
         allCustomers={customers}
         onSave={handleSave}
         onBack={handleBack}
@@ -155,11 +179,27 @@ export default function CustomersPage() {
     );
   }
 
- 
-  if (view === "detail") {
+  if (isEditRoute) {
+    if (!customersLoaded) return null; // brief loading pause while customers fetch
+    if (!selected) return null; // redirect effect above will kick in
+    return (
+      <CustomerForm
+        key={selected.id}
+        customer={selected}
+        allCustomers={customers}
+        onSave={handleSave}
+        onBack={handleBack}
+        draftId={null}
+      />
+    );
+  }
+
+  if (isDetailRoute) {
+    if (!customersLoaded) return null;
+    if (!selected) return null;
     return (
       <CustomerDetail
-        customer={customersWithComputedBilled.find(c => c.id === selected?.id) ?? selected}
+        customer={customersWithComputedBilled.find(c => c.id === selected.id) ?? selected}
         onBack={handleBack}
         onEdit={() => handleEdit(selected)}
         quotations={quotations}
@@ -168,7 +208,7 @@ export default function CustomersPage() {
     );
   }
 
-  return (
+ return (
     <CustomerList
       customers={customersWithComputedBilled}
       search={search}
@@ -179,7 +219,7 @@ export default function CustomersPage() {
       onView={handleView}
       onEdit={handleEdit}
       onDelete={handleDelete}
-      onQuickUpdate={handleQuickUpdate}
+          onQuickUpdate={handleQuickUpdate}
     />
   );
 }

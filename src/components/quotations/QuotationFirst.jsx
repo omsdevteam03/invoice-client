@@ -1,9 +1,10 @@
 import { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import InvoiceDocument from "../invoices/InvoiceDocument";
 import {
   FaFileAlt, FaPlus, FaRupeeSign, FaSearch, FaEye, FaCalendarAlt, FaUser,
   FaCheckCircle, FaFileSignature, FaTrash, FaEdit, FaHistory,
-  FaFileInvoiceDollar, FaExchangeAlt, FaTimes, FaAddressBook,
+  FaFileInvoiceDollar, FaExchangeAlt, FaTimes, FaAddressBook, FaUndo,
 } from "react-icons/fa";
 // ── Auto-saved quotation drafts (crash/navigate-away recovery) ─────────────
 // NOT the quotation's business "status" (Draft/Approved) — this is a
@@ -39,12 +40,13 @@ function timeAgo(ts) {
   const day = Math.floor(hr / 24);
   return `${day}d ago`;
 }
-
 const statusConfig = {
+  Draft:    { bg: "#f1f5f9", color: "#64748b", border: "#e2e8f0", icon: <FaFileSignature size={10} /> },
+  Sent:     { bg: "#eff6ff", color: "#2563eb", border: "#bfdbfe", icon: <FaExchangeAlt size={10} /> },
   Approved: { bg: "#ecfdf5", color: "#059669", border: "#a7f3d0", icon: <FaCheckCircle size={10} /> },
-  Draft: { bg: "#E6F1EC", color: "#1F6F5C", border: "#BFDED2", icon: <FaFileSignature size={10} /> },
+  Rejected: { bg: "#fef2f2", color: "#dc2626", border: "#fecaca", icon: <FaTimes size={10} /> },
+  Expired:  { bg: "#fffbeb", color: "#d97706", border: "#fde68a", icon: <FaHistory size={10} /> },
 };
-
 const tableStyles = `
 .qt-table-wrap {
   background: #fff;
@@ -170,6 +172,35 @@ const tableStyles = `
 .qt-header-row { gap: 12px; }
 .qt-header-actions { display: flex; gap: 8px; }
 .qt-search-box { flex: 1 1 220px; min-width: 220px; }
+
+/* ---------- "Related to Invoice" result banner ---------- */
+.qt-invoice-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  background: #eff6ff;
+  border: 1.5px solid #bfdbfe;
+  border-radius: 12px;
+  padding: 12px 16px;
+  margin-bottom: 14px;
+}
+.qt-invoice-clear-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1.5px solid #bfdbfe;
+  background: #fff;
+  color: #2563eb;
+  font-weight: 700;
+  font-size: 0.78rem;
+  border-radius: 999px;
+  padding: 6px 14px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.qt-invoice-clear-btn:hover { background: #2563eb; color: #fff; border-color: #2563eb; }
 
 /* ---------- Tablet (portrait / landscape, ~761px–1024px) ---------- */
 @media (max-width: 1024px) {
@@ -316,6 +347,8 @@ const tableStyles = `
     flex: 1 1 calc(50% - 6px);
     max-width: none;
   }
+  .qt-invoice-banner { flex-direction: column; align-items: flex-start !important; }
+  .qt-invoice-clear-btn { width: 100%; justify-content: center; }
 }
 
 @media (max-width: 420px) {
@@ -335,6 +368,63 @@ const tableStyles = `
     padding: 22px 18px;
     width: 92%;
   }
+}
+
+/* ---------- Invoice selector (multi-invoice preview) ---------- */
+.qt-inv-tab {
+  border: 1.5px solid #e2e8f0;
+  background: #fff;
+  color: #475569;
+  font-weight: 700;
+  font-size: 0.82rem;
+  border-radius: 999px;
+  padding: 7px 16px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+.qt-inv-tab:hover { transform: translateY(-1px); }
+.qt-inv-tab.active {
+  border-color: #1F6F5C;
+  background: #E6F1EC;
+  color: #1F6F5C;
+}
+.qt-inv-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.qt-inv-table th {
+  text-align: left;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 10px 14px;
+  border-bottom: 1px solid #f1f5f9;
+  background: #f8fafc;
+  white-space: nowrap;
+}
+.qt-inv-table td {
+  padding: 10px 14px;
+  font-size: 0.82rem;
+  color: #334155;
+  border-bottom: 1px solid #f8fafc;
+}
+.qt-inv-view-btn {
+  border: none;
+  border-radius: 8px;
+  padding: 6px 12px;
+  font-size: 0.76rem;
+  font-weight: 700;
+  cursor: pointer;
+  background: #f1f5f9;
+  color: #475569;
+  white-space: nowrap;
+}
+.qt-inv-view-btn.active {
+  background: #1F6F5C;
+  color: #fff;
 }
 
 /* ---------- Recovered drafts panel ---------- */
@@ -393,8 +483,8 @@ function ConfirmDialog({ show, count = 1, onConfirm, onCancel }) {
   );
 }
 
-// Confirm dialog for converting an approved quotation into an invoice
-function ConvertConfirmDialog({ show, quotation, onConfirm, onCancel, converting }) {
+// ResetNumberingDialog Component — styled confirm for the "Reset Numbering" action
+function ResetNumberingDialog({ show, onConfirm, onCancel }) {
   if (!show) return null;
   return (
     <div style={{
@@ -409,30 +499,75 @@ function ConvertConfirmDialog({ show, quotation, onConfirm, onCancel, converting
       }}>
         <div style={{
           width: 60, height: 60, borderRadius: "50%",
-          background: "#ecfdf5", display: "flex",
+          background: "#fef2f2", display: "flex",
           alignItems: "center", justifyContent: "center",
           margin: "0 auto 16px"
         }}>
-          <FaFileInvoiceDollar size={24} color="#059669" />
+          <FaUndo size={22} color="#dc2626" />
         </div>
         <h5 style={{ color: "#0f172a", fontWeight: 700, marginBottom: 8 }}>
-          Convert to Invoice?
+          Reset quotation numbering?
         </h5>
         <p style={{ color: "#64748b", fontSize: "0.9rem", marginBottom: 24 }}>
-          {quotation
-            ? `This will create a new invoice from ${quotation.id} (${quotation.name}) for ₹${quotation.amount.toLocaleString()}.`
-            : "This will create a new invoice from this quotation."}
+          This will reset the next quotation number back to 0001. This cannot be undone.
         </p>
         <div className="d-flex gap-3 justify-content-center flex-wrap">
-          <button onClick={onCancel} disabled={converting}
+          <button onClick={onCancel}
             className="border-0 fw-semibold px-4 py-2"
             style={{ backgroundColor: "#f1f5f9", color: "#475569", borderRadius: "10px", cursor: "pointer", fontSize: "0.9rem" }}>
             Cancel
           </button>
-          <button onClick={onConfirm} disabled={converting}
+          <button onClick={onConfirm}
             className="border-0 fw-semibold px-4 py-2"
-            style={{ backgroundColor: "#059669", color: "#fff", borderRadius: "10px", cursor: converting ? "not-allowed" : "pointer", fontSize: "0.9rem" }}>
-            {converting ? "Converting…" : "Convert"}
+            style={{ backgroundColor: "#dc2626", color: "#fff", borderRadius: "10px", cursor: "pointer", fontSize: "0.9rem" }}>
+            Reset
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// EditApprovedDialog Component — styled confirm shown when editing an
+// already-approved quotation, replacing window.confirm for the same
+// visual language as ConfirmDialog/ResetNumberingDialog above.
+function EditApprovedDialog({ show, onConfirm, onCancel }) {
+  if (!show) return null;
+  return (
+    <div style={{
+      position: "fixed", top: 0, left: 0, width: "100%", height: "100%",
+      backgroundColor: "rgba(0,0,0,0.5)", zIndex: 9999,
+      display: "flex", alignItems: "center", justifyContent: "center",
+      padding: "16px",
+    }}>
+      <div className="qt-modal-card" style={{
+        backgroundColor: "#fff", borderRadius: "16px",
+        boxShadow: "0 20px 60px rgba(0,0,0,0.3)", textAlign: "center"
+      }}>
+        <div style={{
+          width: 60, height: 60, borderRadius: "50%",
+          background: "#fff7ed", display: "flex",
+          alignItems: "center", justifyContent: "center",
+          margin: "0 auto 16px"
+        }}>
+          <FaEdit size={22} color="#ea580c" />
+        </div>
+        <h5 style={{ color: "#0f172a", fontWeight: 700, marginBottom: 8 }}>
+          Edit approved quotation?
+        </h5>
+        <p style={{ color: "#64748b", fontSize: "0.9rem", marginBottom: 24 }}>
+          This quotation has already been approved. Editing it will require client approval again.
+        </p>
+        <div className="d-flex gap-3 justify-content-center flex-wrap">
+          <button onClick={onCancel}
+            className="border-0 fw-semibold px-4 py-2"
+            style={{ backgroundColor: "#f1f5f9", color: "#475569", borderRadius: "10px", cursor: "pointer", fontSize: "0.9rem" }}>
+            Cancel
+          </button>
+          <button onClick={onConfirm}
+            className="border-0 fw-semibold px-4 py-2"
+            style={{ backgroundColor: "#ea580c", color: "#fff", borderRadius: "10px", cursor: "pointer", fontSize: "0.9rem" }}>
+            Continue
           </button>
         </div>
       </div>
@@ -452,18 +587,149 @@ function EditableStatus({ value, onChange }) {
       style={{ backgroundColor: sc.bg, color: sc.color, border: `1px solid ${sc.border}` }}
     >
       <option value="Draft">Draft</option>
+      <option value="Sent">Sent</option>
       <option value="Approved">Approved</option>
+      <option value="Rejected">Rejected</option>
+      <option value="Expired">Expired</option>
     </select>
   );
 }
+function formatInvoiceDate(d) {
+  if (!d) return "—";
+  try {
+    const [y, m, day] = d.split("-");
+    const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    return `${day} ${months[parseInt(m, 10) - 1]} ${y}`;
+  } catch {
+    return d;
+  }
+}
 
-export default function QuotationFirst({ quotations, setQuotations, search, setSearch, setSelected, setEditMode, setShowTemplates, onInvoiceCreated, onChooseCustomer }) {
+// ── Invoice Selector Panel ──────────────────────────────────────────────
+// Shown above the invoice preview whenever a quotation has more than one
+// linked invoice, so the user can switch between them without leaving the
+// modal. Tabs and the details table both drive the same selection, and the
+// currently-viewed invoice is clearly highlighted in both.
+function InvoiceSelectorPanel({ quotation, invoiceList, selectedIndex, onSelect }) {
+  return (
+    <div className="no-print" style={{ marginBottom: 4 }}>
+      <div style={{ fontSize: "0.7rem", fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+        Quotation #{quotation.id}
+      </div>
+      <div style={{ fontSize: "1.05rem", fontWeight: 800, color: "#0f172a", marginBottom: 12 }}>
+        Invoices ({invoiceList.length})
+      </div>
+
+      {/* Tabs */}
+      <div className="d-flex gap-2 flex-wrap mb-3">
+        {invoiceList.map((inv, idx) => (
+          <button
+            key={inv.invoiceNo || idx}
+            onClick={() => onSelect(idx)}
+            className={`qt-inv-tab${idx === selectedIndex ? " active" : ""}`}
+          >
+            Invoice {idx + 1}
+          </button>
+        ))}
+      </div>
+
+      {/* Details table */}
+      <div style={{ border: "1px solid #f1f5f9", borderRadius: 12, overflow: "hidden", marginBottom: 14 }}>
+        <table className="qt-inv-table">
+          <thead>
+            <tr>
+              <th>Invoice</th>
+              <th>Date</th>
+              <th style={{ textAlign: "right" }}>Amount</th>
+              <th style={{ textAlign: "right" }}>Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            {invoiceList.map((inv, idx) => {
+              const active = idx === selectedIndex;
+              const amount = inv.total ?? (inv.items || []).reduce((a, b) => a + Number(b.amount || 0), 0);
+              return (
+                <tr key={inv.invoiceNo || idx} style={{ backgroundColor: active ? "#E6F1EC" : "#fff" }}>
+                  <td style={{ fontWeight: 700, color: "#1F6F5C" }}>{inv.invoiceNo || `Invoice ${idx + 1}`}</td>
+                  <td>{formatInvoiceDate(inv.date)}</td>
+                  <td style={{ textAlign: "right", fontWeight: 600, color: "#0f172a" }}>
+                    ₹{Number(amount).toLocaleString()}
+                  </td>
+                  <td style={{ textAlign: "right" }}>
+                    <button
+                      onClick={() => onSelect(idx)}
+                      className={`qt-inv-view-btn${active ? " active" : ""}`}
+                    >
+                      {active ? "Viewing" : "View Invoice"}
+                    </button>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      <div style={{ fontSize: "0.95rem", fontWeight: 800, color: "#0f172a", marginBottom: 10 }}>
+        Invoice #{invoiceList[selectedIndex]?.invoiceNo || selectedIndex + 1}
+      </div>
+    </div>
+  );
+}
+
+// ── No Invoices Panel ────────────────────────────────────────────────────
+// Shown when a quotation explicitly has zero linked invoices.
+function NoInvoicesPanel({ quotation, onClose, onCreateInvoice }) {
+  return (
+    <div style={{ padding: "44px 24px", textAlign: "center" }}>
+      <div style={{
+        width: 60, height: 60, borderRadius: "50%", background: "#f1f5f9",
+        display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 16px",
+      }}>
+        <FaFileInvoiceDollar size={24} color="#94a3b8" />
+      </div>
+      <h5 style={{ color: "#0f172a", fontWeight: 700, marginBottom: 8 }}>
+        No invoices created for this quotation.
+      </h5>
+      <p style={{ color: "#64748b", fontSize: "0.88rem", marginBottom: 22 }}>
+        Quotation #{quotation.id} doesn't have any invoices yet.
+      </p>
+      <div className="d-flex gap-3 justify-content-center flex-wrap">
+        <button onClick={onClose}
+          className="border-0 fw-semibold px-4 py-2"
+          style={{ backgroundColor: "#f1f5f9", color: "#475569", borderRadius: "10px", cursor: "pointer", fontSize: "0.9rem" }}>
+          Close
+        </button>
+        {onCreateInvoice && (
+          <button onClick={onCreateInvoice}
+            className="border-0 fw-semibold px-4 py-2"
+            style={{ backgroundColor: "#1F6F5C", color: "#fff", borderRadius: "10px", cursor: "pointer", fontSize: "0.9rem" }}>
+            Create Invoice
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+export default function QuotationFirst({
+  quotations, setQuotations, search, setSearch, setSelected, setEditMode,
+  setShowTemplates, onInvoiceCreated, onChooseCustomer, companyInfo, docSettings,
+  invoices = [], onCreateInvoiceFromQuotation,
+  onResetNumbering,
+}) {
   const navigate = useNavigate();
 
   // Confirm Dialog State — deleteIds holds either one id (row delete) or many (bulk delete)
   const [showConfirm, setShowConfirm] = useState(false);
   const [deleteIds, setDeleteIds] = useState([]);
 
+  // Reset Numbering confirm dialog state
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
+
+  // "Edit approved quotation?" confirm dialog state — holds the quotation
+  // pending confirmation, or null when the dialog is closed.
+  const [editApprovedTarget, setEditApprovedTarget] = useState(null);
   // Row selection state
   const [selectedIds, setSelectedIds] = useState([]);
   const headerCheckboxRef = useRef(null);
@@ -489,9 +755,15 @@ const handleDiscardDraft = (draft) => {
   setRecoveredDrafts(prev => prev.filter(d => d.key !== draft.key));
 };
 
-// Convert-to-invoice state
-  const [convertTarget, setConvertTarget] = useState(null);
-  const [converting, setConverting] = useState(false);
+  // ── Invoice preview / selector popup state ──────────────────────────────
+  // Holds { quotation, invoiceList, selectedIndex, isSynthetic }.
+  // invoiceList is always REAL saved invoices — quotation.invoices if the
+  // record carries one directly, otherwise invoices matching
+  // fromQuotationId in the `invoices` prop. Empty invoiceList ([]) means
+  // "no invoices created yet" and shows that panel; `isSynthetic` is kept
+  // in the shape only so InvoiceSelectorPanel's future/legacy callers stay
+  // compatible, but this component no longer sets it to true.
+  const [invoicePreview, setInvoicePreview] = useState(null);
 
   // Customer picker state
   const [showCustomerPicker, setShowCustomerPicker] = useState(false);
@@ -523,8 +795,27 @@ const handleDiscardDraft = (draft) => {
     );
   });
 
-  const handleCustomerSelect = (customer) => {
-    setShowCustomerPicker(false);
+  // Opens the preview popup for a given quotation.
+  // Real invoices only — matched via `fromQuotationId` (or a `q.invoices`
+  // array if the quotation record carries one directly). No synthetic
+  // fallback: if nothing is actually linked yet, that IS the "no invoices"
+  // state, and the panel below tells the user to create one.
+  // - 0 linked invoices → "No invoices created" panel.
+  // - 1 linked invoice → opens straight into the preview, no selector.
+  // - 2+ linked invoices → selector panel + preview.
+  const handlePreviewInvoice = (q) => {
+    const linkedFromProp = invoices.filter(inv => inv.fromQuotationId === q.id);
+    const invoiceList = Array.isArray(q.invoices) ? q.invoices : linkedFromProp;
+
+    setInvoicePreview({
+      quotation: q,
+      invoiceList,
+      selectedIndex: invoiceList.length ? 0 : null,
+      isSynthetic: false,
+    });
+  };
+
+  const handleCustomerSelect = (customer) => {    setShowCustomerPicker(false);
     setCustomerSearch("");
     if (onChooseCustomer) onChooseCustomer(customer);
   };
@@ -574,61 +865,6 @@ const handleDiscardDraft = (draft) => {
     }
   };
 
-  // ── Convert an Approved quotation into a new Invoice ──
-  const handleConvertClick = (q) => setConvertTarget(q);
-  const handleConvertCancel = () => { if (!converting) setConvertTarget(null); };
-
- const handleConvertConfirm = async () => {
-    if (!convertTarget) return;
-    setConverting(true);
-    try {
-      // Look up how many invoices already exist so we can assign the next
-      // sequential number — mirrors the INV-00X logic used in InvoiceForm.
-      let nextInvoiceNo = "INV-001";
-      try {
-        const existingRes = await fetch(`${import.meta.env.VITE_API_URL}/invoices`);
-        const existing = existingRes.ok ? await existingRes.json() : [];
-        nextInvoiceNo = `INV-${String(existing.length + 1).padStart(3, "0")}`;
-      } catch (numErr) {
-        console.error('Failed to compute next invoice number:', numErr);
-      }
-
-      const invoicePayload = {
-        isNew: true,
-        invoiceNo: nextInvoiceNo,
-        name: convertTarget.name,
-        company: convertTarget.company,
-        amount: convertTarget.amount,
-        date: new Date().toISOString().split("T")[0],
-        status: "Unpaid",
-        fromQuotationId: convertTarget.id,
-      };
-
-      const res = await fetch(`${import.meta.env.VITE_API_URL}/invoices`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(invoicePayload),
-      });
-      const createdInvoice = res.ok ? await res.json() : null;
-
-      // Mark the quotation as converted so the button doesn't show again
-      const updatedQuotation = { ...convertTarget, convertedInvoiceId: createdInvoice?.id ?? true };
-      setQuotations(prev => prev.map(q => q.id === convertTarget.id ? updatedQuotation : q));
-      await fetch(`${import.meta.env.VITE_API_URL}/quotations`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...updatedQuotation, isNew: false }),
-      });
-
-      if (onInvoiceCreated) onInvoiceCreated(createdInvoice);
-    } catch (err) {
-      console.error('Convert to invoice failed:', err);
-    } finally {
-      setConverting(false);
-      setConvertTarget(null);
-    }
-  };
-
   // One-time cleanup: any quotation left over from before with status
   // "Pending" is silently migrated to "Draft" so that status never appears
   // in the UI again.
@@ -639,12 +875,41 @@ const handleDiscardDraft = (draft) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const filtered = quotations.filter(q =>
-    !q.isTemplate &&
-    (q.name.toLowerCase().includes(search.toLowerCase()) ||
-      q.company.toLowerCase().includes(search.toLowerCase()) ||
-      q.id.toLowerCase().includes(search.toLowerCase()))
-  );
+  // ── Invoice-number search ────────────────────────────────────────────
+  // If the search text exactly matches a saved invoice number, we switch
+  // into "invoice result" mode: the table narrows to just the ONE
+  // quotation that invoice was created from, and a small banner is shown
+  // above the table (mirrors the "Related to Quotation" banner on the
+  // Invoices page, in reverse). This is on top of — not instead of — the
+  // normal name/company/quote-id search below.
+  const searchTrim = search.trim();
+  const searchLower = searchTrim.toLowerCase();
+
+  const matchedInvoice = searchTrim
+    ? invoices.find(inv => (inv.invoiceNo || "").toLowerCase() === searchLower)
+    : null;
+  const isInvoiceSearch = Boolean(matchedInvoice);
+  const invoiceSearchQuotationId = matchedInvoice?.fromQuotationId || null;
+
+  const filtered = (isInvoiceSearch
+    ? quotations.filter(q => !q.isTemplate && q.id === invoiceSearchQuotationId)
+    : quotations.filter(q =>
+        !q.isTemplate &&
+        (q.name.toLowerCase().includes(searchLower) ||
+          q.company.toLowerCase().includes(searchLower) ||
+          q.id.toLowerCase().includes(searchLower) ||
+          (searchLower && invoices.some(inv =>
+            inv.fromQuotationId === q.id && (inv.invoiceNo || "").toLowerCase().includes(searchLower)
+          )))
+      )
+  ).sort((a, b) => {
+      // Extract the trailing number from ids like "QT-2026-007"
+      const numA = parseInt((a.id.match(/(\d+)$/) || [0])[0], 10) || 0;
+      const numB = parseInt((b.id.match(/(\d+)$/) || [0])[0], 10) || 0;
+      return numB - numA; // newest (highest number) first
+    });
+
+  const clearInvoiceSearch = () => setSearch("");
 
   const allSelected = filtered.length > 0 && selectedIds.length === filtered.length;
   const someSelected = selectedIds.length > 0 && !allSelected;
@@ -664,24 +929,41 @@ const handleDiscardDraft = (draft) => {
   };
 
   const totalValue = quotations.filter(q => !q.isTemplate).reduce((a, b) => a + b.amount, 0);
+  const realQuotationCount = quotations.filter(q => !q.isTemplate).length;
+  const canResetNumbering = realQuotationCount === 0;
 
   return (
     <div style={{ width: "100%" }}>
       <style>{tableStyles}</style>
 
-      {/* Confirm Dialogs */}
+      <div className="no-print">
+          {/* Confirm Dialog */}
       <ConfirmDialog
         show={showConfirm}
         count={deleteIds.length}
         onConfirm={handleConfirm}
         onCancel={handleCancel}
       />
-     <ConvertConfirmDialog
-        show={Boolean(convertTarget)}
-        quotation={convertTarget}
-        onConfirm={handleConvertConfirm}
-        onCancel={handleConvertCancel}
-        converting={converting}
+
+         {/* Reset Numbering Confirm Dialog */}
+      <ResetNumberingDialog
+        show={showResetConfirm}
+        onConfirm={() => {
+          setShowResetConfirm(false);
+          onResetNumbering?.();
+        }}
+        onCancel={() => setShowResetConfirm(false)}
+      />
+
+      {/* Edit Approved Quotation Confirm Dialog */}
+      <EditApprovedDialog
+        show={Boolean(editApprovedTarget)}
+        onConfirm={() => {
+          setSelected(editApprovedTarget);
+          setEditMode(true);
+          setEditApprovedTarget(null);
+        }}
+        onCancel={() => setEditApprovedTarget(null)}
       />
 
       {showCustomerPicker && (
@@ -782,6 +1064,22 @@ const handleDiscardDraft = (draft) => {
         </div>
       <div className="d-flex gap-2 qt-header-actions">
           <button
+            onClick={() => navigate("/trash?tab=quotations")}
+            title="Trash"
+            aria-label="Trash"
+            className="qt-new-btn d-flex align-items-center justify-content-center"
+            style={{
+              background: "#fff", color: "#64748b", cursor: "pointer",
+              borderRadius: "10px", border: "1.5px solid #e2e8f0", flexShrink: 0,
+              width: 38, height: 38, padding: 0,
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = "#fef2f2"; e.currentTarget.style.color = "#dc2626"; e.currentTarget.style.borderColor = "#fecaca"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = "#fff"; e.currentTarget.style.color = "#64748b"; e.currentTarget.style.borderColor = "#e2e8f0"; }}
+          >
+            <FaTrash size={13} />
+          </button>
+
+          <button
             onClick={() => setShowCustomerPicker(true)}
             className="qt-new-btn d-flex align-items-center gap-2 fw-semibold px-3 py-2"
             style={{
@@ -807,7 +1105,9 @@ const handleDiscardDraft = (draft) => {
         </div>
       </div>
 
-      {/* Toolbar: Recovered Drafts toggle + Delete Selected (only when rows are checked) + Search */}
+        {/* Toolbar: Recovered Drafts toggle + Reset Numbering (only when there
+          are zero real quotations) + Delete Selected (only when rows are
+          checked) + Search. */}
       <div className="qt-toolbar d-flex align-items-center justify-content-end gap-2 mb-4 flex-wrap">
         {recoveredDrafts.length > 0 && (
           <button
@@ -828,6 +1128,20 @@ const handleDiscardDraft = (draft) => {
             </span>
           </button>
         )}
+            {canResetNumbering && onResetNumbering && (
+          <button
+            onClick={() => setShowResetConfirm(true)}
+            className="qt-drafts-btn"
+            title="Only available while there are zero quotations"
+            style={{
+              backgroundColor: "#fff",
+              color: "#dc2626",
+              border: "1.5px solid #fecaca",
+            }}
+          >
+            <FaUndo size={11} /> Reset Numbering
+          </button>
+        )}
         {selectedIds.length > 0 && (
           <button onClick={handleBulkDeleteClick} className="qt-bulk-delete-btn">
             <FaTrash size={12} /> Delete Selected ({selectedIds.length})
@@ -839,7 +1153,7 @@ const handleDiscardDraft = (draft) => {
           <input
             value={search} onChange={e => setSearch(e.target.value)}
             className="qt-search-input"
-            placeholder="Search quotations..."
+            placeholder="Search by customer, quote no or invoice no..."
             style={{ border: "none", outline: "none", fontSize: "0.85rem", color: "#0f172a", width: "100%", backgroundColor: "transparent" }}
           />
         </div>
@@ -905,6 +1219,34 @@ const handleDiscardDraft = (draft) => {
         ))}
       </div>
 
+      {/* "Related to Invoice" result banner — shown when the search text
+          matches a known invoice number */}
+      {isInvoiceSearch && (
+        <div className="qt-invoice-banner">
+          <div className="d-flex align-items-center gap-2">
+            <div
+              className="d-flex align-items-center justify-content-center rounded-3 flex-shrink-0"
+              style={{ width: 34, height: 34, background: "#dbeafe", color: "#2563eb" }}
+            >
+              <FaFileInvoiceDollar size={14} />
+            </div>
+            <div>
+              <div style={{ fontWeight: 800, fontSize: "0.9rem", color: "#0f172a" }}>
+                Related to Invoice {matchedInvoice.invoiceNo}
+              </div>
+              <div style={{ fontSize: "0.78rem", color: "#2563eb", fontWeight: 600 }}>
+                {invoiceSearchQuotationId
+                  ? `Quotation ${invoiceSearchQuotationId} found`
+                  : "No quotation is linked to this invoice"}
+              </div>
+            </div>
+          </div>
+          <button className="qt-invoice-clear-btn" onClick={clearInvoiceSearch}>
+            <FaTimes size={11} /> Clear
+          </button>
+        </div>
+      )}
+
   {/* Table — headers always render on desktop/tablet; collapses to compact cards on phones/small tablets; empty state is a single row inside tbody */}
       <div className="qt-table-wrap">
         <div className="qt-table-scroll">
@@ -933,7 +1275,9 @@ const handleDiscardDraft = (draft) => {
             {filtered.length === 0 ? (
               <tr>
                 <td colSpan={7} style={{ textAlign: "center", padding: "48px 16px", color: "#94a3b8", fontSize: "0.9rem" }}>
-                  {search ? `No quotations found.` : "No quotations found."}
+                  {isInvoiceSearch
+                    ? `No quotation found for invoice ${matchedInvoice.invoiceNo}.`
+                    : search ? `No quotations found.` : "No quotations found."}
                 </td>
               </tr>
             ) : (
@@ -988,13 +1332,33 @@ const handleDiscardDraft = (draft) => {
                       style={{ backgroundColor: (statusConfig[q.status] || {}).color }}
                       aria-hidden="true"
                     ></span>
-                    <div className="d-flex gap-2 justify-content-end">
+<div className="d-flex gap-2 justify-content-end">
                       <button onClick={() => { setSelected(q); setEditMode(false); }} title="View" className="qt-action-btn qt-action-view">
                         <FaEye size={13} />
                       </button>
-                      <button onClick={() => { setSelected(q); setEditMode(true); }} title="Edit" className="qt-action-btn qt-action-edit">
-                        <FaEdit size={13} />
-                      </button>
+                               <button
+  onClick={() => {
+    if (q.status === "Approved") {
+      setEditApprovedTarget(q);
+      return;
+    }
+    setSelected(q);
+    setEditMode(true);
+  }}
+  title="Edit"
+  className="qt-action-btn qt-action-edit"
+>
+  <FaEdit size={13} />
+</button>
+                   {q.status === "Approved" && (
+                        <button
+                          onClick={() => handlePreviewInvoice(q)}
+                          title="Preview Invoice"
+                          className="qt-action-btn qt-action-convert"
+                        >
+                          <FaFileInvoiceDollar size={13} />
+                        </button>
+                      )}
                       <button onClick={() => handleDeleteClick(q.id)} title="Delete" className="qt-action-btn qt-action-delete">
                         <FaTrash size={13} />
                       </button>
@@ -1004,9 +1368,70 @@ const handleDiscardDraft = (draft) => {
               ))
             )}
           </tbody>
-        </table>
+     </table>
         </div>
       </div>
+      </div>
+      {/* end no-print wrapper — everything above is hidden when printing */}
+
+      {/* Invoice preview / selector popup */}
+      {invoicePreview && (
+        <div
+          className="print-modal-backdrop"
+          style={{
+            position: "fixed", inset: 0, zIndex: 9999, backgroundColor: "rgba(15,23,42,0.8)",
+            display: "flex", alignItems: "center", justifyContent: "center", padding: "16px",
+            backdropFilter: "blur(4px)",
+          }}
+          onClick={() => setInvoicePreview(null)}
+        >
+          <div
+            className="print-modal-card"
+            style={{
+              backgroundColor: "#fff", borderRadius: "16px", width: "100%", maxWidth: "900px",
+              maxHeight: "90vh", overflow: "auto", position: "relative",
+              boxShadow: "0 24px 64px rgba(0,0,0,0.25)",
+            }}
+            onClick={e => e.stopPropagation()}
+          >
+            {invoicePreview.invoiceList.length === 0 ? (
+              <NoInvoicesPanel
+                quotation={invoicePreview.quotation}
+                onClose={() => setInvoicePreview(null)}
+                onCreateInvoice={
+                  onCreateInvoiceFromQuotation
+                    ? () => {
+                        const q = invoicePreview.quotation;
+                        setInvoicePreview(null);
+                        onCreateInvoiceFromQuotation(q);
+                      }
+                    : undefined
+                }
+              />
+            ) : (
+              <div style={{ padding: "20px" }}>
+                {/* Only show the selector when there's more than one REAL
+                    invoice to choose from — the single synthetic preview
+                    (legacy quotations) skips straight to the document. */}
+                {invoicePreview.invoiceList.length > 1 && !invoicePreview.isSynthetic && (
+                  <InvoiceSelectorPanel
+                    quotation={invoicePreview.quotation}
+                    invoiceList={invoicePreview.invoiceList}
+                    selectedIndex={invoicePreview.selectedIndex}
+                    onSelect={(idx) => setInvoicePreview(prev => ({ ...prev, selectedIndex: idx }))}
+                  />
+                )}
+                <InvoiceDocument
+                  invoice={invoicePreview.invoiceList[invoicePreview.selectedIndex]}
+                  onBack={() => setInvoicePreview(null)}
+                  onEdit={() => {}}
+                />
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
+

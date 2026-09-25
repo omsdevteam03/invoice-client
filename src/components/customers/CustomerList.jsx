@@ -400,15 +400,17 @@ const tableStyles = `
   .action-flag-delete .flag-badge { color: #dc2626 !important; }
  .action-flag-btn .flag-label { display: none; }
 
-  /* Header: stack Add Customer full-width, same as Quotations' buttons */
+ /* Header: stack Add Customer full-width, same as Quotations' buttons */
   .cl-header {
     flex-direction: column;
     align-items: stretch !important;
     gap: 12px;
   }
   .cl-header button {
-    width: 100%;
-    justify-content: center;
+    width: 100% !important;
+    justify-content: center !important;
+    padding: 9px 14px !important;
+    font-size: 0.78rem !important;
   }
 
 /* Toolbar: Drafts / Delete Selected / Search stack full-width too */
@@ -416,9 +418,11 @@ const tableStyles = `
     flex-direction: column;
     align-items: stretch !important;
   }
-  .cl-toolbar > button {
-    width: 100%;
-    justify-content: center;
+.cl-toolbar > button {
+    width: 100% !important;
+    justify-content: center !important;
+    padding: 8px 12px !important;
+    font-size: 0.76rem !important;
   }
   .cl-search-wrap {
     flex: none !important;
@@ -521,14 +525,13 @@ function EditableBadge({ value, options, config, onChange, variant }) {
   );
 }
 
-export default function CustomerList({ customers, search, setSearch, filterStatus, setFilterStatus, onNew, onView, onEdit, onDelete, onQuickUpdate }) {
-    const navigate = useNavigate();
+// NEW
+export default function CustomerList({ customers, search, setSearch, filterStatus, setFilterStatus, onNew, onView, onEdit, onDelete, onQuickUpdate, onQuickAdd, onUseProfile }) {    const navigate = useNavigate();
 
 
   // ✅ Confirm Dialog State — deleteIds holds either one id (row delete) or many (bulk delete)
   const [showConfirm, setShowConfirm] = useState(false);
   const [deleteIds, setDeleteIds] = useState([]);
-
  // ✅ Unsaved customer-form drafts — surfaced here so nothing typed is ever lost
   const [drafts, setDrafts] = useState(() => readDrafts());
   const [showDrafts, setShowDrafts] = useState(false);
@@ -614,7 +617,7 @@ export default function CustomerList({ customers, search, setSearch, filterStatu
     <div style={{ width: "100%" }}>
       <style>{tableStyles}</style>
 
-      {/* ✅ Confirm Dialog */}
+     {/* ✅ Confirm Dialog */}
       <ConfirmDialog
         show={showConfirm}
         count={deleteIds.length}
@@ -649,12 +652,34 @@ export default function CustomerList({ customers, search, setSearch, filterStatu
           </div>
         </div>
         
-        <button onClick={onNew}
-          className="d-flex align-items-center gap-2 border-0 fw-semibold px-3 py-2"
-          style={{ background: "linear-gradient(135deg,#1F6F5C,#134A3E)", color: "#fff", fontSize: "0.82rem", cursor: "pointer", borderRadius: "10px", boxShadow: "0 4px 12px rgba(31,111,92,0.35)" }}>
-          <FaPlus size={12} /> Add Customer <FaChevronDown size={10} style={{ opacity: 0.8 }} />
-        </button>
+           <div className="d-flex gap-2">
+          <button
+            onClick={() => navigate("/trash?tab=customers")}
+            title="Trash"
+            aria-label="Trash"
+            className="d-flex align-items-center justify-content-center border-0"
+            style={{
+              background: "#fff", color: "#64748b", cursor: "pointer",
+              borderRadius: "10px", border: "1.5px solid #e2e8f0",
+              width: 38, height: 38, padding: 0, flexShrink: 0,
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = "#fef2f2"; e.currentTarget.style.color = "#dc2626"; e.currentTarget.style.borderColor = "#fecaca"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = "#fff"; e.currentTarget.style.color = "#64748b"; e.currentTarget.style.borderColor = "#e2e8f0"; }}
+          >
+            <FaTrash size={13} />
+          </button>
+
+          <button onClick={onNew}
+            className="d-flex align-items-center gap-2 border-0 fw-semibold px-3 py-2"
+            style={{ background: "linear-gradient(135deg,#1F6F5C,#134A3E)", color: "#fff", fontSize: "0.82rem", cursor: "pointer", borderRadius: "10px", boxShadow: "0 4px 12px rgba(31,111,92,0.35)" }}>
+            <FaPlus size={12} /> Add Customer <FaChevronDown size={10} style={{ opacity: 0.8 }} />
+          </button>
+        </div>
       </div>
+
+      {/* ✅ Saved Customer Profiles — quick-fill templates for the Create
+          Customer form. Clicking "Use Profile" on a card takes the user to
+          the New Customer form with all these details already filled in. */}
 
    {/* Toolbar: Drafts / Delete selected (only when rows are checked) / Search
           — search box grows to fill remaining width, matching Quotations page,

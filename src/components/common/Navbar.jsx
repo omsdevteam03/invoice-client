@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { FaFileInvoiceDollar, FaSignInAlt, FaUser, FaCog, FaSignOutAlt, FaChevronDown } from "react-icons/fa";import useAuth from "../../hooks/useAuth";
+import { FaFileInvoiceDollar, FaSignInAlt, FaUser, FaCog, FaSignOutAlt, FaChevronDown } from "react-icons/fa";
+import useAuth from "../../hooks/useAuth";
 
 export default function Navbar() {
   const { user, logout } = useAuth();
@@ -32,6 +33,10 @@ export default function Navbar() {
     navigate("/login");
   };
 
+  const closeProfile = () => {
+    setShowProfile(false);
+  };
+
   return (
     <>
       <nav
@@ -59,8 +64,6 @@ export default function Navbar() {
 
         {/* Right: Actions */}
         <div className="d-flex align-items-center gap-2">
-
-         
 
           {/* Divider */}
           <div style={{ width: 1, height: 24, background: "rgba(255,255,255,0.3)", margin: "0 4px" }} />
@@ -247,11 +250,12 @@ export default function Navbar() {
           backgroundColor: "rgba(15,23,42,0.6)",
           display: "flex", alignItems: "center", justifyContent: "center",
         }}
-          onClick={() => setShowProfile(false)}
+          onClick={closeProfile}
         >
           <div style={{
             backgroundColor: "#fff", borderRadius: 20,
-            padding: "32px", maxWidth: 400, width: "90%",
+            padding: "32px", maxWidth: 420, width: "90%",
+            maxHeight: "85vh", overflowY: "auto",
             boxShadow: "0 24px 64px rgba(0,0,0,0.2)",
           }}
             onClick={e => e.stopPropagation()}
@@ -274,6 +278,7 @@ export default function Navbar() {
               </div>
             </div>
 
+            {/* Account Info (read-only) */}
             <div style={{ backgroundColor: "#f8fafc", borderRadius: 12, padding: 16, marginBottom: 20 }}>
               {[
                 { label: "Name", value: user?.name || "Admin User" },
@@ -291,7 +296,7 @@ export default function Navbar() {
             </div>
 
             <button
-              onClick={() => setShowProfile(false)}
+              onClick={closeProfile}
               style={{
                 width: "100%", padding: "10px", border: "none",
                 borderRadius: 8, background: "linear-gradient(135deg,#1F6F5C,#17534A)",

@@ -1,8 +1,11 @@
 import { useState, useEffect, useRef } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useLocation, useNavigate, useParams } from "react-router-dom";
 import InvoiceList from "../components/invoices/InvoiceList";
 import InvoiceForm from "../components/invoices/InvoiceForm";
 import InvoiceDocument from "../components/invoices/InvoiceDocument";
+import ReceivePaymentModal from "../components/invoices/ReceivePaymentModal";
+import { FaFileInvoiceDollar } from "react-icons/fa";
+
 const API = `${import.meta.env.VITE_API_URL}/invoices`;
 const SETTINGS_API = `${import.meta.env.VITE_API_URL}/settings/company`;
 const DOC_SETTINGS_API = `${import.meta.env.VITE_API_URL}/settings/invoice`;
@@ -19,17 +22,82 @@ const isProformaRecord = (i) =>
   i.invoiceType === "Proforma" || (i.invoiceNo || "").startsWith("PI-");
 const isFinalRecord = (i) => !isProformaRecord(i);
 
+function ConvertToFinalModal({ invoiceNo, onCancel, onConfirm }) {
+  if (!invoiceNo) return null;
+  return (
+    <div
+      className="d-flex align-items-center justify-content-center"
+      style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.5)", zIndex: 1000, padding: 16 }}
+      onClick={onCancel}
+    >
+      <div
+        className="bg-white"
+        style={{ borderRadius: 14, padding: "24px", width: "90%", maxWidth: 340, boxShadow: "0 12px 32px rgba(0,0,0,0.2)" }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div
+          className="d-flex align-items-center justify-content-center mx-auto mb-3"
+          style={{ width: 48, height: 48, borderRadius: "50%", background: "#ede9fe", color: "#7c3aed" }}
+        >
+          <FaFileInvoiceDollar size={18} />
+        </div>
+        <div className="text-center fw-bold mb-1" style={{ fontSize: "1rem", color: "#0f172a" }}>
+          Convert {invoiceNo} into a Final Invoice?
+        </div>
+        <div className="text-center mb-4" style={{ fontSize: "0.85rem", color: "#64748b" }}>
+          This creates a new Final Invoice from this proforma and marks the original as Converted.
+        </div>
+        <div className="d-flex gap-2">
+          <button
+            onClick={onCancel}
+            className="flex-fill fw-semibold border-0"
+            style={{ background: "#f1f5f9", color: "#334155", borderRadius: 8, padding: "10px", fontSize: "0.85rem" }}
+          >
+            Cancel
+          </button>
+          <button
+            onClick={onConfirm}
+            className="flex-fill fw-semibold border-0"
+            style={{ background: "linear-gradient(135deg,#a78bfa,#7c3aed)", color: "#fff", borderRadius: 8, padding: "10px", fontSize: "0.85rem" }}
+          >
+            Convert
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Appends one entry to an invoice's activity log. Used everywhere an
+// // invoice is created, edited, has its status changed, receives a payment,
+// or is converted — so the Activity Log tab always has a full history.
+const logActivity = (invoice, message) => ({
+  ...invoice,
+  activityLog: [...(invoice.activityLog || []), { message, date: new Date().toISOString() }],
+});
+
 export default function InvoicesPage() {
   const location = useLocation();
   const navigate = useNavigate();
+  const { id } = useParams();
 
- const [invoices, setInvoices] = useState([]);
-  const [view, setView] = useState("list");
-  const [selected, setSelected] = useState(null);
+  const [invoices, setInvoices] = useState([]);
+  const [invoicesLoaded, setInvoicesLoaded] = useState(false);
+  // Only used for an UNSAVED draft (New / Choose Customer / Choose Quotation
+  // flows) — once an invoice is saved it's identified purely by URL :id,
+  // so a page refresh always re-derives the correct screen from invoices[].
+  const [draftInvoice, setDraftInvoice] = useState(null);
   const [search, setSearch] = useState("");
   const [newInvoiceType, setNewInvoiceType] = useState("Final"); // "Final" | "Proforma" — used when creating a new invoice
+  const [paymentInvoice, setPaymentInvoice] = useState(null); // invoice currently open in the Receive Payment modal
 
- const [companyInfo, setCompanyInfo] = useState({
+  // ── Derive which screen to show from the URL, not from local state ──────
+  const isNewRoute = location.pathname === "/invoices/new";
+  const isEditRoute = Boolean(id) && location.pathname.endsWith("/edit");
+  const isDocRoute = Boolean(id) && !isEditRoute;
+  const selected = id ? invoices.find((i) => i.id === id) : draftInvoice;
+
+  const [companyInfo, setCompanyInfo] = useState({
     companyName: "",
     companyEmail: "",
     companyPhone: "",
@@ -38,7 +106,7 @@ export default function InvoicesPage() {
     website: "",
     logo: null,
   });
-const [docSettings, setDocSettings] = useState({
+  const [docSettings, setDocSettings] = useState({
     invoicePrefix: "INV-",
     quotationPrefix: "QT-",
     gstPercent: 18,
@@ -46,16 +114,28 @@ const [docSettings, setDocSettings] = useState({
     defaultPaymentTerms: "",
     defaultNotes: "",
   });
-const [approvedQuotations, setApprovedQuotations] = useState([]);
+  const [approvedQuotations, setApprovedQuotations] = useState([]);
   const [toast, setToast] = useState(null); // { message } | null
   const saveTimer = useRef(null);
+
   // Load invoices from DB
   useEffect(() => {
     fetch(API)
       .then(res => res.json())
       .then(data => setInvoices(data))
-      .catch(err => console.error('Failed to load invoices:', err));
+      .catch(err => console.error('Failed to load invoices:', err))
+      .finally(() => setInvoicesLoaded(true));
   }, []);
+
+  // If someone lands on /invoices/:id (view or edit) for an invoice that
+  // doesn't exist once loading has finished, send them back to the list
+  // instead of showing a blank/broken screen.
+  useEffect(() => {
+    if (!invoicesLoaded || !id) return;
+    if (!invoices.find((i) => i.id === id)) {
+      navigate("/invoices", { replace: true });
+    }
+  }, [invoicesLoaded, id, invoices, navigate]);
 
   // Load quotations — only the Approved ones are offered as an invoice
   // starting point in the "Choose Customer" picker's Quotations tab.
@@ -66,7 +146,7 @@ const [approvedQuotations, setApprovedQuotations] = useState([]);
       .catch(err => console.error('Failed to load quotations:', err));
   }, []);
 
-// Load company settings from DB
+  // Load company settings from DB
   useEffect(() => {
     fetch(SETTINGS_API)
       .then(res => res.json())
@@ -82,14 +162,47 @@ const [approvedQuotations, setApprovedQuotations] = useState([]);
       .catch(err => console.error('Failed to load invoice/quotation settings:', err));
   }, []);
 
-  // NEW — Jump straight to the edit form when arriving from a quotation conversion
+  // NEW — Jump straight to the edit form when arriving from a quotation conversion.
+  // The invoice was just saved by QuotationsPage, so it's already in the DB —
+  // route straight to its edit URL instead of holding it in local state.
   useEffect(() => {
     const editInvoice = location.state?.editInvoice;
     if (editInvoice) {
-      setSelected(editInvoice);
-      setView("form");
+      navigate(`/invoices/${editInvoice.id}/edit`, { replace: true, state: {} });
+    }
+  }, []);
+
+  // NEW — Jump straight to ONE invoice when arriving via
+  // /invoices?fromQuotationId=QT-xxx (the "View Invoice" button on the
+  // Quotations page). Finds the invoice that was created from that
+  // quotation (matched on the fromQuotationId field saved at conversion
+  // time) and redirects to its own /invoices/:id URL — so only that
+  // person's invoice is shown, never the full list.
+  useEffect(() => {
+    if (!invoicesLoaded) return;
+    const params = new URLSearchParams(location.search);
+    const fromQuotationId = params.get("fromQuotationId");
+    if (!fromQuotationId) return;
+    const match = invoices.find(i => i.fromQuotationId === fromQuotationId);
+    if (match) {
+      navigate(`/invoices/${match.id}`, { replace: true });
+    } else {
+      navigate("/invoices", { replace: true });
+    }
+  }, [invoicesLoaded, location.search, invoices, navigate]);
+
+  // NEW — Jump straight into a prefilled draft invoice when arriving from
+  // the Quotations page's "Create Invoice" button (shown in the Invoice
+  // Selector when a quotation has zero linked invoices yet). Reuses the
+  // same openDraftFromQuotation flow as the "Choose Customer ➜ Quotations"
+  // tab, so numbering/company/buyer prefill logic only lives in one place.
+  useEffect(() => {
+    const chooseQuotation = location.state?.chooseQuotation;
+    if (chooseQuotation) {
+      openDraftFromQuotation(chooseQuotation);
       navigate(location.pathname, { replace: true, state: {} });
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Called whenever the company fields are edited in the form.
@@ -113,10 +226,10 @@ const [approvedQuotations, setApprovedQuotations] = useState([]);
     }, 600);
   };
 
-const handleNew = (type = "Final") => {
-    setSelected(null);
+  const handleNew = (type = "Final") => {
+    setDraftInvoice(null);
     setNewInvoiceType(type);
-    setView("form");
+    navigate("/invoices/new");
   };
 
   // If this invoice is a Converted proforma, redirect to the Final Invoice
@@ -129,52 +242,84 @@ const handleNew = (type = "Final") => {
     return inv;
   };
 
-  const handleEdit = (inv) => { setSelected(resolveConverted(inv)); setView("form"); };
-  const handleView = (inv) => { setSelected(resolveConverted(inv)); setView("document"); };
+  const handleEdit = (inv) => navigate(`/invoices/${resolveConverted(inv).id}/edit`);
+  const handleView = (inv) => navigate(`/invoices/${resolveConverted(inv).id}`);
+
   // Opens a pre-filled, unsaved invoice draft for a given customer, straight
   // into the edit form — nothing is saved until "Generate Invoice" is clicked.
- const openDraftFromCustomer = (customer) => {
+    const openDraftFromCustomer = async (customer) => {
+    // Always fetch the latest active company profile right before creating
+    // a document, instead of relying on whatever was fetched at page load —
+    // this way switching the active company takes effect immediately, with
+    // no page refresh required.
+    let freshCompanyInfo = companyInfo;
+    try {
+      const res = await fetch(SETTINGS_API);
+      if (res.ok) {
+        const data = await res.json();
+        freshCompanyInfo = { ...companyInfo, ...data };
+        setCompanyInfo(freshCompanyInfo);
+      }
+    } catch (err) {
+      console.error("Failed to refresh company info before creating invoice:", err);
+    }
+
     const prefix = docSettings.invoicePrefix || "INV-";
     // Final and Proforma are separate numbering series — must count only
     // same-type invoices, or the two series eat into each other's numbers
     // (e.g. a Proforma save bumps what looks like the Final count too,
     // producing gaps like INV-002, INV-004 instead of INV-001, INV-002).
-   const finalInvoiceNumbers = invoices
+    const finalInvoiceNumbers = invoices
       .filter(isFinalRecord)
       .map(i => parseInt((i.invoiceNo || "").match(/(\d+)$/)?.[1] || "0", 10));
     const nextNum = (finalInvoiceNumbers.length ? Math.max(...finalInvoiceNumbers) : 0) + 1;
     const nextInvoiceNo = `${prefix}${String(nextNum).padStart(3, "0")}`;
-    
-    const draftInvoice = {
+
+        const draftInvoice = {
       invoiceNo: nextInvoiceNo,
       date: new Date().toISOString().split("T")[0],
       dueDate: "",
       status: "Unpaid",
-      gstType: "With GST",
+      gstType: "No GST",
       gstPercent: docSettings.gstPercent ?? 18,
-   companyName: companyInfo.companyName,
-      companyAddress: companyInfo.companyAddress,
-      companyGSTIN: companyInfo.gstin,
-      logo: companyInfo.logo || null,
+      companyName: freshCompanyInfo.companyName,
+      companyAddress: freshCompanyInfo.companyAddress,
+      companyGSTIN: freshCompanyInfo.gstin,
+      logo: freshCompanyInfo.logo || null,
       signature: "/default-signature.png",
       buyerName: customer.name || customer.company || "",
+      buyerCompanyName: customer.company || "",
       buyerAddress: customer.address || "",
       buyerMobile: customer.phone || "",
       buyerGSTIN: "",
       amountPaid: 0,
       notes: docSettings.defaultNotes || "",
       invoiceType: "Final",
-      items: [{ sl: 1, description: "", qty: 1, rate: 0, amount: 0 }],
+           items: [{ sl: 1, description: "", qty: 1, rate: 0, amount: 0 }],
     };
-    setSelected(draftInvoice);
-    setView("form");
+    setDraftInvoice(draftInvoice);
+    navigate("/invoices/new");
   };
 
   // Opens a pre-filled, unsaved invoice draft from an Approved quotation —
-  // Opens a pre-filled, unsaved invoice draft from an Approved quotation —
   // carries over the buyer's details AND the quotation's line items/amount,
   // similar to the "Convert to Invoice" action on the Quotations page.
-const openDraftFromQuotation = (quotation) => {
+  // Also reused by the "Create Invoice" button in the Quotations page's
+  // Invoice Selector (see the chooseQuotation effect above), so a quotation
+  // with zero linked invoices can get its first one started from either page.
+    const openDraftFromQuotation = async (quotation) => {
+    let freshCompanyInfo = companyInfo;
+    try {
+      const res = await fetch(SETTINGS_API);
+      if (res.ok) {
+        const data = await res.json();
+        freshCompanyInfo = { ...companyInfo, ...data };
+        setCompanyInfo(freshCompanyInfo);
+      }
+    } catch (err) {
+      console.error("Failed to refresh company info before creating invoice:", err);
+    }
+
     const prefix = docSettings.invoicePrefix || "INV-";
     // Max-of-existing-numbers, not a .length count — a count silently
     // produces duplicate invoice numbers the moment any Final invoice is
@@ -184,29 +329,40 @@ const openDraftFromQuotation = (quotation) => {
       .map(i => parseInt((i.invoiceNo || "").match(/(\d+)$/)?.[1] || "0", 10));
     const nextNum = (finalInvoiceNumbers.length ? Math.max(...finalInvoiceNumbers) : 0) + 1;
     const nextInvoiceNo = `${prefix}${String(nextNum).padStart(3, "0")}`;
-    const items = quotation.items?.length
-      ? quotation.items.map((it, i) => ({
-          sl: i + 1,
-          description: it.description || "",
-          qty: it.qty || 1,
-          rate: it.rate || 0,
-          amount: it.total ?? (Number(it.qty || 1) * Number(it.rate || 0)),
-        }))
-      : [{ sl: 1, description: quotation.projectTitle || "Service", qty: 1, rate: quotation.amount || 0, amount: quotation.amount || 0 }];
+    const costItems = Array.isArray(quotation.costItems) ? quotation.costItems : [];
+    const items = costItems.length
+      ? costItems.map((it, i) => ({
+        sl: i + 1,
+        description: it.name || "",
+        qty: 1,
+        rate: Number(it.amount) || 0,
+        amount: Number(it.amount) || 0,
+      }))
+      : [{ sl: 1, description: quotation.projectTitle || "Service", qty: 1, rate: 0, amount: 0 }];
+    // Map the quotation's GST style onto the invoice's gstType — the
+    // quotation stores this as gstMode ("with" / "without" / "inclusive"),
+    // so all three states need to carry over, not just with/without.
+const quotationGstType =
+  quotation.gstMode === "inclusive" ? "GST Included" :
+  quotation.gstMode === "without" ? "No GST" :
+  quotation.gstMode === "with" ? "With GST" :
+  quotation.includeGst === true ? "With GST" : "No GST"; // fallback for older quotations without gstMode
 
     const draftInvoice = {
       invoiceNo: nextInvoiceNo,
       date: new Date().toISOString().split("T")[0],
       dueDate: "",
       status: "Unpaid",
-      gstType: "With GST",
-      gstPercent: docSettings.gstPercent ?? 18,
-   companyName: companyInfo.companyName,
-      companyAddress: companyInfo.companyAddress,
-      companyGSTIN: companyInfo.gstin,
-      logo: companyInfo.logo || null,
-      signature: "/default-signature.png",
-      buyerName: quotation.name || quotation.company || "",
+      gstType: quotationGstType,
+      gstPercent: Number(quotation.gstPercent ?? docSettings.gstPercent ?? 18),
+
+      companyName: freshCompanyInfo.companyName,
+      companyAddress: freshCompanyInfo.companyAddress,
+      companyGSTIN: freshCompanyInfo.gstin,
+      logo: freshCompanyInfo.logo || null,
+      signature: "/signature.png",
+           buyerName: quotation.name || quotation.company || "",
+      buyerCompanyName: quotation.company || "",
       buyerAddress: quotation.clientAddress || "",
       buyerMobile: quotation.phone || "",
       buyerGSTIN: "",
@@ -216,32 +372,37 @@ const openDraftFromQuotation = (quotation) => {
       fromQuotationId: quotation.id,
       items,
     };
-    setSelected(draftInvoice);
-    setView("form");
+    setDraftInvoice(draftInvoice);
+    navigate("/invoices/new");
   };
-  // Save to DB
-const handleSave = async (updated) => {
+
+  // Save to DB — logs "Invoice created" for new records, "Invoice details
+  // updated" when editing an existing one.
+  const handleSave = async (updated) => {
     try {
+      const isNew = !invoices.find(i => i.id === updated.id);
+      const withLog = logActivity(updated, isNew ? "Invoice created" : "Invoice details updated");
+
       const res = await fetch(API, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(updated),
+        body: JSON.stringify(withLog),
       });
       if (!res.ok) {
         const errBody = await res.json().catch(() => ({}));
         throw new Error(errBody.message || `Save failed with status ${res.status}`);
       }
-    const saved = await res.json();
+      const saved = await res.json();
       setInvoices(prev => {
         const exists = prev.find(i => i.id === saved.id);
         return exists
           ? prev.map(i => i.id === saved.id ? saved : i)
-          : [...prev, saved];
+          : [saved, ...prev];
       });
-      setSelected(saved);
+      setDraftInvoice(null);
       setToast({ message: "Invoice generated successfully!" });
       setTimeout(() => setToast(null), 2500);
-      setView("document");
+      navigate(`/invoices/${saved.id}`, { replace: true });
     } catch (err) {
       console.error('Save failed:', err);
       alert('Failed to save invoice: ' + err.message);
@@ -258,16 +419,40 @@ const handleSave = async (updated) => {
     }
   };
 
-  // Update just the status (from the dropdown in the table), save to DB
+  // Totals used only for deciding whether a payment fully settles the
+  // invoice, or a status change should reset amountPaid — kept local/simple
+  // here; InvoiceList has its own copy for display purposes.
+  const calcInvoiceTotal = (invoice) => {
+    const subtotal = (invoice.items || []).reduce((a, b) => a + b.amount, 0);
+    const gstPercent = Number(invoice.gstPercent || 18);
+    const tax = invoice.gstType === "With GST" ? Math.round(subtotal * (gstPercent / 100)) : 0;
+    return invoice.gstType === "With GST" ? subtotal + tax : subtotal;
+  };
+
+  // Update just the status (from the dropdown in the table), save to DB.
+  // Also resyncs amountPaid so it never contradicts the manually-chosen
+  // status: "Paid" implies fully paid, "Unpaid"/"Overdue" implies nothing
+  // recorded as paid yet — otherwise a Due amount can be left stuck at ₹0
+  // after switching a previously-Paid invoice back to Unpaid.
   const handleStatusChange = async (invoice, newStatus) => {
-    const updated = { ...invoice, status: newStatus };
+    const total = calcInvoiceTotal(invoice);
+    const newAmountPaid =
+      newStatus === "Paid" ? total :
+        (newStatus === "Unpaid" || newStatus === "Overdue") ? 0 :
+          invoice.amountPaid;
+
+    const withLog = logActivity(
+      { ...invoice, status: newStatus, amountPaid: newAmountPaid },
+      `Status changed to ${newStatus}`
+    );
+
     // Optimistic UI update
-    setInvoices(prev => prev.map(i => i.id === invoice.id ? updated : i));
+    setInvoices(prev => prev.map(i => i.id === invoice.id ? withLog : i));
     try {
       await fetch(API, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(updated),
+        body: JSON.stringify(withLog),
       });
     } catch (err) {
       console.error('Status update failed:', err);
@@ -276,14 +461,75 @@ const handleSave = async (updated) => {
     }
   };
 
-// Converts a Proforma invoice into a new Final invoice: creates a fresh
+  // Called by ReceivePaymentModal's "Save Payment" button. Adds the new
+  // payment to amountPaid, flips status to "Paid" once fully covered, keeps
+  // a payments[] history entry (Payment History tab) and an activityLog
+  // entry (Activity Log tab), and persists to the DB.
+  const handleSavePayment = async (invoice, { amount, method, referenceNo }) => {
+    const total = calcInvoiceTotal(invoice);
+    const newAmountPaid = (invoice.amountPaid || 0) + amount;
+    const newStatus = newAmountPaid >= total ? "Paid" : "Unpaid";
+
+    const payments = [
+      ...(invoice.payments || []),
+      { amount, method, referenceNo, date: new Date().toISOString() },
+    ];
+
+    const withLog = logActivity(
+      { ...invoice, amountPaid: newAmountPaid, status: newStatus, payments },
+      `Payment of ₹${amount.toLocaleString()} received via ${method}${referenceNo ? ` (Ref: ${referenceNo})` : ""}`
+    );
+
+    // Optimistic UI update
+    setInvoices(prev => prev.map(i => (i.id === invoice.id ? withLog : i)));
+
+    try {
+      await fetch(API, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(withLog),
+      });
+      setPaymentInvoice(null);
+      setToast({ message: "Payment recorded successfully!" });
+      setTimeout(() => setToast(null), 2500);
+    } catch (err) {
+      console.error("Save payment failed:", err);
+      // Roll back on failure
+      setInvoices(prev => prev.map(i => (i.id === invoice.id ? invoice : i)));
+      alert("Failed to save payment: " + err.message);
+    }
+  };
+
+  // Generic persist handler used by the Invoice Details tabs (Notes /
+  // Attachments) — the tab component builds the full updated invoice
+  // object and passes an activity message describing the change; this
+  // just appends the log entry, saves to the DB, and updates local state.
+  const handleUpdateInvoice = async (updatedInvoice, activityMessage) => {
+    const previous = invoices.find(i => i.id === updatedInvoice.id) || updatedInvoice;
+    const withLog = activityMessage ? logActivity(updatedInvoice, activityMessage) : updatedInvoice;
+
+    setInvoices(prev => prev.map(i => (i.id === withLog.id ? withLog : i)));
+    try {
+      await fetch(API, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(withLog),
+      });
+    } catch (err) {
+      console.error("Update invoice failed:", err);
+      setInvoices(prev => prev.map(i => (i.id === previous.id ? previous : i)));
+      alert("Failed to save: " + err.message);
+    }
+  };
+
+  // Converts a Proforma invoice into a new Final invoice: creates a fresh
   // INV-00x record copying the buyer/items/totals, marks the original
   // proforma as "Converted" (kept for records, no longer editable back to
-  // Draft/Sent), and opens the new Final invoice for review.
+  // Draft/Sent), and opens the new Final invoice for review. Both records
+  // get their own activity log entry.
   const handleConvertToFinal = async (proforma) => {
-    if (!window.confirm(`Convert ${proforma.invoiceNo} into a Final Invoice?`)) return;
-
     // Derive the next number from the HIGHEST existing Final invoiceNo,
+
     // not a count of how many exist — a count drifts out of sync the
     // moment any Final invoice is deleted or numbering has ever skipped,
     // producing duplicates or gaps like INV-002 appearing as "the first".
@@ -293,15 +539,19 @@ const handleSave = async (updated) => {
     const nextNum = (finalInvoiceNumbers.length ? Math.max(...finalInvoiceNumbers) : 0) + 1;
 
     const prefix = docSettings.invoicePrefix || "INV-";
-    const newFinalInvoice = {
-      ...proforma,
-      id: `INV-${Date.now()}`,
-      invoiceNo: `${prefix}${String(nextNum).padStart(3, "0")}`,
-      invoiceType: "Final",
-      status: "Unpaid",
-      convertedFromId: proforma.id,
-      
-    };
+    const newFinalInvoiceNo = `${prefix}${String(nextNum).padStart(3, "0")}`;
+    const newFinalInvoice = logActivity(
+      {
+        ...proforma,
+        id: `INV-${Date.now()}`,
+        invoiceNo: newFinalInvoiceNo,
+        invoiceType: "Final",
+        status: "Unpaid",
+        convertedFromId: proforma.id,
+        payments: [],
+      },
+      `Converted from Proforma ${proforma.invoiceNo}`
+    );
 
     try {
       const res = await fetch(API, {
@@ -311,7 +561,10 @@ const handleSave = async (updated) => {
       });
       const saved = res.ok ? await res.json() : newFinalInvoice;
 
-      const updatedProforma = { ...proforma, status: "Converted", convertedInvoiceId: saved.id };
+      const updatedProforma = logActivity(
+        { ...proforma, status: "Converted", convertedInvoiceId: saved.id },
+        `Converted to Final Invoice ${newFinalInvoiceNo}`
+      );
       await fetch(API, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -320,19 +573,22 @@ const handleSave = async (updated) => {
 
       setInvoices(prev => {
         const withUpdatedProforma = prev.map(i => i.id === proforma.id ? updatedProforma : i);
-        return [...withUpdatedProforma, saved];
+        return [saved, ...withUpdatedProforma];
       });
-      setSelected(saved);
-      setView("document");
-    } catch (err) {
+      navigate(`/invoices/${saved.id}`, { replace: true });
+       } catch (err) {
       console.error('Convert to final invoice failed:', err);
       alert('Failed to convert invoice: ' + err.message);
     }
   };
 
-  const handleBack = () => { setSelected(null); setView("list"); };
+  // Holds the proforma pending conversion confirmation, or null when the
+  // modal is closed
+  const [convertTarget, setConvertTarget] = useState(null);
 
-const toastEl = toast && (
+  const handleBack = () => { setDraftInvoice(null); navigate("/invoices"); };
+
+  const toastEl = toast && (
     <div
       style={{
         position: "fixed",
@@ -356,11 +612,33 @@ const toastEl = toast && (
     </div>
   );
 
-  if (view === "form") {
+   if (isNewRoute) {
     return (
       <>
         {toastEl}
         <InvoiceForm
+          key={draftInvoice?.id || "new"}
+          invoice={draftInvoice}
+          invoices={invoices}
+          onSave={handleSave}
+          onBack={handleBack}
+          companyInfo={companyInfo}
+          onCompanyChange={handleCompanyChange}
+          docSettings={docSettings}
+          invoiceType={draftInvoice?.invoiceType || newInvoiceType}
+        />
+      </>
+    );
+  }
+
+   if (isEditRoute) {
+    if (!invoicesLoaded) return <>{toastEl}</>; // brief loading pause while invoices fetch
+    if (!selected) return null; // redirect effect above will kick in
+    return (
+      <>
+        {toastEl}
+        <InvoiceForm
+          key={selected?.id || "new"}
           invoice={selected}
           invoices={invoices}
           onSave={handleSave}
@@ -374,20 +652,35 @@ const toastEl = toast && (
     );
   }
 
-  if (view === "document") {
+  if (isDocRoute) {
+    if (!invoicesLoaded) return <>{toastEl}</>;
+    if (!selected) return null;
     return (
       <>
         {toastEl}
-        <InvoiceDocument
+               <InvoiceDocument
           invoice={selected}
           onBack={handleBack}
           onEdit={() => handleEdit(selected)}
           companyInfo={companyInfo}
+          onUpdateInvoice={handleUpdateInvoice}
+          onConvertToFinal={setConvertTarget}
+        />
+        <ConvertToFinalModal
+          invoiceNo={convertTarget?.invoiceNo}
+          onCancel={() => setConvertTarget(null)}
+          onConfirm={() => {
+            const proforma = convertTarget;
+            setConvertTarget(null);
+            handleConvertToFinal(proforma);
+          }}
         />
       </>
     );
   }
-return (
+
+
+  return (
     <>
       {toastEl}
       <InvoiceList
@@ -402,7 +695,22 @@ return (
         onChooseCustomer={openDraftFromCustomer}
         approvedQuotations={approvedQuotations}
         onChooseQuotation={openDraftFromQuotation}
-        onConvertToFinal={handleConvertToFinal}
+        onConvertToFinal={setConvertTarget}
+        onReceivePayment={setPaymentInvoice}
+      />
+      <ReceivePaymentModal
+        invoice={paymentInvoice}
+        onClose={() => setPaymentInvoice(null)}
+        onSave={handleSavePayment}
+      />
+      <ConvertToFinalModal
+        invoiceNo={convertTarget?.invoiceNo}
+        onCancel={() => setConvertTarget(null)}
+        onConfirm={() => {
+          const proforma = convertTarget;
+          setConvertTarget(null);
+          handleConvertToFinal(proforma);
+        }}
       />
     </>
   );
