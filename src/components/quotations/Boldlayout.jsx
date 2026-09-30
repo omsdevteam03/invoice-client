@@ -107,11 +107,18 @@ const styles = `
 
 .qd-bold .footer-bar{ margin:0 48px 16px; padding-top:12px; border-top:1px solid var(--line); display:flex; justify-content:flex-end; flex-wrap:wrap; gap:16px; font-size:11px; color:var(--muted); }
 @media print {
-  @page{ size: A4; margin: 10mm; }
+  @page{ size: A4; margin: 0; }
   .qd-bold{ background:#fff; padding:0; }
+  .qd-bold .sheet{ max-width:100%; margin:0; }
   .qd-bold .page-frame > tbody{ display:table-row-group; }
+  .qd-bold .page-frame > thead > tr > td,
+  .qd-bold .page-frame > tfoot > tr > td{ height:12mm; padding:0; border:none; }
+  .qd-bold .page-frame > thead{ display:table-header-group; }
+  .qd-bold .page-frame > tfoot{ display:table-footer-group; }
   .qd-bold table thead{ display:table-header-group; }
   .qd-bold table tr{ break-inside:avoid; page-break-inside:avoid; }
+  .qd-bold .page-frame > tbody > tr{ break-inside:auto; page-break-inside:auto; }
+  .qd-bold .sign-footer-group{ break-inside:avoid; page-break-inside:avoid; }
 }
 
 .qd-bold .edit-inline{ font-family:inherit; }
@@ -174,15 +181,17 @@ export default function BoldLayout({
     <div className="qd-bold">
       <style>{styles}</style>
       <div className="sheet">
-        <table className="page-frame">
+              <table className="page-frame">
+          <thead><tr><td /></tr></thead>
           <tbody>
             <tr>
               <td>
                 <div className="masthead">
                   <LogoEdit
                     editMode={editMode} logo={quotation.logo} onUpload={onLogoUpload} onRemove={onRemoveLogo}
-                    inputId="bold-logo" boxStyle={{ height: 56, width: 56 }}
-                    fallback={null}
+                   inputId="bold-logo" boxStyle={{ height: 56, width: 56 }}
+shape={quotation.logoShape} onShapeChange={(s) => onChange("logoShape", s)}
+fallback={null}
                   />
                   <div>
                     <div className="company-name">
@@ -203,9 +212,11 @@ export default function BoldLayout({
 
                 <div className="info-table">
                   <div className="info-row">
-                    <div className="info-cell">
+                                        <div className="info-cell">
                       <strong>Quotation</strong>
-                      <EditText editMode={editMode} value={quotation.id} onChange={(val) => onChange("id", val)} placeholder="Quotation No." />
+                      {quotation.quotationNumber
+                        ? quotation.quotationNumber
+                        : <span style={{ opacity: 0.6, fontStyle: "italic" }}>Draft — number assigned on send</span>}
                     </div>
                     <div className="info-cell">
                       <strong>Date</strong>
@@ -502,6 +513,7 @@ gstMode={quotation.gstMode || (quotation.includeGst === true ? "with" : "without
                           </div>
                         )}
 
+                        <div className="sign-footer-group">
                         <div className="sign">
                           <div>
                             <div className="sig-box"></div>
@@ -531,12 +543,14 @@ gstMode={quotation.gstMode || (quotation.includeGst === true ? "with" : "without
                               <span>
                                 Phone: {v.issuerPhone.trim().startsWith("+") ? v.issuerPhone : `+91 ${v.issuerPhone}`}
                               </span>
-                            )
+                                                       )
                           )}
+                        </div>
                         </div>
                       </td>
                   </tr>
           </tbody>
+          <tfoot><tr><td /></tr></tfoot>
             </table>
           </div>
       </div>

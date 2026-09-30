@@ -262,12 +262,15 @@ export default function InvoiceList({
   onStatusChange,
   onChooseCustomer,
   approvedQuotations = [],
+  allQuotations = [],
   onChooseQuotation,
   onConvertToFinal,
   onReceivePayment,
 }) {
   const navigate = useNavigate();
-
+  // Internal id (qt_xxx) stays as the link between records; the UI shows the official number.
+  const quoteLabel = (id) =>
+    allQuotations.find(qt => qt.id === id)?.quotationNumber || id;
   const [deleteTarget, setDeleteTarget] = useState(null); // single invoice pending delete confirmation
   const [bulkDeleteIds, setBulkDeleteIds] = useState(null); // array of ids pending bulk delete confirmation
 
@@ -320,6 +323,7 @@ export default function InvoiceList({
     return (
       (qt.name || "").toLowerCase().includes(q) ||
       (qt.company || "").toLowerCase().includes(q) ||
+      (qt.quotationNumber || "").toLowerCase().includes(q) ||
       (qt.id || "").toLowerCase().includes(q)
     );
   });
@@ -373,10 +377,15 @@ export default function InvoiceList({
   // quotation's invoices and a small banner is shown above it. This is on
   // top of — not instead of — the normal buyer/invoice/status search below.
   const matchingInvoicesForQuote = q
-    ? invoices.filter(inv => (inv.fromQuotationId || "").toLowerCase() === q)
+    ? invoices.filter(inv =>
+        inv.fromQuotationId &&
+        (inv.fromQuotationId.toLowerCase() === q ||
+         quoteLabel(inv.fromQuotationId).toLowerCase() === q))
     : [];
   const matchingApprovedQuotation = q
-    ? approvedQuotations.find(qt => (qt.id || "").toLowerCase() === q)
+    ? approvedQuotations.find(qt =>
+        (qt.id || "").toLowerCase() === q ||
+        (qt.quotationNumber || "").toLowerCase() === q)
     : null;
   const isQuotationSearch = Boolean(q) && (matchingInvoicesForQuote.length > 0 || matchingApprovedQuotation);
   const quotationSearchId = isQuotationSearch
@@ -395,7 +404,8 @@ export default function InvoiceList({
           (inv.buyerName || "").toLowerCase().includes(q) ||
           (inv.invoiceNo || "").toLowerCase().includes(q) ||
           (inv.status || "").toLowerCase().includes(q) ||
-          (inv.fromQuotationId || "").toLowerCase().includes(q)
+          (inv.fromQuotationId || "").toLowerCase().includes(q) ||
+          quoteLabel(inv.fromQuotationId || "").toLowerCase().includes(q)
         );
       });
 
@@ -406,7 +416,7 @@ export default function InvoiceList({
   // Clicking a quotation reference chip (or the "Create Invoice" flow)
   // jumps straight into quotation-result mode for that quote number.
   const handleQuoteRefClick = (quotationId) => {
-    setSearch(quotationId);
+    setSearch(quoteLabel(quotationId));
   };
 
   const clearQuotationSearch = () => setSearch("");
@@ -572,7 +582,7 @@ export default function InvoiceList({
             </div>
             <div>
               <div style={{ fontWeight: 800, fontSize: "0.9rem", color: "#0f172a" }}>
-                Related to Quotation {quotationSearchId}
+                Related to Quotation {quoteLabel(quotationSearchId)}
               </div>
               <div style={{ fontSize: "0.78rem", color: "#7c3aed", fontWeight: 600 }}>
                 {filtered.length} {filtered.length === 1 ? "invoice" : "invoices"} found
@@ -724,10 +734,10 @@ export default function InvoiceList({
                       {inv.fromQuotationId && (
                         <span
                           className="inv-quote-ref"
-                          title={`Show all invoices from ${inv.fromQuotationId}`}
+                          title={`Show all invoices from ${quoteLabel(inv.fromQuotationId)}`}
                           onClick={(e) => { e.stopPropagation(); handleQuoteRefClick(inv.fromQuotationId); }}
                         >
-                          From {inv.fromQuotationId}
+                          From {quoteLabel(inv.fromQuotationId)}
                         </span>
                       )}
                     </td>
@@ -835,7 +845,7 @@ export default function InvoiceList({
                 <tr>
                   <td colSpan={9} className="text-center" style={{ padding: "40px 16px", color: "#94a3b8", fontSize: "0.88rem" }}>
                     {isQuotationSearch
-                      ? `No invoices found for ${quotationSearchId}.`
+                      ? `No invoices found for ${quoteLabel(quotationSearchId)}.`
                       : "No invoices found."}
                   </td>
                 </tr>
@@ -1095,7 +1105,7 @@ export default function InvoiceList({
                         <div style={{ color: "#94a3b8", fontSize: "0.75rem" }}>{qt.company}</div>
                       </div>
                       <div className="text-end">
-                        <div style={{ color: "#7c3aed", fontSize: "0.72rem", fontWeight: 700 }}>{qt.id}</div>
+                        <div style={{ color: "#7c3aed", fontSize: "0.72rem", fontWeight: 700 }}>{qt.quotationNumber || qt.id}</div>
                         <div style={{ color: "#475569", fontSize: "0.78rem" }}>₹{Number(qt.amount || 0).toLocaleString()}</div>
                       </div>
                     </div>

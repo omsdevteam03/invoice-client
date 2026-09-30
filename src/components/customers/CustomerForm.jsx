@@ -1,6 +1,7 @@
 // src/components/customers/CustomerForm.jsx
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import {
+  FaChevronDown, FaCheck,
   FaArrowLeft, FaSave, FaUser, FaBuilding, FaEnvelope,
   FaPhone, FaMapMarkerAlt, FaStickyNote, FaTags,
   FaEye, FaCheckCircle, FaPlus, FaTimes,
@@ -56,12 +57,280 @@ export function timeAgo(ts) {
 let uid = 0;
 const nextId = () => `row-${Date.now()}-${++uid}`;
 
+// Capital after start, space, new line, dot or comma
+// "arjun.mehta,chennai" -> "Arjun.Mehta,Chennai"
+const titleCase = (s) => s.replace(/(?<=^|[\s.,])\S/g, (ch) => ch.toUpperCase());
+
+// Address: same rule as titleCase
+const addressCase = (s) => s.replace(/(?<=^|[\s.,])\S/g, (ch) => ch.toUpperCase());
+
+// Notes: capital at the start and after . , ! ? and new lines
+// "call him.he is busy" -> "Call him.He is busy"
+const noteCase = (s) => s.replace(/(?<=^\s*|[.,!?\n]\s*)\S/g, (ch) => ch.toUpperCase());
+
+const TITLE_FIELDS = ["fullName", "company"];
+
+const EMAIL_DOMAINS = ["gmail.com", "yahoo.com", "outlook.com", "hotmail.com", "rediffmail.com", "icloud.com"];
+
+// "arjun@" or "arjun@g" -> ["arjun@gmail.com", ...]
+const emailSuggestions = (value) => {
+  if (!value.includes("@")) return [];
+  const [local, partial = ""] = value.split("@");
+  if (!local) return [];
+  return EMAIL_DOMAINS.filter(d => d.startsWith(partial.toLowerCase())).map(d => `${local}@${d}`);
+};
+
+// ── Country codes for phone / WhatsApp numbers ──────────────────────────────
+export const DEFAULT_CODE = "+91";
+
+// iso = 2-letter code (Windows can't render flag emoji, so we show text)
+export const COUNTRIES = [
+  { iso: "IN", name: "India", code: "+91" },
+  { iso: "US", name: "United States", code: "+1" },
+  { iso: "CA", name: "Canada", code: "+1" },
+  { iso: "GB", name: "United Kingdom", code: "+44" },
+  { iso: "AE", name: "United Arab Emirates", code: "+971", alias: "uae dubai abu dhabi sharjah ajman" },
+  { iso: "SA", name: "Saudi Arabia", code: "+966" },
+  { iso: "QA", name: "Qatar", code: "+974" },
+  { iso: "KW", name: "Kuwait", code: "+965" },
+  { iso: "OM", name: "Oman", code: "+968" },
+  { iso: "BH", name: "Bahrain", code: "+973" },
+  { iso: "SG", name: "Singapore", code: "+65" },
+  { iso: "MY", name: "Malaysia", code: "+60" },
+  { iso: "LK", name: "Sri Lanka", code: "+94" },
+  { iso: "NP", name: "Nepal", code: "+977" },
+  { iso: "BD", name: "Bangladesh", code: "+880" },
+  { iso: "PK", name: "Pakistan", code: "+92" },
+  { iso: "AF", name: "Afghanistan", code: "+93" },
+  { iso: "MV", name: "Maldives", code: "+960" },
+  { iso: "AU", name: "Australia", code: "+61" },
+  { iso: "NZ", name: "New Zealand", code: "+64" },
+  { iso: "DE", name: "Germany", code: "+49" },
+  { iso: "FR", name: "France", code: "+33" },
+  { iso: "IT", name: "Italy", code: "+39" },
+  { iso: "ES", name: "Spain", code: "+34" },
+  { iso: "NL", name: "Netherlands", code: "+31" },
+  { iso: "CH", name: "Switzerland", code: "+41" },
+  { iso: "SE", name: "Sweden", code: "+46" },
+  { iso: "IE", name: "Ireland", code: "+353" },
+  { iso: "RU", name: "Russia", code: "+7" },
+  { iso: "TR", name: "Turkey", code: "+90" },
+  { iso: "CN", name: "China", code: "+86" },
+  { iso: "JP", name: "Japan", code: "+81" },
+  { iso: "KR", name: "South Korea", code: "+82" },
+  { iso: "HK", name: "Hong Kong", code: "+852" },
+  { iso: "TH", name: "Thailand", code: "+66" },
+  { iso: "ID", name: "Indonesia", code: "+62" },
+  { iso: "PH", name: "Philippines", code: "+63" },
+  { iso: "VN", name: "Vietnam", code: "+84" },
+  { iso: "ZA", name: "South Africa", code: "+27" },
+  { iso: "NG", name: "Nigeria", code: "+234" },
+  { iso: "KE", name: "Kenya", code: "+254" },
+  { iso: "EG", name: "Egypt", code: "+20" },
+  { iso: "BR", name: "Brazil", code: "+55" },
+  { iso: "MX", name: "Mexico", code: "+52" },
+];
+
+// Display form: "+91 9940895128". Numbers already stored with a "+" are left alone.
+export function formatPhone(code, value) {
+  const v = String(value || "").trim();
+  if (!v) return "";
+  if (v.startsWith("+")) return v;
+  return `${code || DEFAULT_CODE} ${v}`;
+}
+
+// Digits only, with country code, for tel: and wa.me links → "919940895128"
+export function dialDigits(code, value) {
+  const v = String(value || "").trim();
+  if (v.startsWith("+")) return v.replace(/\D/g, "");
+  return `${String(code || DEFAULT_CODE).replace(/\D/g, "")}${v.replace(/\D/g, "")}`;
+}
+// Splits a stored "+971 501234567" back into { code, value } for the form
+export function splitPhone(stored, fallbackCode) {
+  const s = String(stored || "").trim();
+  const m = /^(\+\d{1,4})\s+(.+)$/.exec(s);
+  if (m) return { code: m[1], value: m[2] };
+  return { code: fallbackCode || DEFAULT_CODE, value: s };
+}
+
+// Searchable dropdown for choosing a country code
+function CountryCodeSelect({ value, onChange, width = 104 }) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const [customMode, setCustomMode] = useState(false);
+  const [customValue, setCustomValue] = useState("");
+  const wrapRef = useRef(null);
+  const current = value || DEFAULT_CODE;
+
+  const applyCustom = () => {
+    const d = customValue.replace(/\D/g, "");
+    if (!d || d.length > 4) return;
+    onChange(`+${d}`);
+    setOpen(false);
+    setQuery("");
+    setCustomMode(false);
+    setCustomValue("");
+  };
+
+  useEffect(() => {
+    const close = (e) => {
+      if (wrapRef.current && !wrapRef.current.contains(e.target)) {
+        setOpen(false);
+        setQuery("");
+        setCustomMode(false);
+        setCustomValue("");
+      }
+    };
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, []);
+
+  const q = query.trim().toLowerCase();
+  const list = COUNTRIES.filter(
+    (c) => !q || c.name.toLowerCase().includes(q) || c.code.includes(q) || c.iso.toLowerCase().includes(q) || (c.alias || "").includes(q)
+  );
+
+  // Typed digits (e.g. "855" or "+855") that aren't in the list → offer as a custom code
+  const digits = query.replace(/\D/g, "");
+  const customCode = digits && digits.length <= 4 && /^[+\d\s]+$/.test(query.trim()) ? `+${digits}` : "";
+  const showCustom = Boolean(customCode) && !COUNTRIES.some((c) => c.code === customCode);
+  const match = COUNTRIES.find((c) => c.code === current);
+
+  return (
+    <div ref={wrapRef} style={{ position: "relative", width, flexShrink: 0 }}>
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        style={{
+          width: "100%", boxSizing: "border-box", padding: "8px 10px",
+          border: "1.5px solid #e2e8f0", borderRadius: 8, backgroundColor: "#fff",
+          display: "flex", alignItems: "center", justifyContent: "space-between", gap: 6,
+          fontSize: "0.85rem", fontWeight: 600, color: "#0f172a", cursor: "pointer",
+        }}
+      >
+        <span>
+          {match && <span style={{ color: "#94a3b8", fontSize: "0.68rem", marginRight: 5 }}>{match.iso}</span>}
+          {current}
+        </span>
+        <FaChevronDown size={9} color="#64748b" style={{ transform: open ? "rotate(180deg)" : "none", transition: "transform 0.15s" }} />
+      </button>
+
+      {open && (
+        <div style={{
+          position: "absolute", top: "calc(100% + 6px)", left: 0, zIndex: 60, width: 270,
+          background: "#fff", border: `1px solid ${BRAND_SOFT_BORDER}`, borderRadius: 12,
+          boxShadow: "0 10px 28px rgba(15,23,42,0.16)", padding: 6,
+        }}>
+          <div style={{
+            display: "flex", alignItems: "center", gap: 8, padding: "7px 10px", marginBottom: 6,
+            backgroundColor: "#f8fafc", border: "1.5px solid #e2e8f0", borderRadius: 8,
+          }}>
+            <FaSearch size={11} color="#94a3b8" />
+            <input
+              autoFocus
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search country, city or type a code"
+              style={{ border: "none", outline: "none", background: "transparent", fontSize: "0.82rem", width: "100%" }}
+            />
+          </div>
+          {customMode ? (
+            <div style={{ display: "flex", gap: 6, marginBottom: 6 }}>
+              <input
+                autoFocus
+                value={customValue}
+                onChange={(e) => setCustomValue(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); applyCustom(); } }}
+                placeholder="e.g. +855"
+                style={{
+                  flex: 1, minWidth: 0, padding: "7px 10px", fontSize: "0.82rem", outline: "none",
+                  border: `1.5px solid ${BRAND}`, borderRadius: 8,
+                }}
+              />
+              <button
+                type="button"
+                onClick={applyCustom}
+                style={{
+                  border: "none", borderRadius: 8, padding: "0 14px", cursor: "pointer",
+                  background: BRAND, color: "#fff", fontSize: "0.8rem", fontWeight: 700,
+                }}
+              >
+                Add
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setCustomMode(true)}
+              style={{
+                display: "flex", alignItems: "center", gap: 8, width: "100%", marginBottom: 6,
+                padding: "8px 10px", border: `1.5px dashed ${BRAND}`, borderRadius: 8,
+                background: BRAND_SOFT, color: BRAND_DARK, cursor: "pointer",
+                fontSize: "0.83rem", fontWeight: 700, textAlign: "left",
+              }}
+            >
+              <span style={{ fontSize: "1rem", lineHeight: 1 }}>+</span> Add custom code
+            </button>
+          )}
+
+          <div style={{ maxHeight: 230, overflowY: "auto", display: "flex", flexDirection: "column", gap: 2 }}>
+            {showCustom && (
+              <button
+                type="button"
+                onClick={() => { onChange(customCode); setOpen(false); setQuery(""); }}
+                style={{
+                  display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10,
+                  width: "100%", padding: "8px 10px", border: `1.5px dashed ${BRAND}`, borderRadius: 8,
+                  background: BRAND_SOFT, cursor: "pointer", color: BRAND_DARK,
+                  fontSize: "0.83rem", fontWeight: 700, textAlign: "left", marginBottom: 2,
+                }}
+              >
+                <span>Use custom code</span>
+                <span>{customCode}</span>
+              </button>
+            )}
+            {list.length === 0 && !showCustom && (
+              <div style={{ padding: "10px 12px", fontSize: "0.8rem", color: "#94a3b8" }}>
+                No country found. Type a code like +855 to add it.
+              </div>
+            )}
+            {list.map((c) => {
+              const active = c.code === current && c.iso === (match?.iso ?? c.iso);
+              return (
+                <button
+                  key={c.iso}
+                  type="button"
+                  onClick={() => { onChange(c.code); setOpen(false); setQuery(""); }}
+                  style={{
+                    display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10,
+                    width: "100%", padding: "8px 10px", border: "none", borderRadius: 8,
+                    background: active ? BRAND_SOFT : "transparent", cursor: "pointer",
+                    color: active ? BRAND_DARK : "#0f172a", fontSize: "0.83rem", fontWeight: 600, textAlign: "left",
+                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.background = BRAND_SOFT; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.background = active ? BRAND_SOFT : "transparent"; }}
+                >
+                  <span>{c.name}</span>
+                  <span style={{ display: "flex", alignItems: "center", gap: 6, color: "#64748b" }}>
+                    {c.code}
+                    {active && <FaCheck size={10} color={BRAND} />}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 const EMPTY_FORM = {
   fullName: "",
   company: "",
   emails: [{ id: nextId(), type: "Personal", value: "" }],
-  phones: [{ id: nextId(), type: "Mobile", value: "" }],
-  whatsapps: [{ id: nextId(), type: "Mobile", value: "" }],
+  phones: [{ id: nextId(), type: "Mobile", code: DEFAULT_CODE, value: "" }],
+  whatsapps: [{ id: nextId(), type: "Mobile", code: DEFAULT_CODE, value: "" }],
   supportNumber: "",
   addresses: [{ id: nextId(), type: "Home", value: "" }],
   city: "",
@@ -74,6 +343,16 @@ const EMPTY_FORM = {
   notes: [{ id: nextId(), text: "" }],
 };
 
+// Rebuilds phone/WhatsApp rows and restores the country code
+const toPhoneRows = (list, single) => {
+  const src = list?.length ? list : (single ? [{ type: "Mobile", value: single }] : []);
+  const rows = src.map(x => {
+    const { code, value } = splitPhone(x.value, x.code);
+    return { id: nextId(), type: x.type ?? "Mobile", code, value };
+  });
+  return rows.length ? rows : [{ id: nextId(), type: "Mobile", code: DEFAULT_CODE, value: "" }];
+};
+
 function buildFormFromCustomer(c) {
   if (!c) return EMPTY_FORM;
   return {
@@ -82,13 +361,9 @@ function buildFormFromCustomer(c) {
     emails: c.emails?.length
       ? c.emails.map(e => ({ id: nextId(), type: e.type ?? "Personal", value: e.value ?? "" }))
       : [{ id: nextId(), type: "Personal", value: c.email ?? "" }],
-    phones: c.phones?.length
-      ? c.phones.map(p => ({ id: nextId(), type: p.type ?? "Mobile", value: p.value ?? "" }))
-      : [{ id: nextId(), type: "Mobile", value: c.phone ?? "" }],
+    phones: toPhoneRows(c.phones, c.phone),
     supportNumber: c.supportNumber ?? "",
-    whatsapps: c.whatsapps?.length
-      ? c.whatsapps.map(w => ({ id: nextId(), type: w.type ?? "Mobile", value: w.value ?? "" }))
-      : [{ id: nextId(), type: "Mobile", value: "" }],
+    whatsapps: toPhoneRows(c.whatsapps, c.whatsapp),
     addresses: c.addresses?.length
       ? c.addresses.map(a => ({ id: nextId(), type: a.type ?? "Home", value: a.value ?? "" }))
       : [{ id: nextId(), type: "Home", value: c.address ?? "" }],
@@ -178,6 +453,7 @@ function DraftBanner({ draft, onRestore, onDiscard }) {
 function CustomerPreview({ form, customerId }) {
   const filledEmails = form.emails.filter(e => e.value.trim());
   const filledPhones = form.phones.filter(p => p.value.trim());
+  const filledWhatsapps = form.whatsapps.filter(w => w.value.trim());
   const filledAddresses = form.addresses.filter(a => a.value.trim());
   const filledNotes = form.notes.filter(n => n.text.trim());
 
@@ -188,15 +464,18 @@ function CustomerPreview({ form, customerId }) {
       ? filledEmails.map(e => ({ label: `Email (${e.type})`, value: e.value }))
       : [{ label: "Email", value: "" }]),
     ...(filledPhones.length
-      ? filledPhones.map(p => ({ label: `Phone (${p.type})`, value: p.value }))
+      ? filledPhones.map(p => ({ label: `Phone (${p.type})`, value: formatPhone(p.code, p.value) }))
       : [{ label: "Phone", value: "" }]),
+    ...(filledWhatsapps.length
+      ? filledWhatsapps.map(w => ({ label: "WhatsApp", value: formatPhone(w.code, w.value) }))
+      : [{ label: "WhatsApp", value: "" }]),
     ...(form.supportNumber ? [{ label: "Support Number", value: form.supportNumber }] : []),
     ...(filledAddresses.length
       ? filledAddresses.map(a => ({ label: `Address (${a.type})`, value: a.value }))
       : [{ label: "Address", value: "" }]),
     { label: "City", value: form.city },
     { label: "State", value: form.state },
-      { label: "Country", value: form.country },
+    { label: "Country", value: form.country },
     { label: "Status", value: form.status },
   ];
 
@@ -254,7 +533,7 @@ function CustomerPreview({ form, customerId }) {
             <div style={{ ...styles.docBlockLabel, color: "#92400e" }}>NOTES ({filledNotes.length})</div>
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
               {filledNotes.map(n => (
-                <div key={n.id} style={{ fontSize: "0.78rem", color: "#78350f", lineHeight: 1.5 }}>• {n.text}</div>
+                <div key={n.id} style={{ fontSize: "0.78rem", color: "#78350f", lineHeight: 1.5, whiteSpace: "pre-line" }}>• {n.text}</div>
               ))}
             </div>
           </div>
@@ -270,7 +549,8 @@ function CustomerPreview({ form, customerId }) {
 // `prefillProfile`: an optional saved Customer Profile (see
 // CustomerProfilesSection) used to seed a brand-new customer's form when the
 // user clicks "Use Profile". Ignored when `customer` (edit mode) is set.
-export default function CustomerForm({ customer, allCustomers = [], onSave, onBack, draftId }) {  const isEdit = Boolean(customer);
+export default function CustomerForm({ customer, allCustomers = [], onSave, onBack, draftId }) {
+  const isEdit = Boolean(customer);
   const [instanceDraftId] = useState(() => draftId || `${Date.now()}_${Math.random().toString(36).slice(2, 7)}`);
   const draftKey = draftKeyFor(customer, instanceDraftId);
 
@@ -332,7 +612,8 @@ export default function CustomerForm({ customer, allCustomers = [], onSave, onBa
 
   const handleChange = useCallback((e) => {
     const { name, value } = e.target;
-    setForm((prev) => ({ ...prev, [name]: value }));
+    const next = TITLE_FIELDS.includes(name) ? titleCase(value) : value;
+    setForm((prev) => ({ ...prev, [name]: next }));
     setErrors((prev) => ({ ...prev, [name]: undefined }));
   }, []);
 
@@ -341,13 +622,13 @@ export default function CustomerForm({ customer, allCustomers = [], onSave, onBa
   const updateEmail = (id, field, value) =>
     setForm(f => ({ ...f, emails: f.emails.map(e => e.id === id ? { ...e, [field]: value } : e) }));
 
-  const addPhone = () => setForm(f => ({ ...f, phones: [...f.phones, { id: nextId(), type: "Mobile", value: "" }] }));
+  const addPhone = () => setForm(f => ({ ...f, phones: [...f.phones, { id: nextId(), type: "Mobile", code: DEFAULT_CODE, value: "" }] }));
   const removePhone = (id) => setForm(f => ({ ...f, phones: f.phones.filter(p => p.id !== id) }));
 
   const updatePhone = (id, field, value) =>
     setForm(f => ({ ...f, phones: f.phones.map(p => p.id === id ? { ...p, [field]: value } : p) }));
 
-  const addWhatsapp = () => setForm(f => ({ ...f, whatsapps: [...f.whatsapps, { id: nextId(), type: "Mobile", value: "" }] }));
+  const addWhatsapp = () => setForm(f => ({ ...f, whatsapps: [...f.whatsapps, { id: nextId(), type: "Mobile", code: DEFAULT_CODE, value: "" }] }));
   const removeWhatsapp = (id) => setForm(f => ({ ...f, whatsapps: f.whatsapps.filter(w => w.id !== id) }));
   const updateWhatsapp = (id, field, value) =>
     setForm(f => ({ ...f, whatsapps: f.whatsapps.map(w => w.id === id ? { ...w, [field]: value } : w) }));
@@ -363,7 +644,7 @@ export default function CustomerForm({ customer, allCustomers = [], onSave, onBa
     setForm(f => ({ ...f, notes: f.notes.map(n => n.id === id ? { ...n, text } : n) }));
 
   const addTag = (raw) => {
-    const tag = raw.trim();
+    const tag = titleCase(raw.trim());
     if (tag && !form.tags.includes(tag)) {
       setForm(f => ({ ...f, tags: [...f.tags, tag] }));
     }
@@ -376,12 +657,15 @@ export default function CustomerForm({ customer, allCustomers = [], onSave, onBa
     if (!form.fullName.trim()) e.fullName = "Full name is required";
     const badEmail = form.emails.find(em => em.value.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(em.value.trim()));
     if (badEmail) e.emails = "Enter a valid email address";
+    const validNum = (v) => /^\d{6,15}$/.test(v.replace(/[\s-]/g, ""));
     const hasPhone = form.phones.some(p => p.value.trim());
     if (!hasPhone) e.phones = "At least one phone number is required";
     else {
-      const badPhone = form.phones.find(p => p.value.trim() && !/^\d{10}$/.test(p.value.replace(/\s/g, "")));
-      if (badPhone) e.phones = "Enter valid 10-digit numbers";
+      const badPhone = form.phones.find(p => p.value.trim() && !validNum(p.value));
+      if (badPhone) e.phones = "Enter a valid phone number";
     }
+    const badWa = form.whatsapps.find(w => w.value.trim() && !validNum(w.value));
+    if (badWa) e.whatsapps = "Enter a valid WhatsApp number";
     return e;
   };
 
@@ -390,8 +674,17 @@ export default function CustomerForm({ customer, allCustomers = [], onSave, onBa
     if (Object.keys(e).length) { setErrors(e); return; }
     setSaving(true);
     const filledEmails = form.emails.filter(e => e.value.trim());
-    const filledPhones = form.phones.filter(p => p.value.trim());
-    const filledWhatsapps = form.whatsapps.filter(w => w.value.trim());
+    const toStored = (rows) =>
+      rows
+        .filter(r => r.value.trim())
+        .map(r => ({
+          id: r.id,
+          type: r.type,
+          code: r.code || DEFAULT_CODE,
+          value: formatPhone(r.code, r.value.trim()), // "+855 123456789"
+        }));
+    const filledPhones = toStored(form.phones);
+    const filledWhatsapps = toStored(form.whatsapps);
     const filledAddresses = form.addresses.filter(a => a.value.trim());
     const filledNotes = form.notes.filter(n => n.text.trim());
     const saved = {
@@ -403,7 +696,6 @@ export default function CustomerForm({ customer, allCustomers = [], onSave, onBa
       emails: filledEmails,
       phone: filledPhones[0]?.value ?? "",
       phones: filledPhones,
-      supportNumber: form.supportNumber.trim(),
       whatsapp: filledWhatsapps[0]?.value ?? "",
       whatsapps: filledWhatsapps,
       address: filledAddresses[0]?.value ?? "",
@@ -497,23 +789,40 @@ export default function CustomerForm({ customer, allCustomers = [], onSave, onBa
             <h4 className="fw-bold mb-0" style={{ color: "#0f172a", fontSize: "1.2rem" }}>
               {isEdit ? "Edit Customer" : "New Customer"}
             </h4>
-            <button
-              onClick={() => setShowPreview(s => !s)}
-              className="d-flex align-items-center gap-2 border-0 rounded-3 fw-semibold px-3 py-2"
-              style={{
-                backgroundColor: showPreview ? BRAND_SOFT : "#f1f5f9",
-                color: showPreview ? BRAND_DARK : "#64748b",
-                cursor: "pointer",
-                fontSize: "0.82rem",
-                border: showPreview ? `1px solid ${BRAND_SOFT_BORDER}` : "1px solid transparent",
-              }}
-            >
-              {showPreview ? <FaToggleOn size={18} color={BRAND} /> : <FaToggleOff size={18} />}
-              {showPreview ? "Preview On" : "Preview Off"}
-            </button>
-          </div>
+            <div className="d-flex align-items-center gap-2 flex-wrap">
+              <button
+                onClick={() => setShowPreview(s => !s)}
+                className="d-flex align-items-center gap-2 border-0 rounded-3 fw-semibold px-3 py-2"
+                style={{
+                  backgroundColor: showPreview ? BRAND_SOFT : "#f1f5f9",
+                  color: showPreview ? BRAND_DARK : "#64748b",
+                  cursor: "pointer",
+                  fontSize: "0.82rem",
+                  border: showPreview ? `1px solid ${BRAND_SOFT_BORDER}` : "1px solid transparent",
+                }}
+              >
+                {showPreview ? <FaToggleOn size={18} color={BRAND} /> : <FaToggleOff size={18} />}
+                {showPreview ? "Preview On" : "Preview Off"}
+              </button>
 
-       
+              <button onClick={onBack} className="border-0 rounded-3 fw-semibold px-3 py-2"
+                style={{ backgroundColor: "#f1f5f9", color: "#475569", cursor: "pointer", fontSize: "0.82rem" }}>
+                Cancel
+              </button>
+              <button onClick={handleSave} disabled={saving}
+                className="d-flex align-items-center gap-2 border-0 rounded-3 fw-semibold px-3 py-2"
+                style={{
+                  background: `linear-gradient(135deg, ${BRAND}, ${BRAND_DARK})`, color: "#fff",
+                  cursor: saving ? "not-allowed" : "pointer", fontSize: "0.82rem",
+                  boxShadow: `0 4px 12px ${BRAND}4d`,
+                }}
+              >
+                <FaSave size={12} />
+                {saving ? "Saving…" : isEdit ? "Save Changes" : "Create Customer"}
+              </button>
+            </div>
+            </div>
+
           {/* Draft recovery banner */}
           <DraftBanner draft={pendingDraft} onRestore={handleRestoreDraft} onDiscard={handleDiscardDraft} />
 
@@ -547,9 +856,13 @@ export default function CustomerForm({ customer, allCustomers = [], onSave, onBa
                       style={{ ...styles.select, width: 110, flexShrink: 0 }}>
                       {emailTypes.map(t => <option key={t} value={t}>{t}</option>)}
                     </select>
-                    <input type="email" value={em.value} onChange={e => updateEmail(em.id, "value", e.target.value)}
+                    <input type="email" value={em.value} onChange={e => updateEmail(em.id, "value", e.target.value.toLowerCase())}
+                      list={`email-list-${em.id}`}
                       placeholder="client@example.com"
                       style={{ ...styles.input, ...(errors.emails ? styles.inputError : {}) }} autoComplete="off" />
+                    <datalist id={`email-list-${em.id}`}>
+                      {emailSuggestions(em.value).map(s => <option key={s} value={s} />)}
+                    </datalist>
                     {form.emails.length > 1 && (
                       <button onClick={() => removeEmail(em.id)}
                         className="border-0 bg-transparent d-flex align-items-center justify-content-center"
@@ -568,12 +881,13 @@ export default function CustomerForm({ customer, allCustomers = [], onSave, onBa
               </button>
             </SectionRow>
 
-                     <SectionRow icon={<FaPhone size={12} />} title="Phone Numbers">
+            <SectionRow icon={<FaPhone size={12} />} title="Phone Numbers">
               <div className="d-flex flex-column gap-2">
                 {form.phones.map((p) => (
                   <div key={p.id} className="d-flex align-items-center gap-2">
+                    <CountryCodeSelect value={p.code} onChange={code => updatePhone(p.id, "code", code)} />
                     <input type="tel" value={p.value} onChange={e => updatePhone(p.id, "value", e.target.value)}
-                      placeholder="9876543210" maxLength={10}
+                      placeholder="9876543210" maxLength={15}
                       style={{ ...styles.input, ...(errors.phones ? styles.inputError : {}) }} autoComplete="off" />
                     {form.phones.length > 1 && (
                       <button onClick={() => removePhone(p.id)}
@@ -593,12 +907,13 @@ export default function CustomerForm({ customer, allCustomers = [], onSave, onBa
               </button>
             </SectionRow>
 
-                  <SectionRow icon={<FaWhatsapp size={12} />} title="WhatsApp Numbers">
+            <SectionRow icon={<FaWhatsapp size={12} />} title="WhatsApp Numbers">
               <div className="d-flex flex-column gap-2">
                 {form.whatsapps.map((w) => (
                   <div key={w.id} className="d-flex align-items-center gap-2">
+                    <CountryCodeSelect value={w.code} onChange={code => updateWhatsapp(w.id, "code", code)} />
                     <input type="tel" value={w.value} onChange={e => updateWhatsapp(w.id, "value", e.target.value)}
-                      placeholder="9876543210" maxLength={10}
+                      placeholder="9876543210" maxLength={15}
                       style={styles.input} autoComplete="off" />
                     {form.whatsapps.length > 1 && (
                       <button onClick={() => removeWhatsapp(w.id)}
@@ -610,6 +925,7 @@ export default function CustomerForm({ customer, allCustomers = [], onSave, onBa
                   </div>
                 ))}
               </div>
+              {errors.whatsapps && <div style={styles.errorMsg}>{errors.whatsapps}</div>}
               <button onClick={addWhatsapp}
                 className="d-flex align-items-center gap-2 border-0 fw-semibold mt-2"
                 style={{ background: "none", color: BRAND, cursor: "pointer", fontSize: "0.78rem", padding: 0 }}>
@@ -628,13 +944,14 @@ export default function CustomerForm({ customer, allCustomers = [], onSave, onBa
             <SectionRow icon={<FaMapMarkerAlt size={12} />} title="Addresses">
               <div className="d-flex flex-column gap-2">
                 {form.addresses.map((a) => (
-                  <div key={a.id} className="d-flex align-items-center gap-2">
+                  <div key={a.id} className="d-flex align-items-start gap-2">
                     <select value={a.type} onChange={e => updateAddress(a.id, "type", e.target.value)}
                       style={{ ...styles.select, width: 100, flexShrink: 0 }}>
                       {addressTypes.map(t => <option key={t} value={t}>{t}</option>)}
                     </select>
-                    <input type="text" value={a.value} onChange={e => updateAddress(a.id, "value", e.target.value)}
-                      placeholder="Street, area" style={styles.input} autoComplete="off" />
+                    <textarea value={a.value} onChange={e => updateAddress(a.id, "value", addressCase(e.target.value))}
+                      rows={2} placeholder="Street, area"
+                      style={{ ...styles.input, resize: "vertical", fontFamily: "inherit", lineHeight: 1.5 }} />
                     {form.addresses.length > 1 && (
                       <button onClick={() => removeAddress(a.id)}
                         className="border-0 bg-transparent d-flex align-items-center justify-content-center"
@@ -655,28 +972,28 @@ export default function CustomerForm({ customer, allCustomers = [], onSave, onBa
                 <div className="col-12 col-md-4">
                   <Field label="City">
                     <input type="text" value={form.city}
-                      onChange={e => setForm(f => ({ ...f, city: e.target.value }))}
+                      onChange={e => setForm(f => ({ ...f, city: titleCase(e.target.value) }))}
                       placeholder="e.g. Chennai" style={styles.input} autoComplete="off" />
                   </Field>
                 </div>
                 <div className="col-12 col-md-4">
                   <Field label="State">
                     <input type="text" value={form.state}
-                      onChange={e => setForm(f => ({ ...f, state: e.target.value }))}
+                      onChange={e => setForm(f => ({ ...f, state: titleCase(e.target.value) }))}
                       placeholder="e.g. Tamil Nadu" style={styles.input} autoComplete="off" />
                   </Field>
                 </div>
                 <div className="col-12 col-md-4">
                   <Field label="Country">
                     <input type="text" value={form.country}
-                      onChange={e => setForm(f => ({ ...f, country: e.target.value }))}
+                      onChange={e => setForm(f => ({ ...f, country: titleCase(e.target.value) }))}
                       placeholder="e.g. India" style={styles.input} autoComplete="off" />
                   </Field>
                 </div>
               </div>
             </SectionRow>
 
-                        <SectionRow icon={<FaCircle size={9} />} title="Status">
+            <SectionRow icon={<FaCircle size={9} />} title="Status">
               <select name="status" value={form.status} onChange={handleChange} style={{ ...styles.select, maxWidth: 200 }}>
                 <option value="Active">Active</option>
                 <option value="Inactive">Inactive</option>
@@ -741,7 +1058,7 @@ export default function CustomerForm({ customer, allCustomers = [], onSave, onBa
               <div className="d-flex flex-column gap-2">
                 {form.notes.map((n, i) => (
                   <div key={n.id} style={{ position: "relative" }}>
-                    <textarea value={n.text} onChange={e => updateNote(n.id, e.target.value)} rows={2}
+                    <textarea value={n.text} onChange={e => updateNote(n.id, noteCase(e.target.value))} rows={2}
                       placeholder={`Note ${i + 1} — preferences, follow-ups, special requirements…`}
                       style={{ ...styles.input, resize: "vertical", fontFamily: "inherit", lineHeight: 1.5, backgroundColor: "#fffbeb" }} />
                     {form.notes.length > 1 && (
@@ -763,24 +1080,7 @@ export default function CustomerForm({ customer, allCustomers = [], onSave, onBa
 
           </div>
 
-          {/* Footer */}
-          <div className="d-flex justify-content-end gap-3 mt-3 mb-4 flex-wrap">
-            <button onClick={onBack} className="border-0 rounded-3 fw-semibold px-4 py-2"
-              style={{ backgroundColor: "#f1f5f9", color: "#475569", cursor: "pointer", fontSize: "0.85rem" }}>
-              Cancel
-            </button>
-            <button onClick={handleSave} disabled={saving}
-              className="d-flex align-items-center gap-2 border-0 rounded-3 fw-semibold px-4 py-2"
-              style={{
-                background: `linear-gradient(135deg, ${BRAND}, ${BRAND_DARK})`, color: "#fff",
-                cursor: saving ? "not-allowed" : "pointer", fontSize: "0.85rem",
-                boxShadow: `0 4px 12px ${BRAND}4d`,
-              }}
-            >
-              <FaSave size={12} />
-              {saving ? "Saving…" : isEdit ? "Save Changes" : "Create Customer"}
-            </button>
-          </div>
+          <div className="mb-4" />
         </div>
 
         {/* ══ RIGHT: Preview (togglable) ══ */}
@@ -814,7 +1114,7 @@ const styles = {
     borderTop: "1px solid #f1f5f9",
   },
   docTableLabel: { flex: "0 0 42%", color: "#64748b", fontWeight: 600 },
-  docTableValue: { flex: 1, color: "#0f172a", fontWeight: 500, wordBreak: "break-word" },
+  docTableValue: { flex: 1, color: "#0f172a", fontWeight: 500, wordBreak: "break-word", whiteSpace: "pre-line" },
   docBlock: { marginTop: 14 },
   docBlockLabel: { fontSize: "0.68rem", fontWeight: 700, color: "#94a3b8", marginBottom: 6, letterSpacing: "0.04em" },
   tagChip: {

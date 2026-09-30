@@ -11,19 +11,30 @@ const styles = `
 .qd-modern .sheet{ max-width:800px; margin:0 auto; background:var(--paper); border-radius:16px; overflow:hidden; box-shadow:0 6px 30px rgba(45,59,56,0.10); }
 .qd-modern .page-frame{ width:100%; border-collapse:collapse; }
 .qd-modern .page-frame > thead > tr > td,
-.qd-modern .page-frame > tbody > tr > td{ padding:0; }
+.qd-modern .page-frame > tbody > tr > td,
+.qd-modern .page-frame > tfoot > tr > td{ padding:0; border:none; }
 
 .qd-modern .header{
-  background:var(--teal); color:#fff; padding:14px 24px;
+  position:relative; overflow:hidden;
+  background:#ffffff; color:var(--ink);
+  padding:118px 44px 18px;
   display:flex; justify-content:space-between; align-items:center; gap:16px;
-  border-radius:0 0 18px 0;
+  -webkit-print-color-adjust:exact; print-color-adjust:exact;
 }
-.qd-modern .brand{ display:flex; align-items:center; margin-left:30px; background:var(--teal); padding:8px; border-radius:10px; }
+.qd-modern .header-wave{ position:absolute; top:0; left:0; width:100%; height:130px; pointer-events:none; }
+.qd-modern .wave-main{ fill:var(--accent); }
+.qd-modern .wave-soft{ fill:var(--accent); opacity:.45; }
+.qd-modern .brand{ position:relative; z-index:1; display:flex; align-items:center; background:transparent; padding:0; }
 .qd-modern .brand img{ height:68px; border-radius:6px; display:block; }
 
-.qd-modern .header-info{flex:1; text-align:center; }
-.qd-modern .header-info .company-name{ font-size:22px; font-weight:700; color:#fff; margin:0; }
-.qd-modern .header-info .company-address{ font-size:13px; color:rgba(255,255,255,0.85); margin:4px 0 0; line-height:1.5; }
+.qd-modern .header-info{ position:relative; z-index:1; flex:1; text-align:left; }
+.qd-modern .header-info .company-name{ font-size:22px; font-weight:800; color:var(--ink); margin:0; }
+.qd-modern .header-info .company-address{ font-size:13px; color:var(--muted); margin:4px 0 0; line-height:1.5; }
+.qd-modern .header-contact{ position:relative; z-index:1; text-align:right; font-size:12.5px; line-height:1.8; color:var(--ink); }
+@media (max-width:600px){
+  .qd-modern .header{ flex-wrap:wrap; padding:110px 20px 16px; }
+  .qd-modern .header-contact{ text-align:left; }
+}
 .qd-modern .body{ padding:0 44px 40px; }
 .qd-modern .subline{ font-size:14px; font-weight:700; margin:0 0 24px; color:var(--tealDark); display:block; text-align:center; padding:10px 0; }
 .qd-modern .info-table{ background:var(--bg); border:1px solid var(--line); border-radius:12px; margin-bottom:32px; break-inside:avoid; overflow:hidden; }
@@ -71,11 +82,17 @@ const styles = `
 .qd-modern .footer-strip{ height:26px; background:var(--teal); border-radius:0 40px 0 0; margin-top:24px; }
 
 @media print {
-@page{ size: A4; margin-top:14mm; margin-bottom:14mm; margin-left:0; margin-right:0; }  .qd-modern{ background:#fff; padding:0; }
+  @page{ size: A4; margin: 0; }
+  .qd-modern .page-frame > thead > tr > td{ height:8mm; }
+  .qd-modern .page-frame > tfoot > tr > td{ height:12mm; }
+  .qd-modern .page-frame > thead{ display:table-header-group; }
+  .qd-modern .page-frame > tfoot{ display:table-footer-group; }
+  .qd-modern{ background:#fff; padding:0; }
   .qd-modern .sheet{ box-shadow:none; border-radius:0; max-width:100%; margin:0; }
-  .qd-modern .header{ border-radius:0; }
+   .qd-modern .header{ border-radius:0; padding-top:110px; }
   .qd-modern .footer-strip{ border-radius:0; height:14px; margin-top:14px; }
   .qd-modern .sign{ margin-top:24px; page-break-inside: avoid; }
+  .qd-modern .sign-footer-group{ break-inside:avoid; page-break-inside:avoid; }
   .qd-modern .footer-bar{ margin-top:10px; padding-top:8px; }
   .qd-modern .body{ padding-bottom:12px; }
   .qd-modern .page-frame > tbody{ display:table-row-group; }
@@ -125,34 +142,44 @@ export default function ModernLayout({ quotation, companyInfo, customers = [], e
   };
 
   return (
-    <div className="qd-modern">
+       <div className="qd-modern" style={{ "--accent": accent }}>
       <style>{styles}</style>
       <div className="sheet">
+        <div className="header">
+          <svg className="header-wave" viewBox="0 0 800 130" preserveAspectRatio="none" aria-hidden="true">
+            <path className="wave-soft" d="M800,0 L800,34 C730,22 650,26 570,58 C470,98 340,126 215,112 C420,104 530,62 630,30 C690,11 745,2 800,0 Z" />
+            <path className="wave-main" d="M0,0 L800,0 L800,72 C705,42 625,32 545,62 C435,106 265,132 130,102 C70,88 30,72 0,52 Z" />
+          </svg>
+          <div className="brand">
+            <LogoEdit
+              editMode={editMode} logo={quotation.logo} onUpload={onLogoUpload} onRemove={onRemoveLogo}
+              inputId="modern-logo" boxStyle={{ height: 68, width: 92 }}
+shape={quotation.logoShape} onShapeChange={(s) => onChange("logoShape", s)} fallback={null}
+            />
+          </div>
+          <div className="header-info">
+            {editMode ? (
+              <>
+                <CompanySelect editMode value={quotation.issuerName} onChange={(val) => onChange("issuerName", val)} placeholder="Your Company Name" style={{ fontWeight: 700 }} />
+                <EditText editMode value={quotation.issuerAddress} onChange={(val) => onChange("issuerAddress", val)} placeholder="Company address" style={{ marginTop: 6 }} />
+              </>
+            ) : (
+              <>
+                <p className="company-name">{v.issuerName}</p>
+                {v.issuerAddress && <p className="company-address">{v.issuerAddress}</p>}
+              </>
+            )}
+          </div>
+          {!editMode && (v.issuerEmail || v.issuerPhone) && (
+            <div className="header-contact">
+              {v.issuerPhone && <div>{v.issuerPhone}</div>}
+              {v.issuerEmail && <div>{v.issuerEmail}</div>}
+            </div>
+          )}
+        </div>
         <table className="page-frame">
+          <thead><tr><td /></tr></thead>
           <tbody>
-            <tr>
-              <td>
-                <div className="header">
-                  <div className="brand">
-                    <LogoEdit
-                      editMode={editMode} logo={quotation.logo} onUpload={onLogoUpload} onRemove={onRemoveLogo}
-                      inputId="modern-logo" boxStyle={{ height: 68, width: 92 }} fallback={null}
-                    />
-                  </div>
-                  <div className="header-info">
-                    {editMode ? (
-                      <>
-                        <CompanySelect editMode value={quotation.issuerName} onChange={(val) => onChange("issuerName", val)} placeholder="Your Company Name" style={{ color: "#fff", fontWeight: 700, textAlign: "center", justifyContent: "center", background: "rgba(255,255,255,0.15)", border: "1px dashed rgba(255,255,255,0.5)" }} />      <EditText editMode value={quotation.issuerAddress} onChange={(val) => onChange("issuerAddress", val)} placeholder="Company address" style={{ color: "#fff", textAlign: "center", background: "rgba(255,255,255,0.15)", border: "1px dashed rgba(255,255,255,0.5)", marginTop: 6 }} />
-                      </>
-                    ) : (
-                      <>
-                        <p className="company-name">{v.issuerName}</p>
-                        {v.issuerAddress && <p className="company-address">{v.issuerAddress}</p>}
-                      </>
-                    )}
-                  </div>                </div>
-              </td>
-            </tr>
             <tr>
               <td>
                 <div className="body">
@@ -162,9 +189,11 @@ export default function ModernLayout({ quotation, companyInfo, customers = [], e
 
                   <div className="info-table">
                     <div className="info-row">
-                      <div className="info-cell">
+                                         <div className="info-cell">
                         <strong>Quotation Num</strong>
-                        <EditText editMode={editMode} value={quotation.id} onChange={(val) => onChange("id", val)} placeholder="Quotation No." />
+                        {quotation.quotationNumber
+                          ? quotation.quotationNumber
+                          : <span style={{ opacity: 0.6, fontStyle: "italic" }}>Draft — number assigned on send</span>}
                       </div>
                       <div className="info-cell">
                         <strong>Date</strong>
@@ -430,6 +459,7 @@ gstMode={quotation.gstMode || (quotation.includeGst === true ? "with" : "without
                     </div>
                   )}
 
+                  <div className="sign-footer-group">
                   <div className="sign">
                     <div>
                       <div className="sig-box"></div>
@@ -467,10 +497,12 @@ gstMode={quotation.gstMode || (quotation.includeGst === true ? "with" : "without
                       )
                     )}
                   </div>
+                  </div>
                 </div>
               </td>
             </tr>
           </tbody>
+          <tfoot><tr><td /></tr></tfoot>
         </table>
         <div className="footer-strip"></div>
       </div>

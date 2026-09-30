@@ -1,6 +1,7 @@
 // EditableField.jsx
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 import DOMPurify from "dompurify";
+import axiosInstance from "../../api/axiosInstance";
 
 const base = {
   font: "inherit",
@@ -46,6 +47,7 @@ export function EditArea({ editMode, value, onChange, placeholder, rows = 4, sty
     />
   );
 }
+
 const HTML_TAG_RE = /<[a-z][\s\S]*>/i;
 
 // Displays a saved field correctly whether it was saved as HTML (from the
@@ -61,7 +63,7 @@ export function RichOrPlainView({ value, as = "list" }) {
   if (as === "paragraph") {
     return (
       <>
-        {String(value).split(/\n{2,}/).map((p, i) => p.trim() && <p key={i}>{p.trim()}</p>)}
+        {String(value).split(/\n{2,}/).map((p, i) => p.trim() && <p key={i} style={{ whiteSpace: "pre-line" }}>{p.trim()}</p>)}
       </>
     );
   }
@@ -82,13 +84,31 @@ export function bulletView(text, style) {
   );
 }
 
-export function LogoEdit({ editMode, logo, onUpload, onRemove, boxStyle, inputId, fallback }) {
+export function LogoEdit({ editMode, logo, onUpload, onRemove, boxStyle, inputId, fallback, shape = "original", onShapeChange }) {
+  // size = the height each layout already gives in boxStyle
+  const size = typeof boxStyle?.height === "number" ? boxStyle.height : 60;
+  const { width, height, borderRadius, ...boxRest } = boxStyle || {};
+
+  const imgStyle =
+    shape === "circle" ? { width: size, height: size, borderRadius: "50%", objectFit: "cover" }
+    : shape === "square" ? { width: size, height: size, borderRadius: 8, objectFit: "contain" }
+    : { height: size, width: "auto", maxWidth: size * 3, objectFit: "contain" }; // original
+
   return (
     <div style={{ display: "inline-flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
-      <label htmlFor={editMode ? inputId : undefined} style={{ cursor: editMode ? "pointer" : "default", display: "flex", alignItems: "center", justifyContent: "center", ...boxStyle }}>
-        {logo ? <img src={logo} alt="" style={{ width: "100%", height: "100%", objectFit: "contain" }} /> : (editMode ? <span style={{ fontSize: 10, opacity: 0.6 }}>+ Logo</span> : fallback)}
+      <label htmlFor={editMode ? inputId : undefined}
+        style={{ cursor: editMode ? "pointer" : "default", display: "flex", alignItems: "center", justifyContent: "center", ...(logo ? boxRest : boxStyle) }}>
+        {logo ? <img src={logo} alt="" style={{ display: "block", flexShrink: 0, ...imgStyle }} /> : (editMode ? <span style={{ fontSize: 10, opacity: 0.6 }}>+ Logo</span> : fallback)}
       </label>
       {editMode && <input id={inputId} type="file" accept="image/*" style={{ display: "none" }} onChange={onUpload} />}
+      {editMode && logo && onShapeChange && (
+        <select className="no-print" value={shape} onChange={(e) => onShapeChange(e.target.value)}
+          style={{ fontSize: 10, padding: "1px 4px", cursor: "pointer" }}>
+          <option value="original">Original</option>
+          <option value="square">Square</option>
+          <option value="circle">Circle</option>
+        </select>
+      )}
       {editMode && logo && (
         <button type="button" onClick={onRemove} style={{ background: "none", border: "none", color: "#d7263d", fontSize: 10, cursor: "pointer" }}>Remove</button>
       )}
@@ -150,9 +170,10 @@ export function CostCalculatorBar({ includeGst, gstPercent, defaultGstPercent, o
   );
 }
 
-// NEW: table for entering cost items — name + amount per row, with
+// Table for entering cost items — name + amount per row, with
 // "+ Add Item" adding a blank row directly (replaces the old popup modal).
-export function CostItemsTable({ items = [], onChange, gstMode = "with", gstPercent, defaultGstPercent = 18, onGstChange, accent = "#1F6F5C" }) {  const addItem = () => onChange([...items, { id: `item-${Date.now()}`, name: "", amount: 0 }]);
+export function CostItemsTable({ items = [], onChange, gstMode = "with", gstPercent, defaultGstPercent = 18, onGstChange, accent = "#1F6F5C" }) {
+  const addItem = () => onChange([...items, { id: `item-${Date.now()}`, name: "", amount: 0 }]);
   const updateItem = (id, field, value) =>
     onChange(items.map(it => it.id === id ? { ...it, [field]: field === "amount" ? Number(value) || 0 : value } : it));
   const removeItem = (id) => onChange(items.filter(it => it.id !== id));
@@ -168,22 +189,22 @@ export function CostItemsTable({ items = [], onChange, gstMode = "with", gstPerc
         display: "flex", flexWrap: "wrap", gap: 10, alignItems: "flex-end", marginBottom: 10,
         padding: "8px 10px", borderRadius: 8, background: "rgba(140,140,140,0.08)", border: "1px dashed rgba(140,140,140,0.4)",
       }}>
-      <div>
-  <label style={{ display: "block", fontSize: 10, opacity: 0.7, marginBottom: 3 }}>GST Type</label>
-  <select value={gstMode} onChange={(e) => onGstChange("gstMode", e.target.value)} style={{ fontSize: 12, padding: "3px 6px" }}>
-    <option value="with">With GST</option>
-    <option value="without">Without GST</option>
-    <option value="inclusive">GST Included</option>
-  </select>
-</div>
-{gstMode !== "without" && (
-  <div>
-    <label style={{ display: "block", fontSize: 10, opacity: 0.7, marginBottom: 3 }}>GST %</label>
-    <select value={gstPercent ?? defaultGstPercent} onChange={(e) => onGstChange("gstPercent", Number(e.target.value))} style={{ fontSize: 12, padding: "3px 6px" }}>
-      {[0, 5, 12, 18, 28].map(v => <option key={v} value={v}>{v}%</option>)}
-    </select>
-  </div>
-)}
+        <div>
+          <label style={{ display: "block", fontSize: 10, opacity: 0.7, marginBottom: 3 }}>GST Type</label>
+          <select value={gstMode} onChange={(e) => onGstChange("gstMode", e.target.value)} style={{ fontSize: 12, padding: "3px 6px" }}>
+            <option value="with">With GST</option>
+            <option value="without">Without GST</option>
+            <option value="inclusive">GST Included</option>
+          </select>
+        </div>
+        {gstMode !== "without" && (
+          <div>
+            <label style={{ display: "block", fontSize: 10, opacity: 0.7, marginBottom: 3 }}>GST %</label>
+            <select value={gstPercent ?? defaultGstPercent} onChange={(e) => onGstChange("gstPercent", Number(e.target.value))} style={{ fontSize: 12, padding: "3px 6px" }}>
+              {[0, 5, 12, 18, 28].map(v => <option key={v} value={v}>{v}%</option>)}
+            </select>
+          </div>
+        )}
       </div>
 
       <div style={{ border: "1px solid rgba(140,140,140,0.3)", borderRadius: 8, overflow: "hidden" }}>
@@ -203,7 +224,8 @@ export function CostItemsTable({ items = [], onChange, gstMode = "with", gstPerc
               onChange={(e) => updateItem(it.id, "amount", e.target.value)}
               placeholder="0"
               style={{ border: "none", background: "transparent", padding: "8px 10px", fontSize: 13, textAlign: "right", outline: "none" }}
-            />            <button type="button" onClick={() => removeItem(it.id)} title="Remove item"
+            />
+            <button type="button" onClick={() => removeItem(it.id)} title="Remove item"
               style={{ border: "none", background: "transparent", color: "#ef4444", cursor: "pointer" }}>✕</button>
           </div>
         ))}
@@ -220,45 +242,46 @@ export function CostItemsTable({ items = [], onChange, gstMode = "with", gstPerc
       </button>
 
       {/* Live total — updates automatically as items/GST change, no button needed */}
- {items.length > 0 && (() => {
-  const subtotal = items.reduce((sum, it) => sum + (Number(it.amount) || 0), 0);
-  const pct = Number(gstPercent ?? defaultGstPercent) || 0;
-  const rate = pct / 100;
+      {items.length > 0 && (() => {
+        const subtotal = items.reduce((sum, it) => sum + (Number(it.amount) || 0), 0);
+        const pct = Number(gstPercent ?? defaultGstPercent) || 0;
+        const rate = pct / 100;
 
-  let taxableAmount, gstAmount, total;
-  if (gstMode === "with") {
-    taxableAmount = subtotal; gstAmount = Math.round(subtotal * rate); total = subtotal + gstAmount;
-  } else if (gstMode === "inclusive") {
-    total = subtotal; taxableAmount = Math.round(subtotal / (1 + rate)); gstAmount = subtotal - taxableAmount;
-  } else {
-    taxableAmount = subtotal; gstAmount = 0; total = subtotal;
-  }
+        let taxableAmount, gstAmount, total;
+        if (gstMode === "with") {
+          taxableAmount = subtotal; gstAmount = Math.round(subtotal * rate); total = subtotal + gstAmount;
+        } else if (gstMode === "inclusive") {
+          total = subtotal; taxableAmount = Math.round(subtotal / (1 + rate)); gstAmount = subtotal - taxableAmount;
+        } else {
+          taxableAmount = subtotal; gstAmount = 0; total = subtotal;
+        }
 
-  const fmt = (n) => `₹${Number(n).toLocaleString("en-IN")}`;
-  return (
-    <div style={{ marginTop: 10, padding: "10px 14px", borderRadius: 8, background: "rgba(140,140,140,0.06)", border: "1px solid rgba(140,140,140,0.2)" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, padding: "3px 0" }}>
-        <span>Subtotal</span><span>{fmt(subtotal)}</span>
-      </div>
-      {gstMode === "with" && (
-        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, padding: "3px 0" }}>
-          <span>GST ({pct}%)</span><span>{fmt(gstAmount)}</span>
-        </div>
-      )}
-      {gstMode === "inclusive" && (
-        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, padding: "3px 0", color: "#8a8378" }}>
-          <span>Taxable value (GST {pct}% included)</span><span>{fmt(taxableAmount)} + {fmt(gstAmount)} GST</span>
-        </div>
-      )}
-      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, fontWeight: 700, padding: "6px 0 0", marginTop: 4, borderTop: "1px solid rgba(140,140,140,0.25)", color: accent }}>
-        <span>Total Project Cost</span><span>{fmt(total)}</span>
-      </div>
-    </div>
-  );
-})()}
+        const fmt = (n) => `₹${Number(n).toLocaleString("en-IN")}`;
+        return (
+          <div style={{ marginTop: 10, padding: "10px 14px", borderRadius: 8, background: "rgba(140,140,140,0.06)", border: "1px solid rgba(140,140,140,0.2)" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, padding: "3px 0" }}>
+              <span>Subtotal</span><span>{fmt(subtotal)}</span>
+            </div>
+            {gstMode === "with" && (
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, padding: "3px 0" }}>
+                <span>GST ({pct}%)</span><span>{fmt(gstAmount)}</span>
+              </div>
+            )}
+            {gstMode === "inclusive" && (
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, padding: "3px 0", color: "#8a8378" }}>
+                <span>Taxable value (GST {pct}% included)</span><span>{fmt(taxableAmount)} + {fmt(gstAmount)} GST</span>
+              </div>
+            )}
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 14, fontWeight: 700, padding: "6px 0 0", marginTop: 4, borderTop: "1px solid rgba(140,140,140,0.25)", color: accent }}>
+              <span>Total Project Cost</span><span>{fmt(total)}</span>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }
+
 // Renders a table-type custom section (heading arrives separately) as a
 // real editable grid — add/remove rows and columns, edit any cell or
 // column header. `onChange` receives just the changed fields (columns
@@ -331,6 +354,7 @@ export function EditableSectionTable({ section, accent, onChange }) {
     </div>
   );
 }
+
 export function CustomSectionsEdit({ sections, accent, onChange, onAdd, onRemove }) {
   return (
     <>
@@ -444,130 +468,62 @@ export function AddItemModal({ show, onCancel, onConfirm, accent = "#1F6F5C" }) 
 
 /* ────────────────────────────────────────────────────────────────────────
  * Company Name dropdown
- * Used anywhere the *issuing* company's name is entered (Quotation,
- * Proforma Invoice, Final Invoice, ...) so the same 10 preset companies
- * and any custom company added by the user show up consistently, no
- * matter which document/layout is currently open.
+ * Used anywhere the *issuing* company's name is entered. Options come
+ * from the company profiles saved in Settings → Company.
  * ──────────────────────────────────────────────────────────────────── */
 
-const CUSTOM_COMPANIES_KEY = "qp_custom_companies";
-const ADD_CUSTOM_VALUE = "__add_custom_company__";
-
-export const DEFAULT_COMPANIES = [
-  "Orange Mega Software Pvt Ltd",
-  "Nova Tech Solutions",
-  "BluePeak Innovations",
-  "Zenith Digital Works",
-  "Skyline Software Labs",
-  "Vertex Cloud Systems",
-  "Silver Lotus Technologies",
-  "Crimson Bytes Pvt Ltd",
-  "Northstar IT Services",
-  "Pearl Coast Software",
-];
-
-function readCustomCompanies() {
-  try {
-    const raw = localStorage.getItem(CUSTOM_COMPANIES_KEY);
-    const parsed = raw ? JSON.parse(raw) : [];
-    return Array.isArray(parsed) ? parsed.filter(Boolean) : [];
-  } catch (err) {
-    console.error("Failed to read saved custom companies:", err);
-    return [];
+// Share one request when several dropdowns mount at the same time.
+let inFlightRequest = null;
+function fetchCompanyProfiles() {
+  if (!inFlightRequest) {
+    inFlightRequest = axiosInstance
+      .get("/settings/companies")
+      .then((res) => (Array.isArray(res.data) ? res.data : []))
+      .finally(() => { inFlightRequest = null; });
   }
+  return inFlightRequest;
 }
 
-function writeCustomCompanies(list) {
-  try {
-    localStorage.setItem(CUSTOM_COMPANIES_KEY, JSON.stringify(list));
-  } catch (err) {
-    console.error("Failed to save custom companies:", err);
-  }
-}
-
-// Shared list of user-added companies. Backed by localStorage so a company
-// added while editing a Quotation is immediately available in the Proforma
-// Invoice / Final Invoice dropdowns too (and after a page reload).
-export function useCustomCompanies() {
-  const [customCompanies, setCustomCompanies] = useState(readCustomCompanies);
+export function useCompanyProfiles() {
+  const [companies, setCompanies] = useState([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const handleStorage = (e) => {
-      if (e.key === CUSTOM_COMPANIES_KEY) setCustomCompanies(readCustomCompanies());
-    };
-    window.addEventListener("storage", handleStorage);
-    return () => window.removeEventListener("storage", handleStorage);
+    let cancelled = false;
+    fetchCompanyProfiles()
+      .then((list) => { if (!cancelled) setCompanies(list); })
+      .catch((err) => console.error("Failed to load company profiles:", err))
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
   }, []);
 
-  const addCustomCompany = useCallback((name) => {
-    const trimmed = (name || "").trim();
-    if (!trimmed) return null;
-    const current = readCustomCompanies();
-    const exists = [...DEFAULT_COMPANIES, ...current].some((c) => c.toLowerCase() === trimmed.toLowerCase());
-    if (!exists) {
-      const next = [...current, trimmed];
-      writeCustomCompanies(next);
-      setCustomCompanies(next);
-    }
-    return trimmed;
-  }, []);
+  // Active profile first, then the rest; skip profiles with no name.
+  const sorted = companies
+    .filter((c) => (c.companyName || "").trim())
+    .sort((a, b) => (a.status === "active" ? -1 : 0) - (b.status === "active" ? -1 : 0));
 
-  const removeCustomCompany = useCallback((name) => {
-    const current = readCustomCompanies();
-    const next = current.filter((c) => c.toLowerCase() !== (name || "").toLowerCase());
-    writeCustomCompanies(next);
-    setCustomCompanies(next);
-  }, []);
-
-  return { customCompanies, addCustomCompany, removeCustomCompany };
+  return { companies: sorted, loading };
 }
 
-// Edit-mode-only building block: a custom dropdown of preset + custom
-// companies (built as a div-based list rather than a native <select> so
-// each custom company can carry its own delete "✕" button), with a
-// "+ Add Custom Company" row that reveals an inline text field to save a
-// brand-new company (which then becomes selectable everywhere).
-// Drop this in directly wherever a plain <input> for the company name used
-// to sit inside an `editMode ? <input .../> : <div>...</div>` block.
+// `onChange(name, company)` — the second argument is the full profile, so a
+// caller can also fill address / phone / email / logo. Callers that only use
+// the first argument keep working.
 export function CompanySelectField({ value, onChange, placeholder = "Select company", style, excludeValue }) {
-  const { customCompanies, addCustomCompany, removeCustomCompany } = useCustomCompanies();
-  const [addingCustom, setAddingCustom] = useState(false);
-  const [draftName, setDraftName] = useState("");
+  const { companies, loading } = useCompanyProfiles();
   const [open, setOpen] = useState(false);
   const wrapRef = useRef(null);
 
   useEffect(() => {
     const handleClickOutside = (e) => {
-      if (wrapRef.current && !wrapRef.current.contains(e.target)) {
-        setOpen(false);
-        setAddingCustom(false);
-      }
+      if (wrapRef.current && !wrapRef.current.contains(e.target)) setOpen(false);
     };
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const customSet = new Set(customCompanies.map((c) => c.toLowerCase()));
-  const options = [...DEFAULT_COMPANIES, ...customCompanies.filter((c) => !DEFAULT_COMPANIES.includes(c))]
-    .filter((c) => !excludeValue || c.toLowerCase() !== excludeValue.trim().toLowerCase());
-  if (value && !options.includes(value)) options.push(value);
-  const confirmCustom = () => {
-    const saved = addCustomCompany(draftName);
-    if (saved) onChange(saved);
-    setDraftName("");
-    setAddingCustom(false);
-    setOpen(false);
-  };
-  const cancelCustom = () => {
-    setDraftName("");
-    setAddingCustom(false);
-  };
-
-  const handleRemove = (e, company) => {
-    e.stopPropagation();
-    removeCustomCompany(company);
-    if (value === company) onChange("");
-  };
+  const options = companies.filter(
+    (c) => !excludeValue || c.companyName.trim().toLowerCase() !== excludeValue.trim().toLowerCase()
+  );
 
   return (
     <div ref={wrapRef} style={{ position: "relative", width: "100%" }}>
@@ -586,64 +542,46 @@ export function CompanySelectField({ value, onChange, placeholder = "Select comp
           boxShadow: "0 6px 18px rgba(0,0,0,0.12)", maxHeight: 260, overflowY: "auto",
           color: "#1f2937",
         }}>
-          {addingCustom ? (
-            <div style={{ display: "flex", gap: 6, alignItems: "center", padding: 8 }}>
-              <input
-                autoFocus
-                type="text"
-                value={draftName}
-                onChange={(e) => setDraftName(e.target.value)}
-                placeholder="Enter company name"
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") { e.preventDefault(); confirmCustom(); }
-                  if (e.key === "Escape") { e.preventDefault(); cancelCustom(); }
-                }}
-                style={{ ...base, cursor: "text", flex: 1 }}
-              />
-              <button type="button" onClick={confirmCustom}
-                style={{ border: "none", borderRadius: 4, padding: "3px 8px", fontSize: 12, fontWeight: 600, background: "#16A34A", color: "#fff", cursor: "pointer", flexShrink: 0 }}>
-                Save
-              </button>
-              <button type="button" onClick={cancelCustom}
-                style={{ border: "none", borderRadius: 4, padding: "3px 8px", fontSize: 12, fontWeight: 600, background: "#e5e7eb", color: "#374151", cursor: "pointer", flexShrink: 0 }}>
-                Cancel
-              </button>
-            </div>
-          ) : (
-            <>
-              {options.map((c) => (
-                <div
-                  key={c}
-                  onClick={() => { onChange(c); setOpen(false); }}
-                  style={{
-                    display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8,
-                    padding: "8px 12px", fontSize: 13, cursor: "pointer",
-                    background: value === c ? "rgba(140,140,140,0.18)" : "transparent",
-                  }}
-                  onMouseEnter={(e) => { if (value !== c) e.currentTarget.style.background = "rgba(140,140,140,0.08)"; }}
-                  onMouseLeave={(e) => { if (value !== c) e.currentTarget.style.background = "transparent"; }}
-                >
-                  <span>{c}</span>
-                  {customSet.has(c.toLowerCase()) && (
-                    <button
-                      type="button"
-                      onClick={(e) => handleRemove(e, c)}
-                      title="Delete this company"
-                      style={{ border: "none", background: "none", color: "#d7263d", fontSize: 12, cursor: "pointer", padding: "2px 4px", flexShrink: 0 }}
-                    >
-                      ✕
-                    </button>
-                  )}
-                </div>
-              ))}
-              <div
-                onClick={() => setAddingCustom(true)}
-                style={{ padding: "8px 12px", fontSize: 13, cursor: "pointer", color: "#16A34A", fontWeight: 600, borderTop: "1px solid rgba(140,140,140,0.2)" }}
-              >
-                + Add Custom Company
-              </div>
-            </>
+          {loading && <div style={{ padding: "10px 12px", fontSize: 12.5, color: "#8a8378" }}>Loading…</div>}
+
+          {!loading && options.length === 0 && (
+            <div style={{ padding: "10px 12px", fontSize: 12.5, color: "#8a8378" }}>No company profiles yet.</div>
           )}
+
+          {options.map((c) => (
+            <div
+              key={c.id}
+              onClick={() => { onChange(c.companyName, c); setOpen(false); }}
+              style={{
+                display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8,
+                padding: "8px 12px", fontSize: 13, cursor: "pointer",
+                background: value === c.companyName ? "rgba(140,140,140,0.18)" : "transparent",
+              }}
+              onMouseEnter={(e) => { if (value !== c.companyName) e.currentTarget.style.background = "rgba(140,140,140,0.08)"; }}
+              onMouseLeave={(e) => { if (value !== c.companyName) e.currentTarget.style.background = "transparent"; }}
+            >
+              <span>{c.companyName}</span>
+              <span style={{
+                fontSize: 10, fontWeight: 600, padding: "2px 8px", borderRadius: 999, flexShrink: 0,
+                background: c.status === "active" ? "#e6f4ef" : "#f1f0ef",
+                color: c.status === "active" ? "#1F6F5C" : "#6b7280",
+              }}>
+                {c.status === "active" ? "Active" : "Draft"}
+              </span>
+            </div>
+          ))}
+
+          <a
+            href="/settings"
+            target="_blank"
+            rel="noreferrer"
+            style={{
+              display: "block", padding: "8px 12px", fontSize: 13, fontWeight: 600, color: "#16A34A",
+              textDecoration: "none", borderTop: "1px solid rgba(140,140,140,0.2)",
+            }}
+          >
+            + Manage company profiles in Settings
+          </a>
         </div>
       )}
     </div>
@@ -661,13 +599,14 @@ export function CompanySelect({ editMode, value, onChange, placeholder = "Select
   }
   return <CompanySelectField value={value} onChange={onChange} placeholder={placeholder} style={style} excludeValue={excludeValue} />;
 }
+
 /* ────────────────────────────────────────────────────────────────────────
  * Customer selector
  * Used in the "To" section of every quotation layout. Unlike
- * CompanySelectField (which manages its own localStorage-backed list),
- * this one is purely a search/select UI over whatever `customers` array
- * is passed in — the actual customer data always comes from the real
- * Customers page/API via props, never duplicated or hardcoded here.
+ * CompanySelectField, this one is purely a search/select UI over whatever
+ * `customers` array is passed in — the actual customer data always comes
+ * from the real Customers page/API via props, never duplicated or
+ * hardcoded here.
  * ──────────────────────────────────────────────────────────────────── */
 
 function matchesCustomerSearch(cust, q) {

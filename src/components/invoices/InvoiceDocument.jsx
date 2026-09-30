@@ -1,5 +1,12 @@
 import { useState, useEffect } from "react";
 import { FaArrowLeft, FaPrint, FaEdit, FaFileInvoiceDollar } from "react-icons/fa";
+
+function logoStyle(shape, size) {
+  if (shape === "circle") return { width: size, height: size, borderRadius: "50%", objectFit: "cover" };
+  if (shape === "square") return { width: size, height: size, borderRadius: 8, objectFit: "contain" };
+  return { height: size, width: "auto", maxWidth: size * 3, objectFit: "contain" }; // original
+}
+
 function numberToWords(num) {
   const ones = ["", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine",
     "Ten", "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen", "Sixteen", "Seventeen", "Eighteen", "Nineteen"];
@@ -86,9 +93,9 @@ export default function InvoiceDocument({ invoice, onBack, onEdit, onConvertToFi
     </td>
   );
 
- return (
-<div style={{ maxWidth: "860px" }}>
-  
+  return (
+    <div style={{ maxWidth: "860px" }}>
+
       <style>{`
         @media print {
           .no-print { display: none !important; }
@@ -191,49 +198,53 @@ export default function InvoiceDocument({ invoice, onBack, onEdit, onConvertToFi
 
             {/* Header Row — Company + Invoice Info */}
             <tr>
-<td colSpan={3} style={{ border: "1px solid #000", padding: isMobile ? "8px" : "10px 12px" }}>
-                  <div className="d-flex align-items-start gap-3">
+              <td colSpan={3} style={{ border: "1px solid #000", padding: isMobile ? "8px" : "10px 12px" }}>
+                <div className="d-flex align-items-start gap-3">
                   {/* Logo placeholder */}
-              {invoice.logo && (
-  <img src={invoice.logo} alt="Logo" style={{ width: isMobile ? 40 : 52, height: isMobile ? 40 : 52, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
-)}
+                  {invoice.logo && (
+                    <img src={invoice.logo} alt="Logo" style={{ ...logoStyle(invoice.logoShape, isMobile ? 40 : 52), flexShrink: 0 }} />
+                  )}
 
                   <div>
                     <div style={{ fontWeight: 700, fontSize: isMobile ? "0.8rem" : "0.95rem", color: "#0f172a" }}>{invoice.companyName}</div>
-{invoice.companyAddress && (
-  <div style={{ fontSize: isMobile ? "0.65rem" : "0.78rem", color: "#334155", whiteSpace: "pre-line" }}>{invoice.companyAddress}</div>
-)}
-{invoice.companyGSTIN && (
-  <div style={{ fontSize: isMobile ? "0.65rem" : "0.78rem", color: "#334155" }}>GST Number (GSTIN): {invoice.companyGSTIN}</div>
-)}
+                    {invoice.companyAddress && (
+                      <div style={{ fontSize: isMobile ? "0.65rem" : "0.78rem", color: "#334155", whiteSpace: "pre-line" }}>{invoice.companyAddress}</div>
+                    )}
+                    {invoice.companyGSTIN && (
+                      <div style={{ fontSize: isMobile ? "0.65rem" : "0.78rem", color: "#334155" }}>GST Number (GSTIN): {invoice.companyGSTIN}</div>
+                    )}
                   </div>
                 </div>
               </td>
-             <td style={{ border: "1px solid #000", padding: isMobile ? "8px" : "10px 12px", verticalAlign: "top" }}>
-  <div style={{ fontSize: isMobile ? "0.65rem" : "0.78rem", color: "#64748b" }}>Invoice No.</div>
+              <td style={{ border: "1px solid #000", padding: isMobile ? "8px" : "10px 12px", verticalAlign: "top" }}>
+                <div style={{ fontSize: isMobile ? "0.65rem" : "0.78rem", color: "#64748b" }}>Invoice No.</div>
                 <div style={{ fontWeight: 700, fontSize: isMobile ? "0.8rem" : "0.95rem", color: "#0f172a" }}>{invoice.invoiceNo}</div>
               </td>
-           <td style={{ border: "1px solid #000", padding: isMobile ? "8px" : "10px 12px", verticalAlign: "top" }}>
-  <div style={{ fontSize: isMobile ? "0.65rem" : "0.78rem", color: "#64748b" }}>Dated</div>
-  <div style={{ fontWeight: 700, fontSize: isMobile ? "0.75rem" : "0.88rem", color: "#0f172a", whiteSpace: "nowrap" }}>{formatDate(invoice.date)}</div>
-</td>
+              <td style={{ border: "1px solid #000", padding: isMobile ? "8px" : "10px 12px", verticalAlign: "top" }}>
+                <div style={{ fontSize: isMobile ? "0.65rem" : "0.78rem", color: "#64748b" }}>Dated</div>
+                <div style={{ fontWeight: 700, fontSize: isMobile ? "0.75rem" : "0.88rem", color: "#0f172a", whiteSpace: "nowrap" }}>{formatDate(invoice.date)}</div>
+              </td>
             </tr>
 
             {/* Buyer Row */}
             <tr>
               <td colSpan={5} style={{ border: "1px solid #000", padding: isMobile ? "6px 8px" : "8px 12px" }}>
                 <div style={{ fontSize: isMobile ? "0.62rem" : "0.75rem", color: "#64748b", marginBottom: 2 }}>Buyer (Bill to)</div>
-                <div style={{ fontWeight: 700, fontSize: isMobile ? "0.75rem" : "0.88rem", color: "#0f172a" }}>{invoice.buyerName}</div>
+                <div style={{ fontWeight: 700, fontSize: isMobile ? "0.75rem" : "0.88rem", color: "#0f172a" }}>
+                  Name: {invoice.buyerName}
+                </div>
                 {invoice.buyerCompanyName && (
-                  <div style={{ fontWeight: 600, fontSize: isMobile ? "0.68rem" : "0.82rem", color: "#334155" }}>{invoice.buyerCompanyName}</div>
+                  <div style={{ fontWeight: 600, fontSize: isMobile ? "0.68rem" : "0.82rem", color: "#334155" }}>
+                    Company: {invoice.buyerCompanyName}
+                  </div>
                 )}
-{invoice.buyerAddress && (
-  <div style={{ fontSize: isMobile ? "0.68rem" : "0.82rem", color: "#334155" }}>{invoice.buyerAddress}</div>
-)}
+                {invoice.buyerAddress && (
+                  <div style={{ fontSize: isMobile ? "0.68rem" : "0.82rem", color: "#334155", whiteSpace: "pre-line" }}>{invoice.buyerAddress}</div>
+                )}
 
-{invoice.buyerMobile && (
-  <div style={{ fontSize: isMobile ? "0.68rem" : "0.82rem", color: "#334155" }}>Mobile: {invoice.buyerMobile}</div>
-)}
+                {invoice.buyerMobile && (
+                  <div style={{ fontSize: isMobile ? "0.68rem" : "0.82rem", color: "#334155" }}>Mobile: {invoice.buyerMobile}</div>
+                )}
 
                 {invoice.buyerGSTIN && (
                   <div style={{ fontSize: isMobile ? "0.68rem" : "0.82rem", color: "#334155" }}>GSTIN: {invoice.buyerGSTIN}</div>
@@ -244,8 +255,8 @@ export default function InvoiceDocument({ invoice, onBack, onEdit, onConvertToFi
             {/* Table Header */}
             <tr style={{ backgroundColor: "#f1f5f9" }}>
               {mobileCell("Sl. No.", { fontWeight: 700, textAlign: "center", width: "6%" })}
-              {mobileCell("Description of Services", { fontWeight: 700, width: "52%" })}
-              {mobileCell("Qty", { fontWeight: 700, textAlign: "center", width: "8%" })}
+              {mobileCell("Description of Services", { fontWeight: 700, width: "46%" })}
+              {mobileCell("Qty", { fontWeight: 700, textAlign: "center", width: "14%" })}
               {mobileCell("Rate (₹)", { fontWeight: 700, textAlign: "right", width: "17%", whiteSpace: "nowrap" })}
               {mobileCell("Amount (₹)", { fontWeight: 700, textAlign: "right", width: "17%", whiteSpace: "nowrap" })}
             </tr>
@@ -255,7 +266,7 @@ export default function InvoiceDocument({ invoice, onBack, onEdit, onConvertToFi
               <tr key={i}>
                 {mobileCell(item.sl, { textAlign: "center" })}
                 {mobileCell(item.description)}
-                {mobileCell(item.qty, { textAlign: "center" })}
+                {mobileCell(`${item.qty}${item.unit ? " " + item.unit : ""}`, { textAlign: "center", whiteSpace: "nowrap" })}
                 {mobileCell(formatAmount(item.rate), { textAlign: "right" })}
                 {mobileCell(formatAmount(item.amount), { textAlign: "right" })}
               </tr>
@@ -308,19 +319,19 @@ export default function InvoiceDocument({ invoice, onBack, onEdit, onConvertToFi
               {mobileCell(<strong>{formatAmount(due)}</strong>, { border: "1px solid #000", textAlign: "right", color: "#059669" })}
             </tr>
 
-          {/* Amount in Words */}
-<tr>
-  <td colSpan={invoice.dueDate ? 3 : 5} style={{ border: "1px solid #000", padding: isMobile ? "6px 8px" : "8px 12px" }}>
-    <div style={{ fontSize: isMobile ? "0.62rem" : "0.75rem", color: "#64748b" }}>Amount Chargeable (In words)</div>
-    <div style={{ fontWeight: 700, fontSize: isMobile ? "0.68rem" : "0.82rem", color: "#0f172a" }}>{words}</div>
-  </td>
-  {invoice.dueDate && (
-    <td colSpan={2} style={{ border: "1px solid #000", padding: isMobile ? "6px 8px" : "8px 12px" }}>
-      <div style={{ fontSize: isMobile ? "0.62rem" : "0.75rem", color: "#64748b" }}>Due Date</div>
-      <div style={{ fontWeight: 700, fontSize: isMobile ? "0.68rem" : "0.82rem" }}>{formatDate(invoice.dueDate)}</div>
-    </td>
-  )}
-</tr>
+            {/* Amount in Words */}
+            <tr>
+              <td colSpan={invoice.dueDate ? 3 : 5} style={{ border: "1px solid #000", padding: isMobile ? "6px 8px" : "8px 12px" }}>
+                <div style={{ fontSize: isMobile ? "0.62rem" : "0.75rem", color: "#64748b" }}>Amount Chargeable (In words)</div>
+                <div style={{ fontWeight: 700, fontSize: isMobile ? "0.68rem" : "0.82rem", color: "#0f172a" }}>{words}</div>
+              </td>
+              {invoice.dueDate && (
+                <td colSpan={2} style={{ border: "1px solid #000", padding: isMobile ? "6px 8px" : "8px 12px" }}>
+                  <div style={{ fontSize: isMobile ? "0.62rem" : "0.75rem", color: "#64748b" }}>Due Date</div>
+                  <div style={{ fontWeight: 700, fontSize: isMobile ? "0.68rem" : "0.82rem" }}>{formatDate(invoice.dueDate)}</div>
+                </td>
+              )}
+            </tr>
 
             {/* Declaration + Signature */}
             <tr>
@@ -330,7 +341,7 @@ export default function InvoiceDocument({ invoice, onBack, onEdit, onConvertToFi
                   We declare that this invoice shows the actual price of the goods described and that all particulars are true and correct.
                 </div>
                 {invoice.notes && (
-                  <div style={{ fontSize: isMobile ? "0.65rem" : "0.78rem", color: "#475569", marginTop: 6, fontStyle: "italic" }}>
+                  <div style={{ fontSize: isMobile ? "0.65rem" : "0.78rem", color: "#475569", marginTop: 6, fontStyle: "italic", whiteSpace: "pre-line" }}>
                     Note: {invoice.notes}
                   </div>
                 )}

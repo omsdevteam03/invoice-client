@@ -10,6 +10,7 @@ const API = `${import.meta.env.VITE_API_URL}/invoices`;
 const SETTINGS_API = `${import.meta.env.VITE_API_URL}/settings/company`;
 const DOC_SETTINGS_API = `${import.meta.env.VITE_API_URL}/settings/invoice`;
 const QUOTATIONS_API = `${import.meta.env.VITE_API_URL}/quotations`;
+const CUSTOMERS_API = `${import.meta.env.VITE_API_URL}/customers`;
 
 // ── Numbering helpers ────────────────────────────────────────────────────
 // A record is Proforma if it's explicitly tagged that way, OR — for older
@@ -81,8 +82,9 @@ export default function InvoicesPage() {
   const navigate = useNavigate();
   const { id } = useParams();
 
-  const [invoices, setInvoices] = useState([]);
-  const [invoicesLoaded, setInvoicesLoaded] = useState(false);
+const [invoices, setInvoices] = useState([]);
+const [customers, setCustomers] = useState([]);
+const [invoicesLoaded, setInvoicesLoaded] = useState(false);
   // Only used for an UNSAVED draft (New / Choose Customer / Choose Quotation
   // flows) — once an invoice is saved it's identified purely by URL :id,
   // so a page refresh always re-derives the correct screen from invoices[].
@@ -115,6 +117,7 @@ export default function InvoicesPage() {
     defaultNotes: "",
   });
   const [approvedQuotations, setApprovedQuotations] = useState([]);
+const [allQuotations, setAllQuotations] = useState([]);
   const [toast, setToast] = useState(null); // { message } | null
   const saveTimer = useRef(null);
 
@@ -126,6 +129,13 @@ export default function InvoicesPage() {
       .catch(err => console.error('Failed to load invoices:', err))
       .finally(() => setInvoicesLoaded(true));
   }, []);
+  // Load customers (used by the Buyer Name picker in the invoice form)
+useEffect(() => {
+  fetch(CUSTOMERS_API)
+    .then(res => res.json())
+    .then(data => setCustomers(Array.isArray(data) ? data : []))
+    .catch(err => console.error('Failed to load customers:', err));
+}, []);
 
   // If someone lands on /invoices/:id (view or edit) for an invoice that
   // doesn't exist once loading has finished, send them back to the list
@@ -142,7 +152,10 @@ export default function InvoicesPage() {
   useEffect(() => {
     fetch(QUOTATIONS_API)
       .then(res => res.json())
-      .then(data => setApprovedQuotations(data.filter(q => q.status === "Approved" && !q.isTemplate)))
+      .then(data => {
+        setAllQuotations(data);
+        setApprovedQuotations(data.filter(q => q.status === "Approved" && !q.isTemplate));
+      })
       .catch(err => console.error('Failed to load quotations:', err));
   }, []);
 
@@ -620,6 +633,7 @@ const quotationGstType =
           key={draftInvoice?.id || "new"}
           invoice={draftInvoice}
           invoices={invoices}
+            customers={customers}
           onSave={handleSave}
           onBack={handleBack}
           companyInfo={companyInfo}
@@ -641,6 +655,8 @@ const quotationGstType =
           key={selected?.id || "new"}
           invoice={selected}
           invoices={invoices}
+            customers={customers}
+
           onSave={handleSave}
           onBack={handleBack}
           companyInfo={companyInfo}
@@ -694,6 +710,7 @@ const quotationGstType =
         onStatusChange={handleStatusChange}
         onChooseCustomer={openDraftFromCustomer}
         approvedQuotations={approvedQuotations}
+        allQuotations={allQuotations}
         onChooseQuotation={openDraftFromQuotation}
         onConvertToFinal={setConvertTarget}
         onReceivePayment={setPaymentInvoice}

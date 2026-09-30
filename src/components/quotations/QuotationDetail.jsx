@@ -16,6 +16,17 @@ import QuotationTemplate from "./QuotationTemplate";
 import { templates } from "./QuotationTable";
 import TinyMCEEditor from "./TinyMCEEditor";
 
+function capitalizeWords(text) {
+  const s = String(text || "");
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+function logoStyle(shape, size) {
+  if (shape === "circle") return { width: size, height: size, borderRadius: "50%", objectFit: "cover" };
+  if (shape === "square") return { width: size, height: size, borderRadius: 8, objectFit: "contain" };
+  return { height: size, width: "auto", maxWidth: size * 3, objectFit: "contain" }; // original
+}
+
 const QUOTATION_LAYOUTS = {
   classic: ClassicLayout,
   creative: CreativeLayout,
@@ -224,22 +235,31 @@ function ToggleSwitch({ checked, onChange, accent, label }) {
   );
 }
 
-function LogoBox({ form, editMode, accent, onUpload, onRemove }) {
+function LogoBox({ form, editMode, accent, onUpload, onRemove, onShapeChange }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6, flexShrink: 0 }}>
       <label htmlFor={editMode ? "qt-logo-upload" : undefined} style={{
-        width: 88, height: 60, borderRadius: 10, border: `1.5px dashed ${form.logo ? "transparent" : `${accent}55`}`,
+        minWidth: form.logo ? 0 : 88, minHeight: form.logo ? 0 : 60,
+        borderRadius: 10, border: form.logo ? "none" : `1.5px dashed ${accent}55`,
         backgroundColor: form.logo ? "transparent" : "#f1f5f9",
-        display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden",
+        display: "flex", alignItems: "center", justifyContent: "center",
         cursor: editMode ? "pointer" : "default",
       }}>
         {form.logo
-          ? <img src={form.logo} alt="Company logo" style={{ maxWidth: "100%", maxHeight: "100%", objectFit: "contain" }} />
+          ? <img src={form.logo} alt="Company logo" style={logoStyle(form.logoShape, 60)} />
           : <span style={{ fontSize: 12, color: T.faint, fontWeight: 600 }}>{editMode ? "+ Logo" : "Logo"}</span>}
       </label>
       {editMode && <input id="qt-logo-upload" type="file" accept="image/*" style={{ display: "none" }} onChange={onUpload} />}
       {editMode && form.logo && (
-        <button onClick={onRemove} className="no-print border-0" style={{ background: "none", color: T.red, fontSize: 11, cursor: "pointer" }}>Remove</button>
+        <>
+          <select className="no-print" value={form.logoShape || "original"} onChange={(e) => onShapeChange(e.target.value)}
+            style={{ fontSize: 11, border: `1px solid ${T.border}`, borderRadius: 6, padding: "2px 6px", cursor: "pointer" }}>
+            <option value="original">Original</option>
+            <option value="square">Square</option>
+            <option value="circle">Circle</option>
+          </select>
+          <button onClick={onRemove} className="no-print border-0" style={{ background: "none", color: T.red, fontSize: 11, cursor: "pointer" }}>Remove</button>
+        </>
       )}
     </div>
   );
@@ -358,13 +378,14 @@ function ConfirmEditApprovedModal({ show, onCancel, onConfirm, accent = "#F97316
     </div>
   );
 }
-
 export default function QuotationDetail({
   quotation, companyInfo, docSettings, customers = [], isNew, editMode, isNewTemplate,
-  onBack, onEdit, onSave, onCancelEdit,
+  onBack, onEdit, onSave, onSend, onCancelEdit,
 }) {
   const [form, setForm] = useState(() => normalizeFormQuotation(quotation));
   const [showApprovedEditConfirm, setShowApprovedEditConfirm] = useState(false);
+  const [isSending, setIsSending] = useState(false);
+
 
   const draftKeyRef = useRef(
     !isNew && quotation.id ? quotation.id : quotation._draftId || `draft_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`
@@ -437,13 +458,20 @@ export default function QuotationDetail({
     observer.observe(document.body, { childList: true, subtree: true });
     scanIframes();
 
-    window.scrollTo(0, 0);
-    const t = setTimeout(() => window.scrollTo(0, 0), 500);
+    // The app scrolls inside .main-content as well as the window
+    const toTop = () => {
+      const mainContent = document.querySelector(".main-content");
+      if (mainContent) mainContent.scrollTop = 0;
+      window.scrollTo(0, 0);
+    };
+
+    toTop();
+    const timers = [300, 700, 1200, 2000].map((ms) => setTimeout(toTop, ms));
 
     const stop = setTimeout(() => observer.disconnect(), 4000);
 
-    return () => { observer.disconnect(); clearTimeout(t); clearTimeout(stop); };
-  }, [editMode]);
+    return () => { observer.disconnect(); timers.forEach(clearTimeout); clearTimeout(stop); };
+  }, [editMode, form.templateStyle]);
 
   const [showPreview, setShowPreview] = useState(true);
   const [showTemplateSwitcher, setShowTemplateSwitcher] = useState(false);
@@ -461,6 +489,9 @@ export default function QuotationDetail({
 
 const updateField = (field, value) => {
   dirtyRef.current = true;
+  if ((field === "name" || field === "company") && typeof value === "string") {
+    value = capitalizeWords(value);
+  }
   setForm((prev) => {
     let next = { ...prev, [field]: value };
 
@@ -482,6 +513,22 @@ const updateField = (field, value) => {
   });
 };
 
+  const handleIssuerSelect = (name, company) => {
+    dirtyRef.current = true;
+    setForm((prev) => ({
+      ...prev,
+      issuerName: name,
+      ...(company && {
+        issuerAddress: company.companyAddress || "",
+        issuerPhone: company.companyPhone || "",
+        issuerEmail: company.companyEmail || "",
+        issuerWebsite: company.website || "",
+        logo: company.logo || null,
+        logoShape: company.logoShape || "original",
+      }),
+    }));
+  };
+
   const handleThemeColorChange = (color) => {
     dirtyRef.current = true;
     setForm((prev) => ({ ...prev, accentColor: color, accentBg: `linear-gradient(135deg, ${color}, ${shadeColor(color, -25)})` }));
@@ -500,7 +547,7 @@ const updateField = (field, value) => {
 
     scrollToTop();
     requestAnimationFrame(scrollToTop);
-    setTimeout(scrollToTop, 200);
+    [200, 600, 1200, 2000].forEach((ms) => setTimeout(scrollToTop, ms));
   };
 
   const addCustomSection = () => { dirtyRef.current = true; setForm((prev) => ({ ...prev, customSections: [...prev.customSections, { heading: "", content: "" }] })); };
@@ -561,8 +608,21 @@ const updateField = (field, value) => {
       );
     }
   };
-  const handleCancelClick = () => {
-    removeDraft(draftKeyRef.current);
+  const handleSendClick = async () => {
+    setIsSending(true);
+    try {
+      const { _draftId, _isNewQuotation, ...cleanForm } = form;
+      await onSave({ ...cleanForm, _isNewQuotation: isNew, status: "Draft" });
+      await onSend(form.id);
+      removeDraft(draftKeyRef.current);
+    } catch (err) {
+      console.error("Send failed:", err);
+    } finally {
+      setIsSending(false);
+    }
+  };
+
+  const handleCancelClick = () => {    removeDraft(draftKeyRef.current);
     setForm(normalizeFormQuotation(quotation));
     onCancelEdit();
     onBack();
@@ -591,12 +651,12 @@ const updateField = (field, value) => {
       borderTop: `4px solid ${accent}`, borderBottom: `4px solid ${accent}`,
       padding: "8px 10px", marginBottom: 10,
     }}>
-      <LogoBox form={form} editMode={editMode} accent={accent} onUpload={handleLogoUpload} onRemove={() => updateField("logo", null)} />
+      <LogoBox form={form} editMode={editMode} accent={accent} onUpload={handleLogoUpload} onRemove={() => updateField("logo", null)} onShapeChange={(s) => updateField("logoShape", s)} />
       <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, minWidth: 0 }}>
         {editMode ? (
-          <CompanySelectField
+                 <CompanySelectField
             value={form.issuerName}
-            onChange={(val) => updateField("issuerName", val)}
+            onChange={handleIssuerSelect}
             placeholder="Your Company Name"
             style={{ ...inp, fontSize: isMobile ? 18 : 22, fontWeight: 700, color: T.navy, maxWidth: 360, border: `1px solid ${accentBorder}`, backgroundColor: accentSoftBg, textAlign: "center" }}
           />
@@ -643,9 +703,11 @@ const updateField = (field, value) => {
       <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 24, tableLayout: "fixed" }}>
         <tbody>
           <tr>
-            <td style={{ ...cellStyle, width: "50%" }}>
+                      <td style={{ ...cellStyle, width: "50%" }}>
               <span style={cellLabel}>Quotation:</span>{" "}
-              {editMode ? <input value={form.id} onChange={(e) => updateField("id", e.target.value)} style={{ ...cellInput, display: "inline-block", width: "auto", marginTop: 0 }} /> : form.id}
+              {form.quotationNumber
+                ? form.quotationNumber
+                : <span style={{ color: T.faint, fontStyle: "italic" }}>Draft — number assigned on send</span>}
             </td>
             <td style={{ ...cellStyle, width: "50%" }}>
               <span style={cellLabel}>Date:</span>{" "}
@@ -679,8 +741,7 @@ const updateField = (field, value) => {
             <td style={{ ...cellStyle, width: "50%" }}>
               {editMode ? (
                 <>
-                  <CompanySelectField value={form.issuerName} onChange={(val) => updateField("issuerName", val)} placeholder="Your Company Name" style={cellInput} />
-                  <input value={form.issuerAddress || ""} onChange={(e) => updateField("issuerAddress", e.target.value)} placeholder="Company address" style={cellInput} />
+                  <CompanySelectField value={form.issuerName} onChange={handleIssuerSelect} placeholder="Your Company Name" style={cellInput} />                  <input value={form.issuerAddress || ""} onChange={(e) => updateField("issuerAddress", e.target.value)} placeholder="Company address" style={cellInput} />
                   <input value={form.issuerPhone || ""} onChange={(e) => updateField("issuerPhone", e.target.value)} placeholder="Phone" style={cellInput} />
                   <input value={form.issuerEmail || ""} onChange={(e) => updateField("issuerEmail", e.target.value)} placeholder="Email" style={cellInput} />
                 </>
@@ -710,13 +771,25 @@ const updateField = (field, value) => {
   const renderDocContent = (isEditable) => (<div className="bg-white print-doc" style={{ borderRadius: 16, boxShadow: "0 1px 2px rgba(15,23,42,0.04), 0 8px 24px rgba(15,23,42,0.04)", padding: isMobile ? "24px 18px" : "48px 56px", fontFamily: T.font, overflowAnchor: "none" }}>    <style>{`
 
   @media print {
-    @page { size: A4; margin: 8mm 12mm 12mm 12mm; }
+    @page { size: A4; margin: 0; }
     html, body { margin: 0 !important; padding: 0 !important; }
-    .print-doc { padding: 16px 30px !important; box-shadow: none !important; border-radius: 0 !important; margin: 0 !important; font-size: 92% !important; }
+    .print-doc { padding: 0 !important; box-shadow: none !important; border-radius: 0 !important; margin: 0 !important; font-size: 92% !important; }
+
+    /* Margins that work even when the print dialog is set to "None".
+       The empty thead/tfoot rows repeat on every page, so every page gets
+       top and bottom space, and the tbody padding gives left and right space. */
+    .qt-print-frame { width: 100%; border-collapse: collapse; }
+    .qt-print-frame > thead > tr > td,
+    .qt-print-frame > tfoot > tr > td { height: 12mm; padding: 0; border: none; }
+    .qt-print-frame > thead { display: table-header-group !important; }
+    .qt-print-frame > tfoot { display: table-footer-group !important; }
+    .qt-print-frame > tbody > tr { break-inside: auto !important; page-break-inside: auto !important; }
+    .qt-print-frame > tbody > tr > td { padding: 0 15mm !important; }
 
 
     .qt-heading-avoid { break-after: avoid; page-break-after: avoid; }
-    .print-doc table thead { display: table-header-group; }
+    .qt-sign-group { break-inside: avoid; page-break-inside: avoid; }
+        .print-doc table thead { display: table-header-group; }
     .print-doc table tr { break-inside: avoid; page-break-inside: avoid; }
     .qt-print-body p,
     .qt-print-body li { break-inside: avoid; page-break-inside: avoid; }
@@ -732,9 +805,13 @@ const updateField = (field, value) => {
     .quotation-rich-text ol { padding-left: 20px; margin: 0 0 8px; }
     .quotation-rich-text li { margin-bottom: 4px; }
     .quotation-rich-text strong { color: #0f172a; }
-    .quotation-rich-text a { color: inherit; text-decoration: underline; }
+        .quotation-rich-text a { color: inherit; text-decoration: underline; }
+    .qt-print-frame td { padding: 0; vertical-align: top; }
   `}</style>
 
+    <table className="qt-print-frame">
+      <thead><tr><td /></tr></thead>
+      <tbody><tr><td>
     <div className="qt-print-body">
       {printBannerBlock}
       {printHeaderBlock}
@@ -1045,13 +1122,14 @@ const updateField = (field, value) => {
         </div>
       )}
 
-      {/* Signatures */}
+         {/* Signatures + footer, kept together on one page */}
+      <div className="qt-sign-group">
       <div style={{ borderTop: `1px solid ${T.border}`, paddingTop: 16, marginTop: 16, marginBottom: 0 }}>
         <div style={{ display: "flex", gap: 24, flexWrap: "nowrap" }}>
           <div style={{ flex: "1 1 50%", minWidth: 0 }}>
             <div style={{ height: 60, marginBottom: 8, display: "flex", alignItems: "flex-end" }} />
             <div style={{ borderTop: `1px solid ${T.border}`, paddingTop: 6 }}>
-              <div style={{ fontSize: 14, fontWeight: 700, color: T.navy, wordBreak: "break-word" }}>{form.name}</div>
+                         <div style={{ fontSize: 14, fontWeight: 700, color: T.navy, wordBreak: "break-word" }}>{form.name || form.company}</div>
               <div style={{ fontSize: 12.5, color: T.faint, marginTop: 2 }}>Client Signature</div>
             </div>
           </div>
@@ -1114,8 +1192,12 @@ const updateField = (field, value) => {
           </div>
         </div>
       </div>
-      {printFooterBlock}
+               {printFooterBlock}
+      </div>
     </div>
+      </td></tr></tbody>
+      <tfoot><tr><td /></tr></tfoot>
+    </table>
   </div>
   );
 
@@ -1258,10 +1340,18 @@ const updateField = (field, value) => {
             </div>
           )}
 
+                 {editMode && form.status === "Draft" && (
+            <button onClick={handleSendClick} disabled={isSending} title="Send" aria-label="Send"
+              className="d-flex align-items-center justify-content-center border-0 rounded-3"
+              style={{ backgroundColor: T.orange, color: "#fff", cursor: "pointer", height: 30, padding: "0 16px", gap: 7, fontSize: 13, fontWeight: 600, fontFamily: T.font, flexShrink: 0, marginLeft: "auto" }}>
+              <FaCheck size={12} /> {isSending ? "Sending..." : "Send"}
+            </button>
+          )}
+
           {editMode && (
             <button onClick={handleSaveClick} title="Save" aria-label="Save"
               className="d-flex align-items-center justify-content-center border-0 rounded-3"
-              style={{ backgroundColor: T.green, color: "#fff", cursor: "pointer", height: 30, padding: "0 16px", gap: 7, fontSize: 13, fontWeight: 600, fontFamily: T.font, flexShrink: 0, marginLeft: "auto" }}>
+              style={{ backgroundColor: T.green, color: "#fff", cursor: "pointer", height: 30, padding: "0 16px", gap: 7, fontSize: 13, fontWeight: 600, fontFamily: T.font, flexShrink: 0, marginLeft: form.status === "Draft" ? 8 : "auto" }}>
               <FaSave size={12} /> Save
             </button>
           )}
@@ -1285,8 +1375,42 @@ const updateField = (field, value) => {
               onRemoveSignature={() => updateField("signature", null)}
               defaultGstPercent={defaultGstPercent}
             />
-          ) : docContent;
+                    ) : docContent;
         })()}
+
+        {/* Activity history: only when viewing a saved quotation */}
+        {!editMode && !isNew && (
+          <div
+            className="no-print"
+            style={{
+              marginTop: 24, padding: "20px 24px", backgroundColor: "#fff",
+              borderRadius: 16, border: `1px solid ${T.border}`,
+            }}
+          >
+            <div style={{ fontWeight: 700, fontSize: 15, color: T.navy, marginBottom: 14 }}>Activity</div>
+
+            {(form.activityLog || form.activity_log || []).length === 0 ? (
+              <div style={{ fontSize: 13, color: T.faint }}>No activity yet.</div>
+            ) : (
+              <div style={{ borderLeft: `2px solid ${accent}33`, paddingLeft: 16 }}>
+                {(form.activityLog || form.activity_log || []).map((a, i) => (
+                  <div key={i} style={{ position: "relative", marginBottom: 16 }}>
+                    <span style={{
+                      position: "absolute", left: -23, top: 4, width: 10, height: 10,
+                      borderRadius: "50%", background: accent,
+                    }} />
+                    <div style={{ fontSize: 12, color: T.faint }}>
+                      {new Date(a.date).toLocaleString("en-IN", {
+                        day: "2-digit", month: "short", hour: "numeric", minute: "2-digit", hour12: true,
+                      })}
+                    </div>
+                    <div style={{ fontSize: 13.5, fontWeight: 600, color: T.navy }}>{a.message}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
       </div>
 

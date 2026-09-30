@@ -1,5 +1,16 @@
-import { useState, useEffect } from "react";
-import { FaArrowLeft, FaSave, FaPlus, FaTrash, FaEye, FaEyeSlash, FaTimes } from "react-icons/fa";
+import { useState, useEffect, useRef } from "react";
+import { FaArrowLeft, FaSave, FaPlus, FaTrash, FaEye, FaEyeSlash, FaTimes, FaChevronDown } from "react-icons/fa";
+
+function logoStyle(shape, size) {
+  if (shape === "circle") return { width: size, height: size, borderRadius: "50%", objectFit: "cover" };
+  if (shape === "square") return { width: size, height: size, borderRadius: 8, objectFit: "contain" };
+  return { height: size, width: "auto", maxWidth: size * 3, objectFit: "contain" }; // original
+}
+
+// Capitalizes the first letter of every word, e.g. "abi kumar" -> "Abi Kumar"
+function capitalizeWords(str) {
+  return String(str || "").replace(/\b\p{L}/gu, (ch) => ch.toUpperCase());
+}
 
 const spinnerCSS = `
   .no-spinner::-webkit-outer-spin-button,
@@ -16,6 +27,188 @@ const inp = {
   fontSize: "0.875rem", color: "#0f172a", width: "100%", outline: "none",
   backgroundColor: "#fff", fontFamily: "inherit",
 };
+
+// Units for the Qty column. Add or remove entries here anytime.
+const UNIT_OPTIONS = [
+  "Nos", "Pcs", "Kg", "Gram", "Ton", "Litre", "ml",
+  "Meter", "Sq.ft", "Box", "Bag", "Set", "Hour", "Day", "Month",
+];
+
+// ── Custom units (saved in the browser, shared by all item rows) ──────────
+const INVOICE_CUSTOM_UNITS_KEY = "invoice_custom_units";
+const ADD_CUSTOM_UNIT_VALUE = "__add_custom_unit__";
+
+function readCustomUnits() {
+  try {
+    const raw = localStorage.getItem(INVOICE_CUSTOM_UNITS_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed.filter(Boolean) : [];
+  } catch {
+    return [];
+  }
+}
+
+function UnitSelectField({ value, onChange, style }) {
+  const [customUnits, setCustomUnits] = useState(readCustomUnits);
+  const [open, setOpen] = useState(false);
+  const [adding, setAdding] = useState(false);
+  const [draft, setDraft] = useState("");
+  const [pos, setPos] = useState({});
+  const btnRef = useRef(null);
+  const menuRef = useRef(null);
+
+  const options = [...UNIT_OPTIONS, ...customUnits.filter(u => !UNIT_OPTIONS.includes(u))];
+  if (value && !options.includes(value)) options.push(value);
+
+  const closeMenu = () => { setOpen(false); setAdding(false); setDraft(""); };
+
+  // Close on outside click, scroll or resize (the menu is position: fixed)
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e) => {
+      if (btnRef.current?.contains(e.target) || menuRef.current?.contains(e.target)) return;
+      closeMenu();
+    };
+    const onScroll = (e) => {
+      if (menuRef.current?.contains(e.target)) return;
+      closeMenu();
+    };
+    document.addEventListener("mousedown", onDown);
+    window.addEventListener("scroll", onScroll, true);
+    window.addEventListener("resize", closeMenu);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      window.removeEventListener("scroll", onScroll, true);
+      window.removeEventListener("resize", closeMenu);
+    };
+  }, [open]);
+
+  const toggle = () => {
+    if (open) { closeMenu(); return; }
+    const r = btnRef.current.getBoundingClientRect();
+    const left = Math.max(8, Math.min(r.left, window.innerWidth - 240));
+    const openUp = window.innerHeight - r.bottom < 330 && r.top > 330;
+    setPos(openUp ? { left, bottom: window.innerHeight - r.top + 6 } : { left, top: r.bottom + 6 });
+    setOpen(true);
+  };
+
+  const pick = (u) => { onChange(u); closeMenu(); };
+
+  const saveCustom = () => {
+    const name = draft.trim();
+    if (!name) { closeMenu(); return; }
+    const existing = options.find(u => u.toLowerCase() === name.toLowerCase());
+    if (existing) {
+      pick(existing);
+      return;
+    }
+    const next = [...customUnits, name];
+    try { localStorage.setItem(INVOICE_CUSTOM_UNITS_KEY, JSON.stringify(next)); } catch { }
+    setCustomUnits(next);
+    pick(name);
+  };
+
+  const chip = (active) => ({
+    border: active ? "1.5px solid #1F6F5C" : "1.5px solid #e2e8f0",
+    background: active ? "#1F6F5C" : "#fff",
+    color: active ? "#fff" : "#0f172a",
+    borderRadius: 8, padding: "6px 4px", fontSize: "0.78rem", fontWeight: 600,
+    cursor: "pointer", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+  });
+
+  return (
+    <>
+      <button
+        ref={btnRef}
+        type="button"
+        onClick={toggle}
+        style={{
+          ...style,
+          display: "flex", alignItems: "center", justifyContent: "space-between", gap: 4,
+          cursor: "pointer", textAlign: "left",
+          borderColor: open ? "#1F6F5C" : "#e2e8f0",
+        }}
+      >
+        <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: value ? "#0f172a" : "#94a3b8" }}>
+          {value || "-"}
+        </span>
+        <FaChevronDown size={8} color="#64748b" style={{ flexShrink: 0, transform: open ? "rotate(180deg)" : "none", transition: "transform 0.15s" }} />
+      </button>
+
+      {open && (
+        <div
+          ref={menuRef}
+          style={{
+            position: "fixed", zIndex: 10000, width: 228, boxSizing: "border-box",
+            background: "#fff", border: "1px solid #BFDED2", borderRadius: 12,
+            boxShadow: "0 12px 32px rgba(15,23,42,0.18)", padding: 10, ...pos,
+          }}
+        >
+          <div style={{ fontSize: "0.68rem", fontWeight: 700, color: "#94a3b8", letterSpacing: "0.05em", marginBottom: 8 }}>
+            SELECT UNIT
+          </div>
+
+          <div style={{ maxHeight: 200, overflowY: "auto", display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 6 }}>
+            <button type="button" onClick={() => pick("")} style={chip(!value)}>None</button>
+            {options.map(u => (
+              <button
+                key={u}
+                type="button"
+                title={u}
+                onClick={() => pick(u)}
+                style={chip(u === value)}
+                onMouseEnter={e => { if (u !== value) e.currentTarget.style.background = "#E6F1EC"; }}
+                onMouseLeave={e => { if (u !== value) e.currentTarget.style.background = "#fff"; }}
+              >
+                {u}
+              </button>
+            ))}
+          </div>
+
+          {adding ? (
+            <div style={{ display: "flex", gap: 6, marginTop: 10 }}>
+              <input
+                autoFocus
+                type="text"
+                value={draft}
+                maxLength={12}
+                placeholder="e.g. Quintal"
+                onChange={e => setDraft(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === "Enter") { e.preventDefault(); saveCustom(); }
+                  if (e.key === "Escape") { e.preventDefault(); closeMenu(); }
+                }}
+                style={{ flex: 1, minWidth: 0, border: "1.5px solid #1F6F5C", borderRadius: 8, padding: "6px 8px", fontSize: "0.8rem", outline: "none" }}
+              />
+              <button
+                type="button"
+                onClick={saveCustom}
+                style={{ border: "none", borderRadius: 8, padding: "0 12px", background: "#1F6F5C", color: "#fff", fontSize: "0.78rem", fontWeight: 700, cursor: "pointer" }}
+              >
+                Add
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setAdding(true)}
+              style={{
+                display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
+                width: "100%", marginTop: 10, padding: "8px 10px",
+                border: "1.5px dashed #1F6F5C", borderRadius: 8,
+                background: "#E6F1EC", color: "#175646",
+                fontSize: "0.8rem", fontWeight: 700, cursor: "pointer",
+              }}
+            >
+              <FaPlus size={9} /> Add Custom Unit
+            </button>
+          )}
+        </div>
+      )}
+    </>
+  );
+}
+
 
 /* ────────────────────────────────────────────────────────────────────────
  * Company Name dropdown — local to Invoices only (kept separate from the
@@ -278,7 +471,7 @@ function InvoicePreview({ form, isMobile, onClose }) {
               <tr>
                 <td colSpan={3} style={{ border: "1px solid #000", padding: "8px 10px", width: "60%" }}>                  <div className="d-flex align-items-start gap-2">
                   {form.logo
-                    ? <img src={form.logo} alt="Logo" style={{ width: 36, height: 36, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
+                    ? <img src={form.logo} alt="Logo" style={{ ...logoStyle(form.logoShape, 36), flexShrink: 0 }} />
                     : <div style={{ width: 36, height: 36, backgroundColor: "#059669", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
                       <span style={{ color: "#fff", fontWeight: 700, fontSize: "0.55rem" }}>OMS</span>
                     </div>
@@ -315,7 +508,7 @@ function InvoicePreview({ form, isMobile, onClose }) {
                   {form.buyerCompanyName && (
                     <div style={{ fontSize: "0.65rem", fontWeight: 600, color: "#334155" }}>{form.buyerCompanyName}</div>
                   )}
-                  <div style={{ fontSize: "0.65rem", color: "#334155" }}>{form.buyerAddress}</div>
+                  <div style={{ fontSize: "0.65rem", color: "#334155", whiteSpace: "pre-line" }}>{form.buyerAddress}</div>
 
                   <div style={{ fontSize: "0.65rem", color: "#334155" }}>Mobile: {form.buyerMobile}</div>
                   {form.buyerGSTIN && (
@@ -326,8 +519,8 @@ function InvoicePreview({ form, isMobile, onClose }) {
 
               <tr style={{ backgroundColor: "#f1f5f9" }}>
                 {cell("Sl.", { fontWeight: 700, textAlign: "center", width: "6%" })}
-                {cell("Description", { fontWeight: 700, width: "50%" })}
-                {cell("Qty", { fontWeight: 700, textAlign: "center", width: "10%" })}
+                {cell("Description", { fontWeight: 700, width: "46%" })}
+                {cell("Qty", { fontWeight: 700, textAlign: "center", width: "14%" })}
                 {cell("Rate", { fontWeight: 700, textAlign: "right", width: "17%" })}
                 {cell("Amount", { fontWeight: 700, textAlign: "right", width: "17%" })}
               </tr>
@@ -336,7 +529,7 @@ function InvoicePreview({ form, isMobile, onClose }) {
                 <tr key={i}>
                   {cell(item.sl, { textAlign: "center" })}
                   {cell(item.description || <span style={{ color: "#cbd5e1" }}>—</span>)}
-                  {cell(item.qty, { textAlign: "center" })}
+                  {cell(`${item.qty}${item.unit ? " " + item.unit : ""}`, { textAlign: "center", whiteSpace: "nowrap" })}
                   {cell(formatAmount(item.rate), { textAlign: "right" })}
                   {cell(formatAmount(item.amount), { textAlign: "right" })}
                 </tr>
@@ -386,7 +579,7 @@ function InvoicePreview({ form, isMobile, onClose }) {
                     We declare that this invoice shows the actual price of the goods described and that all particulars are true and correct.
                   </div>
                   {form.notes && (
-                    <div style={{ fontSize: "0.58rem", color: "#475569", marginTop: 4, fontStyle: "italic" }}>
+                    <div style={{ fontSize: "0.58rem", color: "#475569", marginTop: 4, fontStyle: "italic", whiteSpace: "pre-line" }}>
                       Note: {form.notes}
                     </div>
                   )}
@@ -414,9 +607,12 @@ function InvoicePreview({ form, isMobile, onClose }) {
   );
 }
 
-export default function InvoiceForm({ invoice, invoices = [], onSave, onBack, companyInfo, onCompanyChange, docSettings, invoiceType = "Final" }) {
+export default function InvoiceForm({ invoice, invoices = [], customers = [], onSave, onBack, companyInfo, onCompanyChange, docSettings, invoiceType = "Final" }) {
   const isEdit = !!invoice;
   const isMobile = useIsMobile(900);
+  const GST_PRESETS = [1, 3, 5, 12, 18, 28];
+  const [customGst, setCustomGst] = useState(false);
+  const [showCustomerList, setShowCustomerList] = useState(false);
   const [showPreview, setShowPreview] = useState(() =>
     typeof window !== "undefined" ? window.innerWidth > 900 : true
   );
@@ -453,7 +649,9 @@ export default function InvoiceForm({ invoice, invoices = [], onSave, onBack, co
     companyAddress: companyInfo?.companyAddress || "",
     companyGSTIN: companyInfo?.gstin || "",
     logo: companyInfo?.logo || null,
-    // Default signature — still fully replaceable via "Change Signature"
+    logoShape: "original",
+    // Default signature
+    //  — still fully replaceable via "Change Signature"
     // below, this just avoids showing an empty "No signature uploaded" box.
     signature: "/signature.png",
     buyerName: "",
@@ -463,7 +661,7 @@ export default function InvoiceForm({ invoice, invoices = [], onSave, onBack, co
     buyerGSTIN: "",
     amountPaid: 0,
     notes: docSettings?.defaultNotes || "",
-    items: [{ sl: 1, description: "", qty: 1, rate: "", amount: 0 }],
+    items: [{ sl: 1, description: "", qty: 1, unit: "Nos", rate: "", amount: 0 }],
   });
   // ✅ Keep the form in sync with whatever invoice was passed in.
   // Without this, if InvoiceForm's instance is reused (not remounted) between
@@ -502,8 +700,11 @@ export default function InvoiceForm({ invoice, invoices = [], onSave, onBack, co
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [docSettings]);
 
-  const updateField = (field, value) =>
+  const NAME_FIELDS = ["buyerName", "buyerCompanyName"];
+  const updateField = (field, value) => {
+    if (NAME_FIELDS.includes(field) && typeof value === "string") value = capitalizeWords(value);
     setForm(prev => ({ ...prev, [field]: value }));
+  };
 
   // Switch between Final/Proforma — swaps the invoice number's prefix
   // (INV-003 ↔ PI-003) live, keeping the numeric part unchanged, and resets
@@ -537,6 +738,18 @@ export default function InvoiceForm({ invoice, invoices = [], onSave, onBack, co
     onCompanyChange({ ...companyInfo, [field]: value });
   };
 
+  const pickCustomer = (c) => {
+    setForm(prev => ({
+      ...prev,
+      buyerName: c.name || "",
+      buyerCompanyName: c.company || "",
+      buyerMobile: c.phone || "",
+      buyerAddress: [c.address, c.city].filter(Boolean).join(", "),
+      buyerGSTIN: c.gst_number || c.gstNumber || c.gstin || "",
+    }));
+    setShowCustomerList(false);
+  };
+
   const updateItem = (i, field, value) => {
     const items = [...form.items];
     items[i] = { ...items[i], [field]: value };
@@ -549,7 +762,7 @@ export default function InvoiceForm({ invoice, invoices = [], onSave, onBack, co
   const addItem = () => {
     setForm(prev => ({
       ...prev,
-      items: [...prev.items, { sl: prev.items.length + 1, description: "", qty: 1, rate: "", amount: 0 }],
+      items: [...prev.items, { sl: prev.items.length + 1, description: "", qty: 1, unit: "Nos", rate: "", amount: 0 }],
     }));
   };
 
@@ -705,7 +918,7 @@ export default function InvoiceForm({ invoice, invoices = [], onSave, onBack, co
 
                   <div className="d-flex align-items-center gap-3">
                     {form.logo
-                      ? <img src={form.logo} alt="Logo" style={{ width: 48, height: 48, borderRadius: "50%", objectFit: "cover", border: "2px solid #e2e8f0" }} />
+                      ? <img src={form.logo} alt="Logo" style={logoStyle(form.logoShape, 48)} />
                       : <div style={{ width: 48, height: 48, backgroundColor: "#059669", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center" }}>
                         <span style={{ color: "#fff", fontWeight: 700, fontSize: "0.65rem" }}>OMS</span>
                       </div>
@@ -737,6 +950,14 @@ export default function InvoiceForm({ invoice, invoices = [], onSave, onBack, co
                         </button>
                       )}
                       <div style={{ fontSize: "0.68rem", color: "#94a3b8", marginTop: 2 }}>PNG, JPG up to 2MB</div>
+                      {form.logo && (
+                        <select value={form.logoShape || "original"} onChange={(e) => updateField("logoShape", e.target.value)}
+                          style={{ marginTop: 6, fontSize: "0.75rem", border: "1px solid #e2e8f0", borderRadius: 6, padding: "3px 8px", cursor: "pointer" }}>
+                          <option value="original">Original</option>
+                          <option value="square">Square</option>
+                          <option value="circle">Circle</option>
+                        </select>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -755,8 +976,9 @@ export default function InvoiceForm({ invoice, invoices = [], onSave, onBack, co
                   <label style={{ fontSize: "0.75rem", fontWeight: 600, color: "#64748b", display: "block", marginBottom: 4 }}>Company GSTIN</label>
                   <input
                     value={form.companyGSTIN || ""}
-                    onChange={e => updateField("companyGSTIN", e.target.value)}
-                    style={inp}
+                    maxLength={15}
+                    onChange={e => updateField("companyGSTIN", e.target.value.toUpperCase())}
+                    style={{ ...inp, textTransform: "uppercase" }}
                     placeholder="Enter GSTIN"
                   />
                 </div>
@@ -813,13 +1035,61 @@ export default function InvoiceForm({ invoice, invoices = [], onSave, onBack, co
                 {form.gstType !== "No GST" && (
                   <div className="col-12 col-md-4">
                     <label style={{ fontSize: "0.75rem", fontWeight: 600, color: "#64748b", display: "block", marginBottom: 4 }}>GST %</label>
-                    <select value={form.gstPercent} onChange={e => updateField("gstPercent", Number(e.target.value))} style={inp}>                      <option value={1}>1%</option>
-                      <option value={3}>3%</option>
-                      <option value={5}>5%</option>
-                      <option value={12}>12%</option>
-                      <option value={18}>18%</option>
-                      <option value={28}>28%</option>
-                    </select>
+
+                    {customGst || !GST_PRESETS.includes(Number(form.gstPercent)) ? (
+                      <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                        <div style={{ position: "relative", flex: 1 }}>
+                          <input
+                            autoFocus
+                            type="number"
+                            className="no-spinner"
+                            min="0"
+                            max="100"
+                            step="0.01"
+                            value={form.gstPercent}
+                            onChange={e => { setCustomGst(true); updateField("gstPercent", e.target.value); }}
+                            placeholder="e.g. 2.5"
+                            style={{ ...inp, paddingRight: 28 }}
+                          />
+                          <span style={{
+                            position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)",
+                            color: "#64748b", fontSize: "0.875rem", pointerEvents: "none",
+                          }}>%</span>
+                        </div>
+                        <button
+                          type="button"
+                          title="Back to list"
+                          onClick={() => { setCustomGst(false); updateField("gstPercent", 18); }}
+                          style={{
+                            border: "1px solid #e2e8f0", background: "#fff", color: "#64748b",
+                            borderRadius: 8, width: 38, height: 38, cursor: "pointer", flexShrink: 0,
+                          }}
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    ) : (
+                      <select
+                        value={form.gstPercent}
+                        onChange={e => {
+                          if (e.target.value === "custom") {
+                            setCustomGst(true);
+                            updateField("gstPercent", "");
+                          } else {
+                            updateField("gstPercent", Number(e.target.value));
+                          }
+                        }}
+                        style={inp}
+                      >
+                        <option value={1}>1%</option>
+                        <option value={3}>3%</option>
+                        <option value={5}>5%</option>
+                        <option value={12}>12%</option>
+                        <option value={18}>18%</option>
+                        <option value={28}>28%</option>
+                        <option value="custom">Custom</option>
+                      </select>
+                    )}
                   </div>
                 )}
                 <div className="col-12 col-md-4">
@@ -835,7 +1105,73 @@ export default function InvoiceForm({ invoice, invoices = [], onSave, onBack, co
                 </div>
                 <div className="col-12 col-md-6">
                   <label style={{ fontSize: "0.75rem", fontWeight: 600, color: "#64748b", display: "block", marginBottom: 4 }}>Buyer Name *</label>
-                  <input name="buyerName" autoComplete="name" value={form.buyerName} onChange={e => updateField("buyerName", e.target.value)} style={inp} placeholder="Contact Person Name" />              </div>
+                  <div style={{ position: "relative" }}>
+                    <input
+                      name="buyerName"
+                      autoComplete="off"
+                      value={form.buyerName || ""}
+                      onFocus={() => setShowCustomerList(true)}
+                      onClick={() => setShowCustomerList(true)}
+                      onBlur={() => setShowCustomerList(false)}
+                      onChange={e => { updateField("buyerName", e.target.value); setShowCustomerList(true); }}
+                      style={{ ...inp, paddingRight: 34 }}
+                      placeholder="Select or type customer name"
+                    />
+
+                    {form.buyerName && (
+                      <button
+                        type="button"
+                        title="Clear customer"
+                        onMouseDown={e => {
+                          e.preventDefault();
+                          setForm(prev => ({
+                            ...prev,
+                            buyerName: "",
+                            buyerCompanyName: "",
+                            buyerMobile: "",
+                            buyerAddress: "",
+                            buyerGSTIN: "",
+                          }));
+                          setShowCustomerList(true);
+                        }}
+                        style={{
+                          position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)",
+                          border: "none", background: "transparent", color: "#94a3b8",
+                          cursor: "pointer", fontSize: "0.9rem", padding: 4,
+                        }}
+                      >
+                        ✕
+                      </button>
+                    )}
+
+                    {showCustomerList && (
+                      <div style={{
+                        position: "absolute", top: "100%", left: 0, right: 0, zIndex: 50,
+                        marginTop: 4, background: "#fff", border: "1px solid #e2e8f0",
+                        borderRadius: 10, boxShadow: "0 8px 24px rgba(15,23,42,0.15)",
+                        maxHeight: 220, overflowY: "auto",
+                      }}>
+                        {customers
+                          .filter(c => {
+                            const q = (form.buyerName || "").toLowerCase();
+                            return !q || (c.name || "").toLowerCase().includes(q) || (c.company || "").toLowerCase().includes(q);
+                          })
+                          .map(c => (
+                            <div
+                              key={c.id}
+                              onMouseDown={e => { e.preventDefault(); pickCustomer(c); }}
+                              style={{ padding: "8px 12px", cursor: "pointer", borderBottom: "1px solid #f1f5f9" }}
+                              onMouseEnter={e => e.currentTarget.style.background = "#E6F1EC"}
+                              onMouseLeave={e => e.currentTarget.style.background = "#fff"}
+                            >
+                              <div style={{ fontWeight: 600, fontSize: "0.85rem", color: "#0f172a" }}>{c.name}</div>
+                              {c.company && <div style={{ fontSize: "0.75rem", color: "#64748b" }}>{c.company}</div>}
+                            </div>
+                          ))}
+                      </div>
+                    )}
+                  </div>   
+                       </div>
                 <div className="col-12 col-md-6">
                   <label style={{ fontSize: "0.75rem", fontWeight: 600, color: "#64748b", display: "block", marginBottom: 4 }}>Company Name</label>
                   <input name="buyerCompanyName" autoComplete="organization" value={form.buyerCompanyName || ""} onChange={e => updateField("buyerCompanyName", e.target.value)} style={inp} placeholder="Client Company Name" />              </div>
@@ -847,7 +1183,7 @@ export default function InvoiceForm({ invoice, invoices = [], onSave, onBack, co
                   <textarea name="buyerAddress" autoComplete="street-address" rows={2} value={form.buyerAddress} onChange={e => updateField("buyerAddress", e.target.value)} style={{ ...inp, resize: "vertical" }} placeholder="Full address..." />              </div>
                 <div className="col-12 col-md-4">
                   <label style={{ fontSize: "0.75rem", fontWeight: 600, color: "#64748b", display: "block", marginBottom: 4 }}>GSTIN (optional)</label>
-                  <input name="buyerGSTIN" autoComplete="off" value={form.buyerGSTIN} onChange={e => updateField("buyerGSTIN", e.target.value)} style={inp} placeholder="33AABCA1234B1ZX" />              </div>
+                  <input name="buyerGSTIN" autoComplete="off" maxLength={15} value={form.buyerGSTIN} onChange={e => updateField("buyerGSTIN", e.target.value.toUpperCase())} style={{ ...inp, textTransform: "uppercase" }} placeholder="33AABCA1234B1ZX" />              </div>
               </div>
 
               {/* Items Table */}
@@ -871,15 +1207,23 @@ export default function InvoiceForm({ invoice, invoices = [], onSave, onBack, co
                         <textarea rows={2} value={item.description} onChange={e => updateItem(i, "description", e.target.value)}
                           style={{ ...inp, resize: "vertical", fontSize: "0.82rem", marginBottom: 8 }} placeholder="Service description..." />
                         <div className="row g-2">
-                          <div className="col-4">
+                          <div className="col-6">
                             <label style={{ fontSize: "0.72rem", fontWeight: 600, color: "#64748b", display: "block", marginBottom: 4 }}>Qty</label>
                             <input type="number" className="no-spinner" value={item.qty} onChange={e => updateItem(i, "qty", e.target.value)} placeholder="1" style={{ ...inp, fontSize: "0.82rem" }} />
                           </div>
-                          <div className="col-4">
+                          <div className="col-6">
+                            <label style={{ fontSize: "0.72rem", fontWeight: 600, color: "#64748b", display: "block", marginBottom: 4 }}>Unit</label>
+                            <UnitSelectField
+                              value={item.unit ?? ""}
+                              onChange={val => updateItem(i, "unit", val)}
+                              style={{ ...inp, fontSize: "0.82rem" }}
+                            />
+                          </div>
+                          <div className="col-6">
                             <label style={{ fontSize: "0.72rem", fontWeight: 600, color: "#64748b", display: "block", marginBottom: 4 }}>Rate</label>
                             <input type="number" className="no-spinner" value={item.rate} onChange={e => updateItem(i, "rate", e.target.value)} placeholder="0" style={{ ...inp, fontSize: "0.82rem" }} />
                           </div>
-                          <div className="col-4">
+                          <div className="col-6">
                             <label style={{ fontSize: "0.72rem", fontWeight: 600, color: "#64748b", display: "block", marginBottom: 4 }}>Amount</label>
                             <div className="fw-semibold" style={{ fontSize: "0.85rem", color: "#0f172a", padding: "8px 0" }}>
                               ₹{Number(item.amount).toLocaleString()}
@@ -895,7 +1239,7 @@ export default function InvoiceForm({ invoice, invoices = [], onSave, onBack, co
                     <div className="row g-0 px-3 py-2" style={{ backgroundColor: "#0f172a" }}>
                       {["Sl.", "Description of Services", "Qty", "Rate (₹)", "Amount (₹)", ""].map((h, i) => (
                         <div key={i}
-                          className={i === 1 ? "col-5" : i === 5 ? "col-1" : "col"}
+                          className={i === 1 ? "col-4" : i === 2 ? "col-2" : i === 5 ? "col-1" : "col"}
                           style={{ color: "#94a3b8", fontSize: "0.72rem", fontWeight: 700, letterSpacing: "0.05em" }}>
                           {h}
                         </div>
@@ -905,12 +1249,17 @@ export default function InvoiceForm({ invoice, invoices = [], onSave, onBack, co
                     {form.items.map((item, i) => (
                       <div key={i} className="row g-0 px-3 py-2 align-items-center" style={{ borderTop: "1px solid #f1f5f9" }}>
                         <div className="col" style={{ fontSize: "0.82rem", color: "#94a3b8" }}>{item.sl}</div>
-                        <div className="col-5 pe-2">
+                        <div className="col-4 pe-2">
                           <textarea rows={2} value={item.description} onChange={e => updateItem(i, "description", e.target.value)}
                             style={{ ...inp, resize: "vertical", fontSize: "0.82rem" }} placeholder="Service description..." />
                         </div>
-                        <div className="col pe-2">
-                          <input type="number" className="no-spinner" value={item.qty} onChange={e => updateItem(i, "qty", e.target.value)} placeholder="1" style={{ ...inp, fontSize: "0.82rem" }} />
+                        <div className="col-2 pe-2 d-flex gap-1">
+                          <input type="number" className="no-spinner" value={item.qty} onChange={e => updateItem(i, "qty", e.target.value)} placeholder="1" style={{ ...inp, fontSize: "0.82rem", padding: "8px 6px", minWidth: 0 }} />
+                          <UnitSelectField
+                            value={item.unit ?? ""}
+                            onChange={val => updateItem(i, "unit", val)}
+                            style={{ ...inp, fontSize: "0.78rem", padding: "8px 6px", width: 62, flexShrink: 0 }}
+                          />
                         </div>
                         <div className="col pe-2">
                           <input type="number" className="no-spinner" value={item.rate} onChange={e => updateItem(i, "rate", e.target.value)} placeholder="0" style={{ ...inp, fontSize: "0.82rem" }} />                        </div>

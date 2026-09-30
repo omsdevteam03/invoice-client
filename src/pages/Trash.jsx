@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
-import { useSearchParams } from "react-router-dom";
-import { FaTrash, FaUndo, FaTimes, FaExclamationTriangle } from "react-icons/fa";
+import { useSearchParams, useNavigate } from "react-router-dom";
+import { FaTrash, FaUndo, FaTimes, FaExclamationTriangle, FaArrowLeft } from "react-icons/fa";
 
 const API_BASE = import.meta.env.VITE_API_URL;
 const TABS = [
@@ -61,6 +61,7 @@ function ConfirmPermanentDeleteModal({ show, onCancel, onConfirm, itemLabel }) {
 }
 
 export default function Trash() {
+    const navigate = useNavigate();
     const [searchParams] = useSearchParams();
     const initialTab = searchParams.get("tab") || "customers";
     const [activeTab, setActiveTab] = useState(initialTab);
@@ -139,9 +140,23 @@ export default function Trash() {
     const currentItems = items[activeEndpoint] || [];
 
     return (
-        <div style={{ maxWidth: 900, margin: "0 auto", padding: "24px 16px", fontFamily: "'Inter', sans-serif" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
-                <FaTrash color={T.slate} />
+<div style={{ maxWidth: 900, margin: "0 auto", padding: "24px 16px", fontFamily: "'Inter', sans-serif" }}>
+    <button
+        onClick={() => navigate(-1)}
+        style={{
+            display: "inline-flex", alignItems: "center", gap: 8,
+            border: `1.5px solid ${T.border}`, backgroundColor: "#fff", color: T.slate,
+            borderRadius: 10, padding: "7px 14px", fontWeight: 600, fontSize: 13.5,
+            cursor: "pointer", marginBottom: 16,
+        }}
+        onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = T.bgSoft; }}
+        onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = "#fff"; }}
+    >
+        <FaArrowLeft size={12} /> Back
+    </button>
+
+    <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
+        <FaTrash color={T.slate} />
                 <h2 style={{ fontWeight: 700, color: T.navy, margin: 0 }}>Trash</h2>
             </div>
             <p style={{ color: T.muted, fontSize: 13.5, marginBottom: 20 }}>

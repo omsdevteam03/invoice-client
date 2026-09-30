@@ -116,14 +116,25 @@ const styles = `
 .qd-classic .footer-bar{ margin-top:24px; padding-top:14px; border-top:1px solid var(--gold); display:flex; justify-content:space-between; flex-wrap:wrap; gap:6px; font-size:11px; color:var(--muted); break-inside:avoid; page-break-inside:avoid; }
 .qd-classic .terms-tpl-row{ display:flex; flex-wrap:wrap; gap:8px; margin-bottom:10px; }
 .qd-classic .terms-tpl-row button{ font-family:inherit; }
+.qd-classic .page-frame{ width:100%; border-collapse:collapse; }
+.qd-classic .page-frame > thead > tr > td,
+.qd-classic .page-frame > tbody > tr > td,
+.qd-classic .page-frame > tfoot > tr > td{ padding:0; border:none; }
+
 @media print {
-  @page{ size: A4; margin: 12mm; }
+  @page{ size: A4; margin: 0; }
   .qd-classic{ background:#fff; padding:0; margin:0; }
-  .qd-classic .sheet{ border:none; padding:24px 32px; }
+  .qd-classic .sheet{ border:none; padding:0 15mm; max-width:100%; margin:0; }
   .qd-classic .sign{ margin-top:36px; }
   .qd-classic .footer-bar{ page-break-after:avoid; }
+  .qd-classic .sign-footer-group{ break-inside:avoid; page-break-inside:avoid; }
+    .qd-classic .page-frame > thead > tr > td,
+  .qd-classic .page-frame > tfoot > tr > td{ height:12mm; }
+  .qd-classic .page-frame > thead{ display:table-header-group; }
+  .qd-classic .page-frame > tfoot{ display:table-footer-group; }
   .qd-classic table thead{ display:table-header-group; }
   .qd-classic table tr{ break-inside:avoid; page-break-inside:avoid; }
+  .qd-classic .page-frame > tbody > tr{ break-inside:auto; page-break-inside:auto; }
 }`;
 
 export default function ClassicLayout({
@@ -159,21 +170,25 @@ export default function ClassicLayout({
     onChange("company", typedName);
   };
   return (
-    <div className="qd-classic">
+      <div className="qd-classic">
       <style>{styles}</style>
       <div className="sheet">
+        <table className="page-frame">
+          <thead><tr><td /></tr></thead>
+          <tbody><tr><td>
 
         <div className="crest">
-          <LogoEdit
-            editMode={editMode} logo={quotation.logo} onUpload={onLogoUpload} onRemove={onRemoveLogo}
-            inputId="classic-logo"
-            boxStyle={{
-              width: 76, height: 76, borderRadius: "50%",
-              border: "none",
-              backgroundColor: "transparent",
-            }}
-            fallback={null}
-          />
+         <LogoEdit
+  editMode={editMode} logo={quotation.logo} onUpload={onLogoUpload} onRemove={onRemoveLogo}
+  inputId="classic-logo"
+  boxStyle={{
+    width: 76, height: 76,
+    border: "none",
+    backgroundColor: "transparent",
+  }}
+  shape={quotation.logoShape} onShapeChange={(s) => onChange("logoShape", s)}
+  fallback={null}
+/>
           <h2>
             <CompanySelect editMode={editMode} value={quotation.issuerName} onChange={(val) => onChange("issuerName", val)}
               placeholder="Your Company Name" style={{ textAlign: "center" }} />
@@ -195,8 +210,12 @@ export default function ClassicLayout({
           </p>
         )}
 
-        <div className="reference-row">
-          <EditText editMode={editMode} value={quotation.id} onChange={(val) => onChange("id", val)} placeholder="Quotation No." />
+             <div className="reference-row">
+          <span>
+            {quotation.quotationNumber
+              ? quotation.quotationNumber
+              : <span style={{ opacity: 0.6, fontStyle: "italic" }}>Draft — number assigned on send</span>}
+          </span>
           <EditText editMode={editMode} type="date" value={quotation.date} onChange={(val) => onChange("date", val)} />
         </div>
 
@@ -394,7 +413,7 @@ export default function ClassicLayout({
               placeholder="Additional notes..." viewRender={(val) => <RichOrPlainView value={val} as="paragraph" />} />
           </div>
         )}
-
+        <div className="sign-footer-group">
         <div className="sign">
           <div>
             <div className="space"></div>
@@ -419,13 +438,17 @@ export default function ClassicLayout({
             <EditText editMode value={quotation.issuerPhone} onChange={(val) => onChange("issuerPhone", val)} placeholder="Phone" />
           ) : (
             v.issuerPhone && (
-              <span>
+                          <span>
                 Phone: {v.issuerPhone.trim().startsWith("+") ? v.issuerPhone : `+91 ${v.issuerPhone}`}
               </span>
-            )
+                  )
           )}
         </div>
+        </div>
 
+          </td></tr></tbody>
+          <tfoot><tr><td /></tr></tfoot>
+        </table>
       </div>
     </div>
   );

@@ -97,15 +97,21 @@ const styles = `
 .qd-minimal .footer-bar{ margin-top:10px; padding-top:10px; border-top:1px solid var(--line); display:flex; justify-content:space-between; flex-wrap:wrap; gap:16px; font-size:11.5px; color:var(--faint); }
 
 @media print {
-  @page{ size: A4; margin: 15mm 15mm 15mm 15mm; }
+  @page{ size: A4; margin: 0; }
   html, body{ margin:0 !important; padding:0 !important; }
   .qd-minimal{ background:#fff; padding:0; margin:0; }
   .qd-minimal .sheet{ max-width:100%; margin:0; }
   .qd-minimal .page-frame{ width:100%; }
   .qd-minimal .page-frame > tbody{ display:table-row-group; }
-  .qd-minimal .page-frame > tbody > tr > td{ padding:0; }
+  .qd-minimal .page-frame > tbody > tr > td{ padding:0 15mm; }
+  .qd-minimal .page-frame > thead > tr > td,
+  .qd-minimal .page-frame > tfoot > tr > td{ height:12mm; padding:0; border:none; }
+  .qd-minimal .page-frame > thead{ display:table-header-group; }
+  .qd-minimal .page-frame > tfoot{ display:table-footer-group; }
   .qd-minimal table thead{ display:table-header-group; }
   .qd-minimal table tr{ break-inside:avoid; page-break-inside:avoid; }
+  .qd-minimal .page-frame > tbody > tr{ break-inside:auto; page-break-inside:auto; }
+  .qd-minimal .sign-footer-group{ break-inside:avoid; page-break-inside:avoid; }
 }
 `;
 
@@ -165,7 +171,8 @@ export default function MinimalLayout({ quotation, companyInfo, customers = [], 
     <div className="qd-minimal">
       <style>{styles}</style>
       <div className="sheet">
-        <table className="page-frame">
+             <table className="page-frame">
+          <thead><tr><td /></tr></thead>
           <tbody>
             <tr>
               <td>
@@ -173,7 +180,8 @@ export default function MinimalLayout({ quotation, companyInfo, customers = [], 
                   <div className="brand">
                     <LogoEdit
                       editMode={editMode} logo={quotation.logo} onUpload={onLogoUpload} onRemove={onRemoveLogo}
-                      inputId="minimal-logo" boxStyle={{ height: 80, width: 80 }} fallback={null}
+                      inputId="minimal-logo" boxStyle={{ height: 80, width: 80 }}
+shape={quotation.logoShape} onShapeChange={(s) => onChange("logoShape", s)} fallback={null}
                     />
                     <div>
                       {editMode ? (
@@ -192,8 +200,12 @@ export default function MinimalLayout({ quotation, companyInfo, customers = [], 
                   <div className="subline">
                     <EditText editMode={editMode} value={quotation.projectTitle} onChange={(val) => onChange("projectTitle", val)} placeholder="Project / Quotation Title" />
                   </div>
-                  <div className="doc-meta">
-                    <strong><EditText editMode={editMode} value={quotation.id} onChange={(val) => onChange("id", val)} placeholder="No." /></strong>
+                                  <div className="doc-meta">
+                    <strong>
+                      {quotation.quotationNumber
+                        ? quotation.quotationNumber
+                        : <span style={{ opacity: 0.6, fontStyle: "italic" }}>Draft — number assigned on send</span>}
+                    </strong>
                     <span>•</span>
                     <EditText
                       editMode={editMode}
@@ -449,6 +461,7 @@ gstMode={quotation.gstMode || (quotation.includeGst === true ? "with" : "without
                   </div>
                 )}
 
+                <div className="sign-footer-group">
                 <div className="sign">
                   <div>
                     <div className="sig-box"></div>
@@ -480,12 +493,14 @@ gstMode={quotation.gstMode || (quotation.includeGst === true ? "with" : "without
                       <span>
                         Phone: {v.issuerPhone.trim().startsWith("+") ? v.issuerPhone : `+91 ${v.issuerPhone}`}
                       </span>
-                    )
+                                      )
                   )}
+                </div>
                 </div>
               </td>
             </tr>
           </tbody>
+          <tfoot><tr><td /></tr></tfoot>
         </table>
       </div>
     </div>

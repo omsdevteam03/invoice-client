@@ -1,7 +1,5 @@
 import { useState } from "react";
-import { FaMoneyBillWave, FaTimes } from "react-icons/fa";
-
-const paymentMethods = ["UPI", "Cash", "Bank Transfer", "Card", "Cheque", "Other"];
+import { FaMoneyBillWave, FaTimes, FaHistory } from "react-icons/fa";
 
 // Same total/due calculation used in InvoiceList — kept local here so this
 // modal doesn't depend on InvoiceList's internals.
@@ -14,6 +12,13 @@ function calcTotals(invoice) {
   return { total, due };
 }
 
+function formatDate(dateStr) {
+  if (!dateStr) return "—";
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return dateStr;
+  return d.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+}
+
 /**
  * ReceivePaymentModal
  *
@@ -22,21 +27,25 @@ function calcTotals(invoice) {
  *   hidden by rendering `null` when this is falsy, so parents can do
  *   `{paymentInvoice && <ReceivePaymentModal invoice={paymentInvoice} .../>}`
  *   or just always render it and pass invoice={null} when closed)
+ *   invoice.payments (optional): array of past payments, each shaped like
+ *   { date, amount } — used to render Payment History.
  * - onClose: () => void — called on Cancel / backdrop click / X button
  * - onSave: (invoice, paymentData) => void — called with the invoice and
- *   { amount, method, referenceNo } when "Save Payment" is clicked
+ *   { amount, date } when "Save Payment" is clicked
  */
 export default function ReceivePaymentModal({ invoice, onClose, onSave }) {
   const [amount, setAmount] = useState("");
-  const [method, setMethod] = useState("UPI");
-  const [referenceNo, setReferenceNo] = useState("");
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+  const [showHistory, setShowHistory] = useState(true);
 
   if (!invoice) return null;
 
   const { total, due } = calcTotals(invoice);
   const alreadyPaid = invoice.amountPaid || 0;
+  const payments = [...(invoice.payments || [])].sort(
+    (a, b) => new Date(b.date) - new Date(a.date)
+  );
 
   const handleSave = async () => {
     const amt = Number(amount);
@@ -51,11 +60,9 @@ export default function ReceivePaymentModal({ invoice, onClose, onSave }) {
     setError("");
     setSaving(true);
     try {
-      await onSave(invoice, { amount: amt, method, referenceNo });
+      await onSave(invoice, { amount: amt, date: new Date().toISOString() });
       // Reset local form state for next time the modal opens
       setAmount("");
-      setMethod("UPI");
-      setReferenceNo("");
     } finally {
       setSaving(false);
     }
@@ -107,6 +114,53 @@ export default function ReceivePaymentModal({ invoice, onClose, onSave }) {
             <SummaryRow label="Remaining" value={`₹${due.toLocaleString()}`} bold last />
           </div>
 
+          {/* Payment History */}
+          {payments.length > 0 && (
+            <div style={{ marginBottom: 16 }}>
+              <button
+                onClick={() => setShowHistory(s => !s)}
+                className="d-flex align-items-center justify-content-between border-0 w-100"
+                style={{ background: "transparent", padding: "0 0 8px 0", cursor: "pointer" }}
+              >
+                <div className="d-flex align-items-center gap-2">
+                  <FaHistory size={11} color="#64748b" />
+                  <span style={{ fontSize: "0.78rem", fontWeight: 700, color: "#334155" }}>
+                    Payment History ({payments.length})
+                  </span>
+                </div>
+                <span style={{ fontSize: "0.75rem", color: "#94a3b8" }}>
+                  {showHistory ? "Hide" : "Show"}
+                </span>
+              </button>
+
+              {showHistory && (
+                <div
+                  style={{
+                    border: "1px solid #e2e8f0",
+                    borderRadius: 10,
+                    maxHeight: 160,
+                    overflowY: "auto",
+                  }}
+                >
+                  {payments.map((p, i) => (
+                    <div
+                      key={i}
+                      className="d-flex justify-content-between align-items-center px-3 py-2"
+                      style={{ borderBottom: i === payments.length - 1 ? "none" : "1px solid #f1f5f9" }}
+                    >
+                      <div style={{ fontSize: "0.8rem", fontWeight: 600, color: "#0f172a" }}>
+                        {formatDate(p.date)}
+                      </div>
+                      <div style={{ fontSize: "0.85rem", fontWeight: 700, color: "#1F6F5C", whiteSpace: "nowrap" }}>
+                        ₹{Number(p.amount).toLocaleString()}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Payment Amount */}
           <Field label="Payment Amount">
             <input
@@ -118,24 +172,6 @@ export default function ReceivePaymentModal({ invoice, onClose, onSave }) {
               max={due}
               style={inputStyle}
               autoFocus
-            />
-          </Field>
-
-          {/* Payment Method */}
-          <Field label="Payment Method">
-            <select value={method} onChange={e => setMethod(e.target.value)} style={inputStyle}>
-              {paymentMethods.map(m => <option key={m} value={m}>{m}</option>)}
-            </select>
-          </Field>
-
-          {/* Reference No. */}
-          <Field label="Reference No." optional>
-            <input
-              type="text"
-              value={referenceNo}
-              onChange={e => setReferenceNo(e.target.value)}
-              placeholder="Transaction / UTR / cheque no."
-              style={inputStyle}
             />
           </Field>
 

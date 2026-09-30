@@ -19,31 +19,42 @@ const SCOPE_TEMPLATES = [
 const styles = `
 .qd-creative{
 --coral:#ff6f59; --teal:#2a9d8f; --cream:#ffffff; --ink:#33302c; --muted:#8a8378; --card:#ffffff; --lineclr:#33302c;
-  background:#ffffff; font-family:'Poppins','Segoe UI',Arial,sans-serif; color:var(--ink); padding:40px 20px;
+  background:#ffffff; font-family:'Poppins','Segoe UI',Arial,sans-serif; color:var(--ink); padding:0;
   -webkit-print-color-adjust: exact;
   print-color-adjust: exact;
   color-adjust: exact;
 }
-.qd-creative .sheet{ max-width:780px; margin:0 auto; background:var(--cream); border-radius:0 0 24px 24px; overflow:hidden; box-shadow:0 8px 30px rgba(255,111,89,0.12); }
-.qd-creative .page-frame{ width:100%; border-collapse:collapse; }
+.qd-creative .sheet{ position:relative; max-width:780px; margin:0 auto; background:var(--cream); border-radius:0; overflow:hidden; box-shadow:none; }.qd-creative .page-frame{ width:100%; border-collapse:collapse; }
 .qd-creative .page-frame > thead > tr > td,
 .qd-creative .page-frame > tbody > tr > td{ padding:0; }
 .qd-creative .inner{ padding:28px 48px 44px; }
 .qd-creative .header{
-  display:flex; justify-content:space-between; align-items:center;
+  position:relative; overflow:hidden;
+  display:flex; justify-content:flex-start; align-items:center;
   flex-wrap:wrap; gap:20px;
-  padding:30px 48px;
-  background:#b8481f;
+  padding:34px 48px;
+  min-height:150px;
+  background:#ffffff;
+}
+.qd-creative .header-deco{ position:absolute; top:0; right:0; width:300px; height:150px; pointer-events:none; }
+.qd-creative .d-accent{ fill:var(--accent); }
+.qd-creative .d-light{ fill:var(--accent); opacity:.5; }
+.qd-creative .d-gray{ fill:#c9ccd1; }
+.qd-creative .d-dark{ fill:#2b2f36; }
+.qd-creative .header-brand{ position:relative; z-index:1; max-width:calc(100% - 260px); }
+@media (max-width:600px){
+  .qd-creative .header-brand{ max-width:100%; }
+  .qd-creative .header-deco{ opacity:.25; }
 }
 .qd-creative .header-title h1{ font-size:34px; font-weight:800; margin:0; color:var(--coral); letter-spacing:2px; text-transform:uppercase; }
 .qd-creative .header-title .subline{ font-size:16px; font-weight:600; color:#b8481f; margin:16px 0 4px; text-align:center; }
 .qd-creative .header-title .quote-meta{ font-size:12.5px; color:var(--muted); text-align:center; margin:0 0 12px; }
 .qd-creative .header-brand{ display:flex; align-items:center; gap:12px; }
 .qd-creative .header-brand .brand-text{ text-align:left; }.qd-creative .header-brand .brand-label{ display:none; }
-.qd-creative .header-brand h3{ margin:0; font-size:22px; font-weight:700; color:#ffffff; }
-.qd-creative .header-brand span{ color:#ffffff; }
-.qd-creative .header-brand .logo{ width:72px; height:72px; border-radius:10px; display:flex; align-items:center; justify-content:center; color:#fff; font-weight:700; overflow:hidden; flex-shrink:0; }.qd-creative .header-brand .logo.no-logo{ background:var(--coral); }
-.qd-creative .header-brand .logo img{ width:100%; height:100%; object-fit:cover; }
+.qd-creative .header-brand h3{ margin:0; font-size:22px; font-weight:700; color:#1f2937; }
+.qd-creative .header-brand span{ color:#6b7280; font-size:13px; }
+
+.qd-creative .header-brand .logo{ min-width:72px; height:72px; display:flex; align-items:center; justify-content:center; color:#fff; font-weight:700; flex-shrink:0; }.qd-creative .header-brand .logo.no-logo{ background:var(--coral); border-radius:10px; }
 
 .qd-creative .info-table{ background:transparent; border-radius:0; box-shadow:none; margin-bottom:24px; break-inside:avoid; overflow:hidden; }.qd-creative .info-row{ display:flex; }
 .qd-creative .info-row + .info-row{ border-top:1px solid var(--lineclr); }
@@ -94,14 +105,23 @@ const styles = `
 
 .qd-creative .footer-bar{ margin-top:20px; display:flex; justify-content:flex-end; flex-wrap:wrap; gap:16px; font-size:12px; color:var(--muted); }
 
+.qd-creative .page-frame > thead > tr > td,
+.qd-creative .page-frame > tbody > tr > td,
+.qd-creative .page-frame > tfoot > tr > td{ padding:0; border:none; }
+
 @media print {
-@page{ size: A4; margin: 5mm; }
+  @page{ size: A4; margin: 0; }
   .qd-creative .page-frame > tbody{ display:table-row-group; }
+  .qd-creative .page-frame > thead > tr > td{ height:8mm; }
+  .qd-creative .page-frame > tfoot > tr > td{ height:12mm; }
+  .qd-creative .page-frame > thead{ display:table-header-group; }
+  .qd-creative .page-frame > tfoot{ display:table-footer-group; }
   .qd-creative .sign{ margin-top:20px !important; }
   .qd-creative .sign-footer-group{ page-break-inside:avoid; break-inside:avoid; }
   .qd-creative .info-table{ page-break-inside: avoid; }
   .qd-creative table thead{ display:table-header-group; }
   .qd-creative table tr{ break-inside:avoid; page-break-inside:avoid; }
+  .qd-creative .page-frame > tbody > tr{ break-inside:auto; page-break-inside:auto; }
 }
 `;
 export default function CreativeLayout({
@@ -136,44 +156,58 @@ export default function CreativeLayout({
   };
 
   return (
-    <div className="qd-creative">
+    <div className="qd-creative" style={{ "--accent": accent }}>
       <style>{styles}</style>
       <div className="sheet">
+        <div className="header">
+          <svg className="header-deco" viewBox="0 0 300 150" aria-hidden="true">
+            <polygon className="d-gray" points="95,0 185,0 95,90" />
+            <polygon className="d-dark" points="50,0 140,0 95,48" />
+            <polygon className="d-accent" points="150,0 300,0 300,120" />
+            <polygon className="d-light" points="175,45 175,150 265,150" />
+          </svg>
+          <div className="header-brand">
+            <div className={`logo ${quotation.logo ? "has-logo" : (editMode ? "no-logo" : "")}`}>
+              <LogoEdit
+                editMode={editMode} logo={quotation.logo} onUpload={onLogoUpload} onRemove={onRemoveLogo}
+                inputId="creative-logo" boxStyle={{ width: 72, height: 72 }}
+shape={quotation.logoShape} onShapeChange={(s) => onChange("logoShape", s)} fallback={null} />
+            </div>
+            <div className="brand-text" style={{ textAlign: "left" }}>
+              <div className="brand-label">Quotation by</div>
+              <h3><CompanySelect editMode={editMode} value={quotation.issuerName} onChange={(val) => onChange("issuerName", val)} placeholder="Your Company Name" /></h3>
+              {(editMode || v.issuerAddress) && (
+                <span><EditText editMode={editMode} value={quotation.issuerAddress} onChange={(val) => onChange("issuerAddress", val)} placeholder="Company address" /></span>
+              )}
+            </div>
+          </div>
+        </div>
         <table className="page-frame">
+          <thead><tr><td /></tr></thead>
           <tbody>
             <tr>
               <td>
-                <div className="header">
-                  <div className="header-brand">
-                    <div className={`logo ${quotation.logo ? "has-logo" : (editMode ? "no-logo" : "")}`}>
-                      <LogoEdit
-                        editMode={editMode} logo={quotation.logo} onUpload={onLogoUpload} onRemove={onRemoveLogo}
-                        inputId="creative-logo" boxStyle={{ width: 72, height: 72, objectFit: "contain" }} fallback={null} />
-                    </div>
-                    <div className="brand-text" style={{ textAlign: "left" }}>
-                      <div className="brand-label">Quotation by</div>
-                      <h3><CompanySelect editMode={editMode} value={quotation.issuerName} onChange={(val) => onChange("issuerName", val)} placeholder="Your Company Name" /></h3>
-                      {(editMode || v.issuerAddress) && (
-                        <span><EditText editMode={editMode} value={quotation.issuerAddress} onChange={(val) => onChange("issuerAddress", val)} placeholder="Company address" /></span>
-                      )}
-                    </div>
-                  </div>
-
-
-                </div>
                 <div className="header-title" style={{ textAlign: "center" }}>
                   <div className="subline">
                     <EditText editMode={editMode} value={quotation.projectTitle} onChange={(val) => onChange("projectTitle", val)} placeholder="Project / Quotation Title" />
                   </div>
-                  <div className="quote-meta">
+                                  <div className="quote-meta">
                     {editMode ? (
                       <>
-                        <EditText editMode value={quotation.id} onChange={(val) => onChange("id", val)} placeholder="Quotation No." style={{ display: "inline-block", width: "auto" }} />
+                        <span>
+                          {quotation.quotationNumber
+                            ? quotation.quotationNumber
+                            : <span style={{ fontStyle: "italic" }}>Draft — number assigned on send</span>}
+                        </span>
                         <span> &middot; </span>
                         <EditText editMode type="date" value={quotation.date} onChange={(val) => onChange("date", val)} style={{ display: "inline-block", width: "auto" }} />
                       </>
                     ) : (
-                      <>Quotation No: {quotation.id} &middot; Date: {quotation.date}</>
+                      <>
+                        Quotation No: {quotation.quotationNumber
+                          ? quotation.quotationNumber
+                          : <span style={{ fontStyle: "italic" }}>Draft — number assigned on send</span>} &middot; Date: {quotation.date}
+                      </>
                     )}
                   </div>
                 </div>
@@ -457,11 +491,12 @@ export default function CreativeLayout({
                       )}
                     </div>
                   </div>
-                </div>
-              </td>
+                    </div>
+                  </td>
             </tr>
           </tbody>
-        </table>
+          <tfoot><tr><td /></tr></tfoot>
+               </table>
       </div>
     </div>
   );

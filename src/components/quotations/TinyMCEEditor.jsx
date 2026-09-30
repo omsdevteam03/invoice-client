@@ -1,6 +1,24 @@
 // TinyMCEEditor.jsx
 import { useEffect, useRef, useState } from "react"; import { TinyMCE } from "oms-custom-tinymce/react";
 
+// Runs fn() and puts BOTH scroll positions back afterwards.
+// The app scrolls inside .main-content, not only the window.
+function keepScroll(fn) {
+  const main = document.querySelector(".main-content");
+  const mainTop = main ? main.scrollTop : 0;
+  const winX = window.scrollX;
+  const winY = window.scrollY;
+  fn();
+  const restore = () => {
+    if (main) main.scrollTop = mainTop;
+    window.scrollTo(winX, winY);
+  };
+  restore();
+  requestAnimationFrame(restore);
+  setTimeout(restore, 100);
+  setTimeout(restore, 400);
+}
+
 export default function TinyMCEEditor({
   id,
   value,
@@ -41,7 +59,7 @@ export default function TinyMCEEditor({
         editorRef.current = inst;
         const current = inst.getContent();
         if (current !== (value || "")) {
-          inst.setContent(value || "", { no_selection: true });
+          keepScroll(() => inst.setContent(value || "", { no_selection: true }));
         }
       } else {
         // toolbar is in the DOM but the instance isn't fully initialized
@@ -80,15 +98,7 @@ export default function TinyMCEEditor({
     if (editor && typeof editor.getContent === "function" && !editor.destroyed) {
       const current = editor.getContent();
       if (current !== (value || "")) {
-        // Remember scroll position — setContent can move the caret and
-        // cause the browser to auto-scroll the page to the editor.
-        const scrollX = window.scrollX;
-        const scrollY = window.scrollY;
-
-        editor.setContent(value || "", { no_selection: true });
-
-        // Belt-and-suspenders: snap scroll back in case it still moved.
-        window.scrollTo(scrollX, scrollY);
+        keepScroll(() => editor.setContent(value || "", { no_selection: true }));
       }
     }
   }, [value]);
@@ -143,7 +153,9 @@ export default function TinyMCEEditor({
           onInit={(evt, editor) => {
             editorRef.current = editor;
             setIsLoading(false);
-          }} value={value ?? ""}
+            keepScroll(() => {});   // undo any jump caused by initialising
+          }}
+          value={value ?? ""}
           onEditorChange={(content) => {
             isInternalUpdate.current = true;
             onChange?.(content);
@@ -151,7 +163,7 @@ export default function TinyMCEEditor({
           disabled={disabled}
           init={{
             baseUrl: "/assets/tinymce",
-
+            auto_focus: false,
             scrollbars: true,
             height,
             menubar: false,

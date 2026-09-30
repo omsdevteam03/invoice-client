@@ -54,6 +54,12 @@ function buildNextNumberPreview(settings) {
   return `${prefix}-${seqStr}`;
 }
 
+// NEW — internal id for drafts. Never shown to the user as "the
+// quotation number"; a real QT-xxxx is only minted by POST /:id/send.
+function generateInternalId() {
+  return `qt_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
 function SaveErrorBanner({ message, onDismiss }) {
   if (!message) return null;
   return (
@@ -305,7 +311,7 @@ export default function QuotationsPage() {
     }
   };
 
-  const handleSave = async (updated) => {
+   const handleSave = async (updated) => {
     setIsSaving(true);
     setSaveError(null);
 
@@ -318,7 +324,7 @@ export default function QuotationsPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...payload,
-          id: isNewSave ? undefined : payload.id,
+          id: payload.id,   // always the internal id — backend never invents one
           isNew: isNewSave,
           isTemplate: false,
         }),
@@ -326,9 +332,9 @@ export default function QuotationsPage() {
 
       if (!res.ok) {
         let detail = "";
-        try {
+           try {
           const body = await res.json();
-          detail = body?.message || body?.error || "";
+          detail = body?.error || body?.message || "";
         } catch {
           // response wasn't JSON — ignore, fall back to status text
         }
@@ -395,7 +401,7 @@ export default function QuotationsPage() {
     const customer = pendingCustomer;
 
     const newQ = {
-      id: buildNextNumberPreview(docSettings),
+      id: generateInternalId(),
       _isNewQuotation: true,
       customerId: customer?.id || null,
       name: customer?.name || "New Client",
@@ -452,7 +458,7 @@ export default function QuotationsPage() {
     const customer = pendingCustomer;
 
     const newQ = {
-      id: buildNextNumberPreview(docSettings),
+      id: generateInternalId(),
       _isNewQuotation: true,
       customerId: customer?.id || null,
       name: customer?.name || "New Client",
@@ -497,6 +503,26 @@ export default function QuotationsPage() {
     return null;
   }
 
+    const handleSend = async (quotationId) => {
+    try {
+      const res = await fetch(`${API}/${quotationId}/send`, { method: 'POST' });
+      if (!res.ok) {
+        let detail = "";
+        try { const body = await res.json(); detail = body?.error || body?.message || ""; } catch {}
+                throw new Error(detail || `Request failed with status ${res.status}`);
+      }
+      const sent = await res.json();
+      setQuotations(prev => prev.map(q => q.id === sent.id ? sent : q));
+      setSelected(sent);
+      setEditMode(false);
+      return sent;
+    } catch (err) {
+      console.error('Send failed:', err);
+      setSaveError(err.message || "Failed to send quotation.");
+      throw err;
+    }
+  };
+
   if (selected) {
     return (
       <>
@@ -519,11 +545,13 @@ export default function QuotationsPage() {
           }}
           onEdit={() => setEditMode(true)}
           onSave={handleSave}
+          onSend={handleSend}
           onCancelEdit={() => { setEditMode(false); setSaveError(null); }}
         />
       </>
     );
   }
+
   return (
     <>
       <SaveErrorBanner message={saveError} onDismiss={() => setSaveError(null)} />
@@ -542,6 +570,7 @@ export default function QuotationsPage() {
         invoices={invoices}
         onCreateInvoiceFromQuotation={handleCreateInvoiceFromQuotation}
         onResetNumbering={handleResetNumbering}
+        onSend={handleSend}
       />
 
       {showTemplates && (

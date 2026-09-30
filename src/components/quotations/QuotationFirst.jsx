@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import InvoiceDocument from "../invoices/InvoiceDocument";
 import {
   FaFileAlt, FaPlus, FaRupeeSign, FaSearch, FaEye, FaCalendarAlt, FaUser,
-  FaCheckCircle, FaFileSignature, FaTrash, FaEdit, FaHistory,
+  FaCheckCircle, FaFileSignature, FaTrash, FaEdit, FaHistory, FaCopy,
   FaFileInvoiceDollar, FaExchangeAlt, FaTimes, FaAddressBook, FaUndo,
 } from "react-icons/fa";
 // ── Auto-saved quotation drafts (crash/navigate-away recovery) ─────────────
@@ -39,6 +39,22 @@ function timeAgo(ts) {
   if (hr < 24) return `${hr}h ago`;
   const day = Math.floor(hr / 24);
   return `${day}d ago`;
+}
+
+// Adapter — timeAgo() above takes a JS ms timestamp; ISO date strings from
+// the backend (updatedAt) need converting first.
+function timeAgoIso(isoString) {
+  if (!isoString) return "a while ago";
+  const ms = new Date(isoString).getTime();
+  if (Number.isNaN(ms)) return "a while ago";
+  return timeAgo(ms);
+}
+
+// Same internal-id shape as QuotationsPage.jsx — a duplicated quotation is
+// a brand-new draft, so it needs its own fresh internal id, never the
+// source quotation's id and never its official number.
+function generateInternalId() {
+  return `qt_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 }
 const statusConfig = {
   Draft:    { bg: "#f1f5f9", color: "#64748b", border: "#e2e8f0", icon: <FaFileSignature size={10} /> },
@@ -433,6 +449,22 @@ const tableStyles = `
   border: 1px solid #FDE68A;
   border-radius: 10px;
 }
+
+/* ---------- Saved draft quotations section ---------- */
+.qt-draft-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 14px;
+  padding: 14px 16px;
+  border-bottom: 1px solid #f1f5f9;
+  transition: background-color 0.15s ease;
+}
+.qt-draft-row:last-child { border-bottom: none; }
+.qt-draft-row:hover { background-color: #faf9ff; }
+.qt-draft-row.qt-row-selected { background-color: #E6F1EC; }
+.qt-draft-info { flex: 1 1 220px; min-width: 0; }
+.qt-draft-actions { display: flex; align-items: center; gap: 8px; margin-left: auto; }
 `;
 
 // ConfirmDialog Component — handles single-row delete and bulk delete
@@ -576,8 +608,20 @@ function EditApprovedDialog({ show, onConfirm, onCancel }) {
 }
 
 // Inline-editable Status pill
-function EditableStatus({ value, onChange }) {
+function EditableStatus({ value, onChange, hasNumber }) {
   const sc = statusConfig[value] || { bg: "#f8fafc", color: "#64748b", border: "#e2e8f0" };
+
+  // A quotation with no official number yet can only ever be "Draft" here.
+  // Sent/Approved/Rejected only make sense once it's been through /send —
+  // changing those from Draft belongs to the Send action, not this dropdown.
+  if (!hasNumber) {
+    return (
+      <span className="qt-status-select" style={{ backgroundColor: sc.bg, color: sc.color, border: `1px solid ${sc.border}`, cursor: "default" }}>
+        Draft
+      </span>
+    );
+  }
+
   return (
     <select
       value={value}
@@ -586,7 +630,6 @@ function EditableStatus({ value, onChange }) {
       className="qt-status-select"
       style={{ backgroundColor: sc.bg, color: sc.color, border: `1px solid ${sc.border}` }}
     >
-      <option value="Draft">Draft</option>
       <option value="Sent">Sent</option>
       <option value="Approved">Approved</option>
       <option value="Rejected">Rejected</option>
@@ -717,6 +760,7 @@ export default function QuotationFirst({
   setShowTemplates, onInvoiceCreated, onChooseCustomer, companyInfo, docSettings,
   invoices = [], onCreateInvoiceFromQuotation,
   onResetNumbering,
+  onSend,
 }) {
   const navigate = useNavigate();
 
@@ -726,6 +770,22 @@ export default function QuotationFirst({
 
   // Reset Numbering confirm dialog state
   const [showResetConfirm, setShowResetConfirm] = useState(false);
+
+  // Which saved draft is currently being sent (disables its dropdown)
+  const [sendingId, setSendingId] = useState(null);
+
+  // Same action as the Send button inside the quotation editor
+  const handleSendDraft = async (q) => {
+    if (!onSend || sendingId) return;
+    setSendingId(q.id);
+    try {
+      await onSend(q.id);
+    } catch (err) {
+      console.error("Send failed:", err);
+    } finally {
+      setSendingId(null);
+    }
+  };
 
   // "Edit approved quotation?" confirm dialog state — holds the quotation
   // pending confirmation, or null when the dialog is closed.
@@ -815,9 +875,42 @@ const handleDiscardDraft = (draft) => {
     });
   };
 
-  const handleCustomerSelect = (customer) => {    setShowCustomerPicker(false);
+   const handleCustomerSelect = (customer) => {    setShowCustomerPicker(false);
     setCustomerSearch("");
     if (onChooseCustomer) onChooseCustomer(customer);
+  };
+
+  // Requirement #5 — Duplicate: creates a brand-new Draft carrying over
+  // the useful content (customer, scope, pricing, terms, etc.), but never
+  // the source's official number, sent/approval status, or history. Works
+  // on ANY quotation (draft, sent, approved) — duplicating an approved one
+  // is exactly how you'd start a similar new deal without touching the
+  // original record.
+  const handleDuplicateDraft = async (q) => {
+    const {
+      id, quotationNumber, sentAt, status, versionHistory, updatedAt,
+      ...copyable
+    } = q;
+
+    const newDraft = {
+      ...copyable,
+      id: generateInternalId(),
+      status: "Draft",
+      date: new Date().toISOString().split("T")[0],
+    };
+
+    try {
+      const res = await fetch(`${import.meta.env.VITE_API_URL}/quotations`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...newDraft, isNew: true, isTemplate: false }),
+      });
+      if (!res.ok) throw new Error(`Request failed with status ${res.status}`);
+      const saved = await res.json();
+      setQuotations(prev => [...prev, saved]);
+    } catch (err) {
+      console.error("Failed to duplicate quotation:", err);
+    }
   };
 
   const handleDeleteClick = (id) => {
@@ -897,19 +990,25 @@ const handleDiscardDraft = (draft) => {
         !q.isTemplate &&
         (q.name.toLowerCase().includes(searchLower) ||
           q.company.toLowerCase().includes(searchLower) ||
-          q.id.toLowerCase().includes(searchLower) ||
+          (q.quotationNumber || "").toLowerCase().includes(searchLower) ||
           (searchLower && invoices.some(inv =>
             inv.fromQuotationId === q.id && (inv.invoiceNo || "").toLowerCase().includes(searchLower)
           )))
       )
   ).sort((a, b) => {
-      // Extract the trailing number from ids like "QT-2026-007"
-      const numA = parseInt((a.id.match(/(\d+)$/) || [0])[0], 10) || 0;
-      const numB = parseInt((b.id.match(/(\d+)$/) || [0])[0], 10) || 0;
-      return numB - numA; // newest (highest number) first
+      // Numbered ones first (newest QT number first), drafts after (newest first)
+      if (!a.quotationNumber && !b.quotationNumber) return new Date(b.date) - new Date(a.date);
+      if (!a.quotationNumber) return 1;
+      if (!b.quotationNumber) return -1;
+      const numA = parseInt((a.quotationNumber.match(/(\d+)$/) || [0])[0], 10) || 0;
+      const numB = parseInt((b.quotationNumber.match(/(\d+)$/) || [0])[0], 10) || 0;
+      return numB - numA;
     });
 
   const clearInvoiceSearch = () => setSearch("");
+
+const savedDrafts = filtered.filter(q => !q.quotationNumber);
+const numberedQuotations = filtered.filter(q => q.quotationNumber);
 
   const allSelected = filtered.length > 0 && selectedIds.length === filtered.length;
   const someSelected = selectedIds.length > 0 && !allSelected;
@@ -1247,7 +1346,89 @@ const handleDiscardDraft = (draft) => {
         </div>
       )}
 
-  {/* Table — headers always render on desktop/tablet; collapses to compact cards on phones/small tablets; empty state is a single row inside tbody */}
+      {/* Saved drafts — backend drafts with no QT number yet */}
+      {savedDrafts.length > 0 && (
+        <div className="mb-4">
+          <div className="d-flex align-items-center gap-2 mb-2">
+            <h5 className="fw-bold mb-0" style={{ color: "#0f172a", fontSize: "1rem" }}>
+              Draft Quotations
+            </h5>
+            <span style={{
+              backgroundColor: "#E6F1EC", color: "#1F6F5C", borderRadius: 999,
+              fontSize: "0.72rem", fontWeight: 700, padding: "2px 10px",
+            }}>
+              {savedDrafts.length}
+            </span>
+          </div>
+
+          <div className="qt-table-wrap">
+            {savedDrafts.map(q => (
+              <div key={q.id} className={`qt-draft-row${selectedIds.includes(q.id) ? " qt-row-selected" : ""}`}>
+                <input
+                  type="checkbox"
+                  className="qt-checkbox"
+                  checked={selectedIds.includes(q.id)}
+                  onChange={() => toggleSelectOne(q.id)}
+                />
+                <div className="qt-draft-info">
+                  <div className="fw-semibold" style={{ color: "#0f172a", fontSize: "0.9rem" }}>
+                    {q.company || q.name}
+                  </div>
+                  <div style={{ color: "#64748b", fontSize: "0.8rem" }}>
+                    {q.projectTitle || "Untitled quotation"}
+                  </div>
+                  <div style={{ color: "#94a3b8", fontSize: "0.78rem", marginTop: 2 }}>
+                    ₹{q.amount.toLocaleString()} · Last edited {timeAgoIso(q.updatedAt)}
+                  </div>
+                </div>
+
+                {/* Status: Draft / Sent */}
+                <select
+                  value="Draft"
+                  disabled={sendingId === q.id}
+                  onChange={(e) => {
+                    if (e.target.value === "Sent") handleSendDraft(q);
+                  }}
+                  className="qt-status-select"
+                  style={{
+                    backgroundColor: statusConfig.Draft.bg,
+                    color: statusConfig.Draft.color,
+                    border: `1px solid ${statusConfig.Draft.border}`,
+                    opacity: sendingId === q.id ? 0.6 : 1,
+                  }}
+                >
+                  <option value="Draft">{sendingId === q.id ? "Sending..." : "Draft"}</option>
+                  <option value="Sent">Sent</option>
+                </select>
+
+                <div className="qt-draft-actions">
+                  <button
+                    onClick={() => { setSelected(q); setEditMode(true); }}
+                    className="d-flex align-items-center gap-1 border-0 fw-semibold px-3 py-2 rounded-3"
+                    style={{ backgroundColor: "#E6F1EC", color: "#1F6F5C", cursor: "pointer", fontSize: "0.78rem", whiteSpace: "nowrap" }}
+                  >
+                    Continue Editing
+                  </button>
+                  <button
+                    onClick={() => handleDuplicateDraft(q)}
+                    title="Duplicate"
+                    className="qt-action-btn"
+                    style={{ background: "#f1f5f9", color: "#475569" }}
+                  >
+                    <FaCopy size={12} />
+                  </button>
+                  <button onClick={() => handleDeleteClick(q.id)} title="Delete" className="qt-action-btn qt-action-delete">
+                    <FaTrash size={13} />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+  {/* Table — numbered quotations only. Hidden when there are only drafts. */}
+      {(numberedQuotations.length > 0 || savedDrafts.length === 0) && (
       <div className="qt-table-wrap">
         <div className="qt-table-scroll">
         <table className="qt-table">
@@ -1272,7 +1453,7 @@ const handleDiscardDraft = (draft) => {
             </tr>
           </thead>
           <tbody>
-            {filtered.length === 0 ? (
+                       {numberedQuotations.length === 0 ? (
               <tr>
                 <td colSpan={7} style={{ textAlign: "center", padding: "48px 16px", color: "#94a3b8", fontSize: "0.9rem" }}>
                   {isInvoiceSearch
@@ -1281,8 +1462,9 @@ const handleDiscardDraft = (draft) => {
                 </td>
               </tr>
             ) : (
-              filtered.map(q => (
-                <tr key={q.id} className={selectedIds.includes(q.id) ? "qt-row-selected" : ""}>
+              numberedQuotations.map(q => {
+  return (
+  <tr key={q.id} className={selectedIds.includes(q.id) ? "qt-row-selected" : ""}>
                   <td onClick={e => e.stopPropagation()}>
                     <input
                       type="checkbox"
@@ -1293,13 +1475,16 @@ const handleDiscardDraft = (draft) => {
                   </td>
                   <td>
                     <span className="qt-cell-label">Quote</span>
-                    <span className="fw-semibold" style={{ color: "#1F6F5C" }}>{q.id}</span>
+                    <span className="fw-semibold" style={{ color: "#1F6F5C" }}>{q.quotationNumber}</span>
                   </td>
                   <td>
                     <span className="qt-cell-label">Customer</span>
                     <div className="fw-semibold" style={{ color: "#0f172a", fontSize: "0.85rem" }}>{q.name}</div>
                     <div style={{ color: "#94a3b8", fontSize: "0.72rem" }}>{q.company}</div>
-                    <div className="qt-mobile-id">{q.id}</div>
+                    {q.projectTitle && (
+                      <div style={{ color: "#64748b", fontSize: "0.72rem" }}>{q.projectTitle}</div>
+                    )}
+                    <div className="qt-mobile-id">{q.quotationNumber}</div>
                   </td>
                   <td>
                     <span className="qt-cell-label">Date</span>
@@ -1321,9 +1506,9 @@ const handleDiscardDraft = (draft) => {
                     <span className="qt-cell-label">Total</span>
                     <span className="fw-semibold" style={{ color: "#0f172a" }}>₹{q.amount.toLocaleString()}</span>
                   </td>
-                  <td onClick={e => e.stopPropagation()}>
+                                <td onClick={e => e.stopPropagation()}>
                     <span className="qt-cell-label">Status</span>
-                    <EditableStatus value={q.status} onChange={(val) => handleStatusChange(q, val)} />
+                    <EditableStatus value={q.status} onChange={(val) => handleStatusChange(q, val)} hasNumber={Boolean(q.quotationNumber)} />
                   </td>
                 <td className="qt-actions-cell" style={{ textAlign: "right" }}>
                     <span className="qt-cell-label">Action</span>
@@ -1359,18 +1544,28 @@ const handleDiscardDraft = (draft) => {
                           <FaFileInvoiceDollar size={13} />
                         </button>
                       )}
+                      <button
+                        onClick={() => handleDuplicateDraft(q)}
+                        title="Duplicate"
+                        className="qt-action-btn"
+                        style={{ background: "#f1f5f9", color: "#475569" }}
+                      >
+                        <FaCopy size={13} />
+                      </button>
                       <button onClick={() => handleDeleteClick(q.id)} title="Delete" className="qt-action-btn qt-action-delete">
                         <FaTrash size={13} />
                       </button>
                     </div>
                   </td>
                 </tr>
-              ))
+                );
+              })
             )}
           </tbody>
      </table>
         </div>
       </div>
+      )}
       </div>
       {/* end no-print wrapper — everything above is hidden when printing */}
 
