@@ -11,6 +11,19 @@ import { useNavigate } from "react-router-dom";
 
 const API_BASE = `${import.meta.env.VITE_API_URL}/chat`;
 
+// Dictation languages
+const VOICE_LANGUAGES = [
+  { code: "ta-IN", label: "தமிழ் (Tamil)" },
+  { code: "en-IN", label: "English" },
+  { code: "hi-IN", label: "हिन्दी (Hindi)" },
+  { code: "te-IN", label: "తెలుగు (Telugu)" },
+  { code: "ml-IN", label: "മലയാളം (Malayalam)" },
+  { code: "kn-IN", label: "ಕನ್ನಡ (Kannada)" },
+  { code: "bn-IN", label: "বাংলা (Bengali)" },
+  { code: "mr-IN", label: "मराठी (Marathi)" },
+  { code: "gu-IN", label: "ગુજરાતી (Gujarati)" },
+];
+
 // Matches the "![image](data:...)\n<rest of text>" format we save for
 // image messages. Returns { imageDataUrl, text }. If there's no image,
 // imageDataUrl is null and text is the original content unchanged.
@@ -237,9 +250,10 @@ export default function AIChatBox({
   const [isRecording, setIsRecording] = useState(false);
   const [micError, setMicError] = useState(null); 
   // "ta-IN" = Tamil, "en-IN" = English. Remembered between visits.
-  const [voiceLang, setVoiceLang] = useState(
-    () => localStorage.getItem("nexa:voiceLang") || "ta-IN"
-  ); 
+  const [voiceLang, setVoiceLang] = useState(() => {
+    const saved = localStorage.getItem("nexa:voiceLang");
+    return VOICE_LANGUAGES.some((l) => l.code === saved) ? saved : "ta-IN";
+  }); 
   const [copiedId, setCopiedId] = useState(null);
   const [editingMessageId, setEditingMessageId] = useState(null); // id of the message being edited, or null
   const scrollRef = useRef(null);
@@ -689,18 +703,20 @@ export default function AIChatBox({
               >
                 🎤
               </button>
-              <button
-                style={{ ...styles.iconBtn, width: 44, fontSize: 12, fontWeight: 700 }}
-                onClick={() => {
-                  const next = voiceLang === "ta-IN" ? "en-IN" : "ta-IN";
-                  setVoiceLang(next);
-                  localStorage.setItem("nexa:voiceLang", next);
+              <select
+                style={styles.langSelect}
+                value={voiceLang}
+                onChange={(e) => {
+                  setVoiceLang(e.target.value);
+                  localStorage.setItem("nexa:voiceLang", e.target.value);
                 }}
                 title="Voice language"
                 aria-label="Voice language"
               >
-                {voiceLang === "ta-IN" ? "த" : "EN"}
-              </button>
+                {VOICE_LANGUAGES.map((l) => (
+                  <option key={l.code} value={l.code}>{l.label}</option>
+                ))}
+              </select>
             </>
           )}
 
@@ -832,6 +848,17 @@ const styles = {
   iconBtnActive: {
     background: "#fee2e2",
     border: "1px solid #fecaca",
+  },
+    langSelect: {
+    border: "1px solid #ddd",
+    background: "#fff",
+    borderRadius: 999,
+    height: 38,
+    padding: "0 10px",
+    fontSize: 13,
+    cursor: "pointer",
+    outline: "none",
+    maxWidth: 140,
   },
   input: {
     flex: 1,

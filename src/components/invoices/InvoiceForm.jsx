@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { FaArrowLeft, FaSave, FaPlus, FaTrash, FaEye, FaEyeSlash, FaTimes, FaChevronDown } from "react-icons/fa";
+import { INVOICE_LABELS, INVOICE_FONT, InvoiceLangToggle } from "./invoiceLang";
 
 function logoStyle(shape, size) {
   if (shape === "circle") return { width: size, height: size, borderRadius: "50%", objectFit: "cover" };
@@ -406,6 +407,7 @@ function useIsMobile(breakpoint = 900) {
 
 // ── Live Preview (full mirror of InvoiceDocument, shown alongside the form) ─
 function InvoicePreview({ form, isMobile, onClose }) {
+  const L = INVOICE_LABELS[form.invoiceLang === "ta" ? "ta" : "en"];
   const rawSum = form.items.reduce((a, b) => a + Number(b.amount || 0), 0);
   const gstPercent = Number(form.gstPercent || 18);
   let subtotal, tax, total;
@@ -465,7 +467,7 @@ function InvoicePreview({ form, isMobile, onClose }) {
       </div>
 
       <div style={{ padding: isMobile ? "10px" : "16px", overflowY: isMobile ? "visible" : "auto", flex: isMobile ? "none" : 1, backgroundColor: "#f1f5f9" }}>
-        <div style={{ backgroundColor: "#fff", padding: isMobile ? "10px" : "14px", fontFamily: "Arial, sans-serif", overflowX: isMobile ? "auto" : "visible" }}>
+        <div style={{ backgroundColor: "#fff", padding: isMobile ? "10px" : "14px", fontFamily: INVOICE_FONT, overflowX: isMobile ? "auto" : "visible" }}>
           <table style={{ width: "100%", minWidth: isMobile ? "560px" : "auto", borderCollapse: "collapse", border: "1px solid #000" }}>
             <tbody>
               <tr>
@@ -490,18 +492,18 @@ function InvoicePreview({ form, isMobile, onClose }) {
                 </div>
                 </td>
                 <td style={{ border: "1px solid #000", padding: "8px 10px", verticalAlign: "top", width: "25%" }}>
-                  <div style={{ fontSize: "0.62rem", color: "#64748b" }}>Invoice No.</div>
+                  <div style={{ fontSize: "0.62rem", color: "#64748b" }}>{L.invoiceNo}</div>
                   <div style={{ fontWeight: 700, fontSize: "0.75rem", color: "#0f172a" }}>{form.invoiceNo || "—"}</div>
                 </td>
                 <td style={{ border: "1px solid #000", padding: "8px 10px", verticalAlign: "top", width: "15%" }}>
-                  <div style={{ fontSize: "0.62rem", color: "#64748b" }}>Dated</div>
+                  <div style={{ fontSize: "0.62rem", color: "#64748b" }}>{L.dated}</div>
                   <div style={{ fontWeight: 700, fontSize: "0.7rem", color: "#0f172a" }}>{formatDate(form.date)}</div>
                 </td>
               </tr>
 
               <tr>
                 <td colSpan={5} style={{ border: "1px solid #000", padding: "6px 10px" }}>
-                  <div style={{ fontSize: "0.6rem", color: "#64748b" }}>Buyer (Bill to)</div>
+                  <div style={{ fontSize: "0.6rem", color: "#64748b" }}>{L.buyer}</div>
                   <div style={{ fontWeight: 700, fontSize: "0.72rem", color: "#0f172a" }}>
                     {form.buyerName || <span style={{ color: "#cbd5e1" }}>Buyer Name</span>}
                   </div>
@@ -510,7 +512,7 @@ function InvoicePreview({ form, isMobile, onClose }) {
                   )}
                   <div style={{ fontSize: "0.65rem", color: "#334155", whiteSpace: "pre-line" }}>{form.buyerAddress}</div>
 
-                  <div style={{ fontSize: "0.65rem", color: "#334155" }}>Mobile: {form.buyerMobile}</div>
+                  <div style={{ fontSize: "0.65rem", color: "#334155" }}>{L.mobile}: {form.buyerMobile}</div>
                   {form.buyerGSTIN && (
                     <div style={{ fontSize: "0.65rem", color: "#334155" }}>GSTIN: {form.buyerGSTIN}</div>
                   )}
@@ -518,11 +520,11 @@ function InvoicePreview({ form, isMobile, onClose }) {
               </tr>
 
               <tr style={{ backgroundColor: "#f1f5f9" }}>
-                {cell("Sl.", { fontWeight: 700, textAlign: "center", width: "6%" })}
-                {cell("Description", { fontWeight: 700, width: "46%" })}
-                {cell("Qty", { fontWeight: 700, textAlign: "center", width: "14%" })}
-                {cell("Rate", { fontWeight: 700, textAlign: "right", width: "17%" })}
-                {cell("Amount", { fontWeight: 700, textAlign: "right", width: "17%" })}
+                {cell(L.sl, { fontWeight: 700, textAlign: "center", width: "6%" })}
+                {cell(L.description, { fontWeight: 700, width: "46%" })}
+                {cell(L.qty, { fontWeight: 700, textAlign: "center", width: "14%" })}
+                {cell(L.rate, { fontWeight: 700, textAlign: "right", width: "17%" })}
+                {cell(L.amount, { fontWeight: 700, textAlign: "right", width: "17%" })}
               </tr>
 
               {form.items.map((item, i) => (
@@ -536,37 +538,37 @@ function InvoicePreview({ form, isMobile, onClose }) {
               ))}
 
               <tr>
-                {cell("")}{cell(<strong>Sub Total</strong>)}{cell("")}{cell("")}
+                {cell("")}{cell(<strong>{L.subTotal}</strong>)}{cell("")}{cell("")}
                 {cell(<strong>{formatAmount(subtotal)}</strong>, { textAlign: "right" })}
               </tr>
               {form.gstType !== "No GST" && (
                 <tr>
-                  {cell("")}{cell(<strong>{`GST @ ${gstPercent}%${form.gstType === "GST Included" ? " (Included)" : ""}`}</strong>)}{cell("")}{cell("")}
+                                {cell("")}{cell(<strong>{`${L.gst} @ ${gstPercent}%${form.gstType === "GST Included" ? ` (${L.included})` : ""}`}</strong>)}{cell("")}{cell("")}
                   {cell(<strong>{formatAmount(tax)}</strong>, { textAlign: "right" })}
                 </tr>
               )}
 
               <tr>
-                {cell("")}{cell(<strong>Total Invoice Value</strong>)}{cell("")}{cell("")}
+                {cell("")}{cell(<strong>{L.total}</strong>)}{cell("")}{cell("")}
                 {cell(<strong>{formatAmount(total)}</strong>, { textAlign: "right" })}
               </tr>
               <tr>
-                {cell("")}{cell("Amount Paid")}{cell("")}{cell("")}
+                {cell("")}{cell(L.paid)}{cell("")}{cell("")}
                 {cell(formatAmount(amountPaid), { textAlign: "right" })}
               </tr>
               <tr style={{ backgroundColor: "#ecfdf5" }}>
-                {cell("")}{cell(<strong>Amount Due</strong>)}{cell("")}{cell("")}
+                {cell("")}{cell(<strong>{L.due}</strong>)}{cell("")}{cell("")}
                 {cell(<strong style={{ color: "#059669" }}>{formatAmount(due)}</strong>, { textAlign: "right" })}
               </tr>
 
               <tr>
                 <td colSpan={form.dueDate ? 3 : 5} style={{ border: "1px solid #000", padding: "6px 10px" }}>
-                  <div style={{ fontSize: "0.58rem", color: "#64748b" }}>Amount Chargeable (In words)</div>
+                  <div style={{ fontSize: "0.58rem", color: "#64748b" }}>{L.inWords}</div>
                   <div style={{ fontWeight: 700, fontSize: "0.65rem", color: "#0f172a" }}>{words}</div>
                 </td>
                 {form.dueDate && (
                   <td colSpan={2} style={{ border: "1px solid #000", padding: "6px 10px" }}>
-                    <div style={{ fontSize: "0.58rem", color: "#64748b" }}>Due Date</div>
+                    <div style={{ fontSize: "0.58rem", color: "#64748b" }}>{L.dueDate}</div>
                     <div style={{ fontWeight: 700, fontSize: "0.65rem", color: "#0f172a" }}>{formatDate(form.dueDate)}</div>
                   </td>
                 )}
@@ -574,24 +576,24 @@ function InvoicePreview({ form, isMobile, onClose }) {
 
               <tr>
                 <td colSpan={3} style={{ border: "1px solid #000", padding: "6px 10px", verticalAlign: "top" }}>
-                  <div style={{ fontWeight: 700, fontSize: "0.62rem", textDecoration: "underline", marginBottom: 3 }}>Declaration:</div>
+                  <div style={{ fontWeight: 700, fontSize: "0.62rem", textDecoration: "underline", marginBottom: 3 }}>{L.declaration}</div>
                   <div style={{ fontSize: "0.58rem", color: "#334155", lineHeight: 1.5 }}>
-                    We declare that this invoice shows the actual price of the goods described and that all particulars are true and correct.
+                    {L.declarationText}
                   </div>
                   {form.notes && (
                     <div style={{ fontSize: "0.58rem", color: "#475569", marginTop: 4, fontStyle: "italic", whiteSpace: "pre-line" }}>
-                      Note: {form.notes}
+                      {L.note}: {form.notes}
                     </div>
                   )}
                 </td>
                 <td colSpan={2} style={{ border: "1px solid #000", padding: "6px 10px", textAlign: "right", verticalAlign: "bottom" }}>
-                  <div style={{ fontSize: "0.6rem", color: "#334155" }}>For {form.companyName || "Your Company"}</div>                  <div style={{ margin: "6px 0", minHeight: 36, display: "flex", justifyContent: "flex-end" }}>
+                  <div style={{ fontSize: "0.6rem", color: "#334155" }}>{L.forCompany(form.companyName || "Your Company")}</div>                  <div style={{ margin: "6px 0", minHeight: 36, display: "flex", justifyContent: "flex-end" }}>
                     {form.signature
                       ? <img src={form.signature} alt="Signature" style={{ maxHeight: 44, maxWidth: 120, objectFit: "contain" }} />
                       : <div style={{ width: 120, height: 40 }} />
                     }
                   </div>
-                  <div style={{ fontSize: "0.6rem", color: "#475569" }}>Authorized Signatory</div>
+                  <div style={{ fontSize: "0.6rem", color: "#475569" }}>{L.signatory}</div>
                 </td>
               </tr>
             </tbody>
@@ -904,6 +906,13 @@ export default function InvoiceForm({ invoice, invoices = [], customers = [], on
               </select>
             </div>
           )}
+
+          <div className="mb-3">
+            <InvoiceLangToggle
+              lang={form.invoiceLang === "ta" ? "ta" : "en"}
+              onChange={(l) => updateField("invoiceLang", l)}
+            />
+          </div>
 
           <div className="card border-0 shadow-sm" style={{ borderRadius: "16px" }}>
             <div className="p-4">

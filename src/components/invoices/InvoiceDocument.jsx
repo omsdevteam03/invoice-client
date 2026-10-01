@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { FaArrowLeft, FaPrint, FaEdit, FaFileInvoiceDollar } from "react-icons/fa";
+import { INVOICE_LABELS, INVOICE_FONT, InvoiceLangToggle } from "./invoiceLang";
 
 function logoStyle(shape, size) {
   if (shape === "circle") return { width: size, height: size, borderRadius: "50%", objectFit: "cover" };
@@ -55,6 +56,8 @@ const cell = (content, style = {}) => (
 
 export default function InvoiceDocument({ invoice, onBack, onEdit, onConvertToFinal }) {
   const isMobile = useIsMobile(700);
+  const [lang, setLang] = useState(invoice.invoiceLang === "ta" ? "ta" : "en");
+  const L = INVOICE_LABELS[lang];
   const rawSum = invoice.items.reduce((a, b) => a + Number(b.amount), 0);
   const gstPercent = Number(invoice.gstPercent || 18);
   let subtotal, tax, total;
@@ -142,7 +145,8 @@ export default function InvoiceDocument({ invoice, onBack, onEdit, onConvertToFi
         >
           <FaArrowLeft size={12} /> Back
         </button>
-        <div className="d-flex gap-2">
+        <div className="d-flex gap-2" style={{ flexWrap: "wrap" }}>
+          <InvoiceLangToggle lang={lang} onChange={setLang} />
           {isProforma && invoice.status !== "Converted" && (
             <button onClick={() => onConvertToFinal && onConvertToFinal(invoice)}
               className="d-flex align-items-center gap-2 border-0 rounded-3 fw-semibold px-3 py-2"
@@ -178,7 +182,7 @@ export default function InvoiceDocument({ invoice, onBack, onEdit, onConvertToFi
         className="print-doc"
         style={{
           padding: isMobile ? "14px" : "32px",
-          fontFamily: "Arial, sans-serif",
+          fontFamily: INVOICE_FONT,
           overflowX: isMobile ? "auto" : "visible",
           backgroundColor: "#fff",
         }}
@@ -190,7 +194,7 @@ export default function InvoiceDocument({ invoice, onBack, onEdit, onConvertToFi
             border: "1.5px solid #7c3aed", borderRadius: 8, padding: "6px 0",
             marginBottom: 12, backgroundColor: "#f5f3ff",
           }}>
-            PROFORMA INVOICE
+            {L.proforma}
           </div>
         )}
         <table style={{ width: "100%", minWidth: isMobile ? "620px" : "auto", borderCollapse: "collapse", border: "1px solid #000" }}>
@@ -211,17 +215,17 @@ export default function InvoiceDocument({ invoice, onBack, onEdit, onConvertToFi
                       <div style={{ fontSize: isMobile ? "0.65rem" : "0.78rem", color: "#334155", whiteSpace: "pre-line" }}>{invoice.companyAddress}</div>
                     )}
                     {invoice.companyGSTIN && (
-                      <div style={{ fontSize: isMobile ? "0.65rem" : "0.78rem", color: "#334155" }}>GST Number (GSTIN): {invoice.companyGSTIN}</div>
+                      <div style={{ fontSize: isMobile ? "0.65rem" : "0.78rem", color: "#334155" }}>{L.gstNumber}: {invoice.companyGSTIN}</div>
                     )}
                   </div>
                 </div>
               </td>
               <td style={{ border: "1px solid #000", padding: isMobile ? "8px" : "10px 12px", verticalAlign: "top" }}>
-                <div style={{ fontSize: isMobile ? "0.65rem" : "0.78rem", color: "#64748b" }}>Invoice No.</div>
+                <div style={{ fontSize: isMobile ? "0.65rem" : "0.78rem", color: "#64748b" }}>{L.invoiceNo}</div>
                 <div style={{ fontWeight: 700, fontSize: isMobile ? "0.8rem" : "0.95rem", color: "#0f172a" }}>{invoice.invoiceNo}</div>
               </td>
               <td style={{ border: "1px solid #000", padding: isMobile ? "8px" : "10px 12px", verticalAlign: "top" }}>
-                <div style={{ fontSize: isMobile ? "0.65rem" : "0.78rem", color: "#64748b" }}>Dated</div>
+                <div style={{ fontSize: isMobile ? "0.65rem" : "0.78rem", color: "#64748b" }}>{L.dated}</div>
                 <div style={{ fontWeight: 700, fontSize: isMobile ? "0.75rem" : "0.88rem", color: "#0f172a", whiteSpace: "nowrap" }}>{formatDate(invoice.date)}</div>
               </td>
             </tr>
@@ -229,13 +233,13 @@ export default function InvoiceDocument({ invoice, onBack, onEdit, onConvertToFi
             {/* Buyer Row */}
             <tr>
               <td colSpan={5} style={{ border: "1px solid #000", padding: isMobile ? "6px 8px" : "8px 12px" }}>
-                <div style={{ fontSize: isMobile ? "0.62rem" : "0.75rem", color: "#64748b", marginBottom: 2 }}>Buyer (Bill to)</div>
+                <div style={{ fontSize: isMobile ? "0.62rem" : "0.75rem", color: "#64748b", marginBottom: 2 }}>{L.buyer}</div>
                 <div style={{ fontWeight: 700, fontSize: isMobile ? "0.75rem" : "0.88rem", color: "#0f172a" }}>
-                  Name: {invoice.buyerName}
+                  {L.name}: {invoice.buyerName}
                 </div>
                 {invoice.buyerCompanyName && (
                   <div style={{ fontWeight: 600, fontSize: isMobile ? "0.68rem" : "0.82rem", color: "#334155" }}>
-                    Company: {invoice.buyerCompanyName}
+                    {L.company}: {invoice.buyerCompanyName}
                   </div>
                 )}
                 {invoice.buyerAddress && (
@@ -243,7 +247,7 @@ export default function InvoiceDocument({ invoice, onBack, onEdit, onConvertToFi
                 )}
 
                 {invoice.buyerMobile && (
-                  <div style={{ fontSize: isMobile ? "0.68rem" : "0.82rem", color: "#334155" }}>Mobile: {invoice.buyerMobile}</div>
+                  <div style={{ fontSize: isMobile ? "0.68rem" : "0.82rem", color: "#334155" }}>{L.mobile}: {invoice.buyerMobile}</div>
                 )}
 
                 {invoice.buyerGSTIN && (
@@ -254,11 +258,11 @@ export default function InvoiceDocument({ invoice, onBack, onEdit, onConvertToFi
 
             {/* Table Header */}
             <tr style={{ backgroundColor: "#f1f5f9" }}>
-              {mobileCell("Sl. No.", { fontWeight: 700, textAlign: "center", width: "6%" })}
-              {mobileCell("Description of Services", { fontWeight: 700, width: "46%" })}
-              {mobileCell("Qty", { fontWeight: 700, textAlign: "center", width: "14%" })}
-              {mobileCell("Rate (₹)", { fontWeight: 700, textAlign: "right", width: "17%", whiteSpace: "nowrap" })}
-              {mobileCell("Amount (₹)", { fontWeight: 700, textAlign: "right", width: "17%", whiteSpace: "nowrap" })}
+              {mobileCell(L.sl, { fontWeight: 700, textAlign: "center", width: "6%" })}
+              {mobileCell(L.description, { fontWeight: 700, width: "46%" })}
+              {mobileCell(L.qty, { fontWeight: 700, textAlign: "center", width: "14%" })}
+              {mobileCell(L.rate, { fontWeight: 700, textAlign: "right", width: "17%", whiteSpace: "nowrap" })}
+              {mobileCell(L.amount, { fontWeight: 700, textAlign: "right", width: "17%", whiteSpace: "nowrap" })}
             </tr>
 
             {/* Items */}
@@ -275,7 +279,7 @@ export default function InvoiceDocument({ invoice, onBack, onEdit, onConvertToFi
             {/* Subtotal */}
             <tr>
               {mobileCell("", { border: "1px solid #000" })}
-              {mobileCell(<strong>Sub Total</strong>, { border: "1px solid #000" })}
+              {mobileCell(<strong>{L.subTotal}</strong>, { border: "1px solid #000" })}
               {mobileCell("", { border: "1px solid #000" })}
               {mobileCell("", { border: "1px solid #000" })}
               {mobileCell(<strong>{formatAmount(subtotal)}</strong>, { border: "1px solid #000", textAlign: "right" })}
@@ -285,7 +289,7 @@ export default function InvoiceDocument({ invoice, onBack, onEdit, onConvertToFi
             {invoice.gstType !== "No GST" && (
               <tr>
                 {mobileCell("", { border: "1px solid #000" })}
-                {mobileCell(<strong>{`GST @ ${gstPercent}%${invoice.gstType === "GST Included" ? " (Included)" : ""}`}</strong>, { border: "1px solid #000" })}
+                {mobileCell(<strong>{`${L.gst} @ ${gstPercent}%${invoice.gstType === "GST Included" ? ` (${L.included})` : ""}`}</strong>, { border: "1px solid #000" })}
                 {mobileCell("", { border: "1px solid #000" })}
                 {mobileCell("", { border: "1px solid #000" })}
                 {mobileCell(<strong>{formatAmount(tax)}</strong>, { border: "1px solid #000", textAlign: "right" })}
@@ -295,7 +299,7 @@ export default function InvoiceDocument({ invoice, onBack, onEdit, onConvertToFi
             {/* Total Invoice Value */}
             <tr>
               {mobileCell("", { border: "1px solid #000" })}
-              {mobileCell(<strong>Total Invoice Value</strong>, { border: "1px solid #000" })}
+              {mobileCell(<strong>{L.total}</strong>, { border: "1px solid #000" })}
               {mobileCell("", { border: "1px solid #000" })}
               {mobileCell("", { border: "1px solid #000" })}
               {mobileCell(<strong>{formatAmount(total)}</strong>, { border: "1px solid #000", textAlign: "right" })}
@@ -304,7 +308,7 @@ export default function InvoiceDocument({ invoice, onBack, onEdit, onConvertToFi
             {/* Amount Paid */}
             <tr>
               {mobileCell("", { border: "1px solid #000" })}
-              {mobileCell("Amount Paid", { border: "1px solid #000" })}
+              {mobileCell(L.paid, { border: "1px solid #000" })}
               {mobileCell("", { border: "1px solid #000" })}
               {mobileCell("", { border: "1px solid #000" })}
               {mobileCell(formatAmount(amountPaid), { border: "1px solid #000", textAlign: "right" })}
@@ -313,7 +317,7 @@ export default function InvoiceDocument({ invoice, onBack, onEdit, onConvertToFi
             {/* Amount Due */}
             <tr style={{ backgroundColor: "#ecfdf5" }}>
               {mobileCell("", { border: "1px solid #000" })}
-              {mobileCell(<strong>Amount Due</strong>, { border: "1px solid #000" })}
+              {mobileCell(<strong>{L.due}</strong>, { border: "1px solid #000" })}
               {mobileCell("", { border: "1px solid #000" })}
               {mobileCell("", { border: "1px solid #000" })}
               {mobileCell(<strong>{formatAmount(due)}</strong>, { border: "1px solid #000", textAlign: "right", color: "#059669" })}
@@ -322,12 +326,12 @@ export default function InvoiceDocument({ invoice, onBack, onEdit, onConvertToFi
             {/* Amount in Words */}
             <tr>
               <td colSpan={invoice.dueDate ? 3 : 5} style={{ border: "1px solid #000", padding: isMobile ? "6px 8px" : "8px 12px" }}>
-                <div style={{ fontSize: isMobile ? "0.62rem" : "0.75rem", color: "#64748b" }}>Amount Chargeable (In words)</div>
+                <div style={{ fontSize: isMobile ? "0.62rem" : "0.75rem", color: "#64748b" }}>{L.inWords}</div>
                 <div style={{ fontWeight: 700, fontSize: isMobile ? "0.68rem" : "0.82rem", color: "#0f172a" }}>{words}</div>
               </td>
               {invoice.dueDate && (
                 <td colSpan={2} style={{ border: "1px solid #000", padding: isMobile ? "6px 8px" : "8px 12px" }}>
-                  <div style={{ fontSize: isMobile ? "0.62rem" : "0.75rem", color: "#64748b" }}>Due Date</div>
+                  <div style={{ fontSize: isMobile ? "0.62rem" : "0.75rem", color: "#64748b" }}>{L.dueDate}</div>
                   <div style={{ fontWeight: 700, fontSize: isMobile ? "0.68rem" : "0.82rem" }}>{formatDate(invoice.dueDate)}</div>
                 </td>
               )}
@@ -336,18 +340,18 @@ export default function InvoiceDocument({ invoice, onBack, onEdit, onConvertToFi
             {/* Declaration + Signature */}
             <tr>
               <td colSpan={3} style={{ border: "1px solid #000", padding: isMobile ? "6px 8px" : "8px 12px", verticalAlign: "top" }}>
-                <div style={{ fontWeight: 700, fontSize: isMobile ? "0.68rem" : "0.82rem", textDecoration: "underline", marginBottom: 4 }}>Declaration:</div>
+                <div style={{ fontWeight: 700, fontSize: isMobile ? "0.68rem" : "0.82rem", textDecoration: "underline", marginBottom: 4 }}>{L.declaration}</div>
                 <div style={{ fontSize: isMobile ? "0.65rem" : "0.78rem", color: "#334155", lineHeight: 1.6 }}>
-                  We declare that this invoice shows the actual price of the goods described and that all particulars are true and correct.
+                  {L.declarationText}
                 </div>
                 {invoice.notes && (
                   <div style={{ fontSize: isMobile ? "0.65rem" : "0.78rem", color: "#475569", marginTop: 6, fontStyle: "italic", whiteSpace: "pre-line" }}>
-                    Note: {invoice.notes}
+                    {L.note}: {invoice.notes}
                   </div>
                 )}
               </td>
               <td colSpan={2} style={{ border: "1px solid #000", padding: isMobile ? "6px 8px" : "8px 12px", textAlign: "right", verticalAlign: "bottom" }}>
-                <div style={{ fontSize: isMobile ? "0.68rem" : "0.82rem", color: "#334155" }}>For {invoice.companyName}</div>    {/* Signature Image or Upload */}
+                <div style={{ fontSize: isMobile ? "0.68rem" : "0.82rem", color: "#334155" }}>{L.forCompany(invoice.companyName)}</div>    {/* Signature Image or Upload */}
                 <div style={{ margin: "8px 0", minHeight: 48, display: "flex", justifyContent: "flex-end" }}>
                   {invoice.signature
                     ? <img src={invoice.signature} alt="Signature" style={{ maxHeight: 60, maxWidth: 160, objectFit: "contain" }} />
@@ -355,7 +359,7 @@ export default function InvoiceDocument({ invoice, onBack, onEdit, onConvertToFi
                   }
                 </div>
 
-                <div style={{ fontSize: isMobile ? "0.68rem" : "0.82rem", color: "#475569" }}>Authorized Signatory</div>
+                <div style={{ fontSize: isMobile ? "0.68rem" : "0.82rem", color: "#475569" }}>{L.signatory}</div>
               </td>
             </tr>
 
