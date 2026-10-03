@@ -700,7 +700,7 @@ const updateField = (field, value) => {
 
   const printHeaderBlock = (
     <div style={{ marginBottom: 18 }}>
-      <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 24, tableLayout: "fixed" }}>
+      <table className="qt-party-table" style={{ width: "100%", borderCollapse: "collapse", marginBottom: 24, tableLayout: "fixed" }}>
         <tbody>
           <tr>
                       <td style={{ ...cellStyle, width: "50%" }}>
@@ -715,11 +715,8 @@ const updateField = (field, value) => {
             </td>
           </tr>
           <tr>
-            <td style={cellStyle}><span style={cellLabel}>To:</span></td>
-            <td style={cellStyle}><span style={cellLabel}>From:</span></td>
-          </tr>
-          <tr>
             <td style={cellStyle}>
+              <div style={{ ...cellLabel, marginBottom: 4 }}>To:</div>
               {editMode ? (
                 <>
                   <input value={form.name || ""} onChange={(e) => updateField("name", e.target.value)} placeholder="Client contact name" style={cellInput} />
@@ -739,6 +736,7 @@ const updateField = (field, value) => {
               )}
             </td>
             <td style={{ ...cellStyle, width: "50%" }}>
+              <div style={{ ...cellLabel, marginBottom: 4 }}>From:</div>
               {editMode ? (
                 <>
                   <CompanySelectField value={form.issuerName} onChange={handleIssuerSelect} placeholder="Your Company Name" style={cellInput} />                  <input value={form.issuerAddress || ""} onChange={(e) => updateField("issuerAddress", e.target.value)} placeholder="Company address" style={cellInput} />
@@ -807,6 +805,13 @@ const updateField = (field, value) => {
     .quotation-rich-text strong { color: #0f172a; }
         .quotation-rich-text a { color: inherit; text-decoration: underline; }
     .qt-print-frame td { padding: 0; vertical-align: top; }
+    @media screen and (max-width: 640px) {
+      .qt-party-table, .qt-party-table tbody, .qt-party-table tr, .qt-party-table td {
+        display: block; width: 100% !important; box-sizing: border-box;
+      }
+      .qt-party-table td + td { border-top: none !important; }
+      .qt-print-body td, .qt-print-body th { overflow-wrap: anywhere; }
+    }
   `}</style>
 
     <table className="qt-print-frame">
@@ -1254,10 +1259,10 @@ const updateField = (field, value) => {
   return (
     <div style={{ fontFamily: T.font, ...(editMode ? (isMobile ? styles.splitContainerMobile : styles.splitContainer) : { maxWidth: 900 }) }}>
 
-      <div style={editMode ? styles.formSide : {}}>
+      <div className="qt-fluid" style={editMode ? styles.formSide : {}}>
         <div className="d-flex align-items-center no-print"
           style={{
-            flexWrap: "nowrap", gap: 6,
+            flexWrap: "wrap", gap: 6, rowGap: 8,
             backgroundColor: "#fff",
             padding: "8px 12px",
             marginBottom: 8,

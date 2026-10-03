@@ -217,6 +217,9 @@ const tableStyles = `
   transform: translateY(-1px);
 }
 
+/* Phone-only copy of Drafts (lives in the header row) */
+.cl-drafts-mobile { display: none !important; }
+
 /* ── Badge selects (inline-editable Status) ── */
 .badge-select {
   border: none;
@@ -406,12 +409,28 @@ const tableStyles = `
     align-items: stretch !important;
     gap: 12px;
   }
-  .cl-header button {
-    width: 100% !important;
-    justify-content: center !important;
-    padding: 9px 14px !important;
-    font-size: 0.78rem !important;
+  .cl-header-actions { width: 100%; flex-wrap: nowrap; }
+  .cl-header-actions .cl-trash-btn { width: 38px !important; flex: 0 0 38px; }
+  .cl-header-actions .cl-drafts-mobile {
+    display: inline-flex !important;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    flex: 0 0 auto;
+    height: 38px;
+    padding: 0 12px;
+    font-size: 0.78rem;
   }
+  .cl-header-actions .cl-add-btn {
+    flex: 1 1 0;
+    min-width: 0;
+    justify-content: center !important;
+    padding: 9px 10px !important;
+    font-size: 0.78rem !important;
+    white-space: nowrap;
+  }
+  /* Toolbar copy is hidden on phones */
+  .cl-toolbar .cl-drafts-desktop { display: none !important; }
 
 /* Toolbar: Drafts / Delete Selected / Search stack full-width too */
   .cl-toolbar {
@@ -652,12 +671,12 @@ export default function CustomerList({ customers, search, setSearch, filterStatu
           </div>
         </div>
         
-           <div className="d-flex gap-2">
+        <div className="d-flex gap-2 cl-header-actions">
           <button
             onClick={() => navigate("/trash?tab=customers")}
             title="Trash"
             aria-label="Trash"
-            className="d-flex align-items-center justify-content-center border-0"
+            className="cl-trash-btn d-flex align-items-center justify-content-center border-0"
             style={{
               background: "#fff", color: "#64748b", cursor: "pointer",
               borderRadius: "10px", border: "1.5px solid #e2e8f0",
@@ -669,8 +688,28 @@ export default function CustomerList({ customers, search, setSearch, filterStatu
             <FaTrash size={13} />
           </button>
 
+          {drafts.length > 0 && (
+            <button
+              onClick={() => setShowDrafts(s => !s)}
+              className="cl-drafts-mobile border-0 fw-semibold rounded-3"
+              style={{
+                backgroundColor: showDrafts ? "#fde68a" : "#fffbeb",
+                color: "#92400e",
+                border: "1.5px solid #fde68a",
+                cursor: "pointer",
+                whiteSpace: "nowrap",
+              }}
+            >
+              <FaHistory size={12} /> Drafts
+              <span style={{
+                backgroundColor: "#92400e", color: "#fff", borderRadius: "999px",
+                fontSize: "0.68rem", fontWeight: 700, padding: "1px 7px",
+              }}>{drafts.length}</span>
+            </button>
+          )}
+
           <button onClick={onNew}
-            className="d-flex align-items-center gap-2 border-0 fw-semibold px-3 py-2"
+            className="cl-add-btn d-flex align-items-center gap-2 border-0 fw-semibold px-3 py-2"
             style={{ background: "linear-gradient(135deg,#1F6F5C,#134A3E)", color: "#fff", fontSize: "0.82rem", cursor: "pointer", borderRadius: "10px", boxShadow: "0 4px 12px rgba(31,111,92,0.35)" }}>
             <FaPlus size={12} /> Add Customer <FaChevronDown size={10} style={{ opacity: 0.8 }} />
           </button>
@@ -688,7 +727,7 @@ export default function CustomerList({ customers, search, setSearch, filterStatu
       <div className="cl-toolbar d-flex align-items-center justify-content-end gap-2 mb-3 flex-wrap">
         {drafts.length > 0 && (
           <button onClick={() => setShowDrafts(s => !s)}
-            className="d-flex align-items-center gap-2 border-0 fw-semibold px-3 py-2 rounded-3"
+            className="cl-drafts-desktop d-flex align-items-center gap-2 border-0 fw-semibold px-3 py-2 rounded-3"
             style={{
               backgroundColor: showDrafts ? "#fde68a" : "#fffbeb",
               color: "#92400e",

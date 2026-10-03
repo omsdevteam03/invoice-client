@@ -209,7 +209,7 @@ const styles = {
     gap: 8,
   },
   rowActive: {
-    background: "#eaecfc",
+    background: "#dff3ea",
   },
   rowTitle: {
     overflow: "hidden",

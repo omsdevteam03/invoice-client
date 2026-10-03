@@ -1,4 +1,4 @@
-import { getQuotationView, getCostLines, getCostItems, splitCostLine, htmlToPlainText } from "./quotationLayoutUtils"; import { useState } from "react";
+import { getQuotationView, getCostLines, getCostItems, splitCostLine, htmlToPlainText, mobileCss } from "./quotationLayoutUtils"; import { useState } from "react";
 import { EditText, EditArea, LogoEdit, SignatureEdit, CostItemsTable, CustomSectionsEdit, CompanySelect, CustomerSelect, RichOrPlainView } from "./EditableField";
 const TERMS_TEMPLATES = [
   { label: "Standard", text: "50% advance payment required to begin work, balance due on delivery.\nDelivery timelines are estimates and may shift with scope changes.\nRevisions beyond the agreed scope will be billed separately.\nThis quotation is valid for 15 days from the date of issue." },
@@ -137,6 +137,18 @@ const styles = `
   .qd-classic .page-frame > tbody > tr{ break-inside:auto; page-break-inside:auto; }
 }`;
 
+const CLASSIC_MOBILE = `
+  & .sheet{ padding:24px 16px !important; border:none !important; }
+  & .crest h2{ font-size:15px !important; letter-spacing:1.5px !important; }
+  & h1{ font-size:22px !important; letter-spacing:4px !important; }
+  & .project-title{ margin-bottom:20px !important; }
+  & .reference-row{ justify-content:center !important; flex-wrap:wrap !important; padding:0 !important; }
+  & .reference-row > *{ max-width:none !important; }
+  & .meta-table, & .meta-table tbody, & .meta-table tr, & .meta-table td{ display:block !important; width:100% !important; box-sizing:border-box; }
+  & .meta-table td + td{ border-top:none !important; }
+`;
+
+
 export default function ClassicLayout({
   quotation, companyInfo, customers = [], editMode = false, onChange = () => { },
   onCustomSectionChange = () => { }, onAddCustomSection = () => { }, onRemoveCustomSection = () => { },
@@ -171,7 +183,7 @@ export default function ClassicLayout({
   };
   return (
       <div className="qd-classic">
-      <style>{styles}</style>
+      <style>{styles}{mobileCss(".qd-classic", CLASSIC_MOBILE)}</style>
       <div className="sheet">
         <table className="page-frame">
           <thead><tr><td /></tr></thead>

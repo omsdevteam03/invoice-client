@@ -1,4 +1,4 @@
-import { getQuotationView, getCostLines, getCostItems, splitCostLine, htmlToPlainText } from "./quotationLayoutUtils";
+import { getQuotationView, getCostLines, getCostItems, splitCostLine, htmlToPlainText, mobileCss } from "./quotationLayoutUtils";
 import { useState } from "react";
 import { EditText, EditArea, LogoEdit, SignatureEdit, CostItemsTable, CustomSectionsEdit, CompanySelect, CustomerSelect, RichOrPlainView } from "./EditableField";
 const TERMS_TEMPLATES = [
@@ -124,6 +124,18 @@ const styles = `
   .qd-creative .page-frame > tbody > tr{ break-inside:auto; page-break-inside:auto; }
 }
 `;
+
+const CREATIVE_MOBILE = `
+  & .header{ padding:20px 16px !important; min-height:110px !important; gap:12px !important; }
+  & .header-deco{ width:150px !important; height:75px !important; opacity:.55; }
+  & .header-brand{ max-width:100% !important; gap:10px !important; }
+  & .header-brand h3{ font-size:16px !important; }
+  & .header-title .subline{ font-size:15px !important; padding:0 16px; }
+  & .header-title .quote-meta{ padding:0 16px; }
+  & .inner{ padding:16px 16px 28px !important; }
+  & .cols2{ margin-top:16px !important; }
+`;
+
 export default function CreativeLayout({
   quotation, companyInfo, customers = [], editMode = false, onChange = () => { },
   onCustomSectionChange = () => { }, onAddCustomSection = () => { }, onRemoveCustomSection = () => { },
@@ -157,7 +169,8 @@ export default function CreativeLayout({
 
   return (
     <div className="qd-creative" style={{ "--accent": accent }}>
-      <style>{styles}</style>
+      <style>{styles}{mobileCss(".qd-creative", CREATIVE_MOBILE)}</style>
+      
       <div className="sheet">
         <div className="header">
           <svg className="header-deco" viewBox="0 0 300 150" aria-hidden="true">

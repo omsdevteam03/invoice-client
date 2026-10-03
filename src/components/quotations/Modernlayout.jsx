@@ -1,4 +1,4 @@
-import { getQuotationView, getCostLines, getCostItems, splitCostLine, htmlToPlainText } from "./quotationLayoutUtils";
+import { getQuotationView, getCostLines, getCostItems, splitCostLine, htmlToPlainText, mobileCss } from "./quotationLayoutUtils";
 import { useState } from "react";
 import { EditText, EditArea, LogoEdit, SignatureEdit, CostItemsTable, CustomSectionsEdit, CompanySelect, CustomerSelect, RichOrPlainView } from "./EditableField";
 
@@ -117,6 +117,19 @@ const TERMS_TEMPLATES = [
   { label: "Simple Freelance", text: "Scope: Work will proceed strictly as described in this quotation. Anything outside this scope will be quoted separately.\n\nPayment: 50% upfront, 50% on completion. Late payments beyond 7 days of the due date may incur a 2% monthly late fee.\n\nRevisions: Up to 2 rounds of revisions are included. Additional revisions are billed at the standard hourly rate.\n\nOwnership: Full ownership of final files transfers to the Client upon receipt of full payment.\n\nCancellation: If the Client cancels after work has begun, the advance payment is non-refundable and covers work completed to date.\n\nValidity: This quotation is valid for 15 days from the date of issue." },
 ];
 
+const MODERN_MOBILE = `
+  & .header{ padding:78px 16px 14px !important; gap:10px !important; flex-wrap:wrap !important; }
+  & .header-wave{ height:84px !important; }
+  & .brand img{ height:52px !important; }
+  & .header-info{ flex:1 1 160px !important; min-width:0 !important; }
+  & .header-info .company-name{ font-size:17px !important; }
+  & .header-contact{ text-align:left !important; width:100%; }
+  & .body{ padding:0 16px 28px !important; }
+  & .subline{ margin-bottom:16px !important; }
+  & .footer-strip{ height:16px !important; }
+`;
+
+
 export default function ModernLayout({ quotation, companyInfo, customers = [], editMode = false, onChange = () => { }, onCustomSectionChange = () => { }, onAddCustomSection = () => { }, onRemoveCustomSection = () => { },
   onLogoUpload = () => { }, onRemoveLogo = () => { },
   onSignatureUpload = () => { }, onRemoveSignature = () => { },
@@ -143,7 +156,7 @@ export default function ModernLayout({ quotation, companyInfo, customers = [], e
 
   return (
        <div className="qd-modern" style={{ "--accent": accent }}>
-      <style>{styles}</style>
+      <style>{styles}{mobileCss(".qd-modern", MODERN_MOBILE)}</style>
       <div className="sheet">
         <div className="header">
           <svg className="header-wave" viewBox="0 0 800 130" preserveAspectRatio="none" aria-hidden="true">

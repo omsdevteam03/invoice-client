@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { useNavigate } from "react-router-dom"; 
+import { useNavigate } from "react-router-dom";
 
 // Reusable AI chat box, backed by the server.
 //
@@ -10,6 +10,29 @@ import { useNavigate } from "react-router-dom";
 //   onChatUpdated(chat) - called after any message exchange (e.g. to bump it to the top of the sidebar / update title)
 
 const API_BASE = `${import.meta.env.VITE_API_URL}/chat`;
+
+// Change these to restyle everything (e.g. green: "#10b981" family)
+const THEME = {
+  pageBg: "linear-gradient(180deg, #f3fbf7 0%, #e3f4ec 100%)",
+  solidBg: "#eaf6f0",
+  userBubble: "linear-gradient(135deg, #34a98a 0%, #1f7a63 100%)",
+  accent: "#1f7a63",
+  orb: "radial-gradient(circle at 30% 28%, #ffffff 0%, #bbf7d0 28%, #6ee7b7 62%, #14b8a6 100%)",
+  shadow: "rgba(31, 122, 99, 0.12)",
+  shadowStrong: "rgba(31, 122, 99, 0.28)",
+};
+
+const Svg = ({ children, size = 16, fill = "none" }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill={fill} stroke="currentColor"
+    strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">{children}</svg>
+);
+const CopyIcon = () => (<Svg><rect x="9" y="9" width="13" height="13" rx="2" /><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" /></Svg>);
+const ThumbIcon = ({ filled }) => (<Svg fill={filled ? "currentColor" : "none"}><path d="M14 9V5a3 3 0 0 0-3-3l-4 9v11h11.28a2 2 0 0 0 2-1.7l1.38-9a2 2 0 0 0-2-2.3zM7 22H4a2 2 0 0 1-2-2v-7a2 2 0 0 1 2-2h3" /></Svg>);
+const SpeakerIcon = () => (<Svg><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" /><path d="M15.54 8.46a5 5 0 0 1 0 7.07" /></Svg>);
+const RefreshIcon = () => (<Svg><polyline points="17 1 21 5 17 9" /><path d="M3 11V9a4 4 0 0 1 4-4h14" /><polyline points="7 23 3 19 7 15" /><path d="M21 13v2a4 4 0 0 1-4 4H3" /></Svg>);
+const ClipIcon = () => (<Svg size={18}><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" /></Svg>);
+const MicIcon = () => (<Svg size={18}><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" /><path d="M19 10v2a7 7 0 0 1-14 0v-2" /><line x1="12" y1="19" x2="12" y2="23" /></Svg>);
+const SendIcon = () => (<Svg size={20}><line x1="22" y1="2" x2="11" y2="13" /><polygon points="22 2 15 22 11 13 2 9 22 2" /></Svg>);
 
 // Dictation languages
 const VOICE_LANGUAGES = [
@@ -168,22 +191,22 @@ function QuestionForm({ questions, onSubmit }) {
             ) : (
               <>
                 {rowsFor(q.key).map((r, idx) => (
-                  <div key={idx} style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                  <div key={idx} style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
                     <input
-                      style={{ ...styles.formInput, flex: 1, minWidth: 0 }}
+                      style={{ ...styles.formInput, flex: "1 1 160px", minWidth: 0 }}
                       placeholder={`Item ${idx + 1} (e.g. Frontend)`}
                       value={r.description}
                       onChange={(e) => updateRow(q.key, idx, "description", e.target.value)}
                     />
                     <input
-                      style={{ ...styles.formInput, flex: "0 0 52px", textAlign: "center" }}
+                      style={{ ...styles.formInput, flex: "0 0 64px", minWidth: 0, textAlign: "center" }}
                       placeholder="Qty"
                       inputMode="numeric"
                       value={r.qty}
                       onChange={(e) => updateRow(q.key, idx, "qty", e.target.value.replace(/[^\d.]/g, ""))}
                     />
                     <input
-                      style={{ ...styles.formInput, flex: "0 0 90px" }}
+                      style={{ ...styles.formInput, flex: "1 1 90px", minWidth: 0 }}
                       placeholder="₹ Price"
                       inputMode="numeric"
                       value={r.price}
@@ -237,6 +260,7 @@ function QuestionForm({ questions, onSubmit }) {
 
 export default function AIChatBox({
   chatId,
+  isMobile = false,
   aiName = "Nexa",
   greeting = "Hi! How can I help you today?",
   onChatCreated,
@@ -248,13 +272,14 @@ export default function AIChatBox({
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [attachedImage, setAttachedImage] = useState(null); // data URL or null
   const [isRecording, setIsRecording] = useState(false);
-  const [micError, setMicError] = useState(null); 
+  const [micError, setMicError] = useState(null);
   // "ta-IN" = Tamil, "en-IN" = English. Remembered between visits.
   const [voiceLang, setVoiceLang] = useState(() => {
     const saved = localStorage.getItem("nexa:voiceLang");
     return VOICE_LANGUAGES.some((l) => l.code === saved) ? saved : "ta-IN";
-  }); 
+  });
   const [copiedId, setCopiedId] = useState(null);
+  const [liked, setLiked] = useState({}); // messageId -> true
   const [editingMessageId, setEditingMessageId] = useState(null); // id of the message being edited, or null
   const scrollRef = useRef(null);
   const fileInputRef = useRef(null);
@@ -427,6 +452,55 @@ export default function AIChatBox({
     });
   }
 
+  // ── Speak a reply out loud ────────────────────────────────────────────
+  function speak(text) {
+    if (!("speechSynthesis" in window) || !text) return;
+    window.speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = voiceLang;
+    window.speechSynthesis.speak(u);
+  }
+
+  // ── Tap the language chip to cycle Tamil → English → Hindi … ─────────
+  function cycleLang() {
+    const i = VOICE_LANGUAGES.findIndex((l) => l.code === voiceLang);
+    const next = VOICE_LANGUAGES[(i + 1) % VOICE_LANGUAGES.length].code;
+    setVoiceLang(next);
+    localStorage.setItem("nexa:voiceLang", next);
+  }
+
+  // ── Regenerate the last reply (re-sends the user message before it) ──
+  async function regenerate(botIdx) {
+    if (loading || !chatId) return;
+    const userMsg = [...messages.slice(0, botIdx)].reverse().find((m) => m.role === "user");
+    if (!userMsg || String(userMsg.id).startsWith("temp-")) return;
+    const { imageDataUrl, text } = parseMessageContent(userMsg.content);
+
+    setLoading(true);
+    setMessages((prev) => {
+      const idx = prev.findIndex((m) => m.id === userMsg.id);
+      return idx === -1 ? prev : prev.slice(0, idx);
+    });
+    try {
+      const res = await fetch(`${API_BASE}/${chatId}/messages/${userMsg.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content: text, image: imageDataUrl || undefined, aiName }),
+      });
+      if (!res.ok) throw new Error("Request failed");
+      const data = await res.json();
+      setMessages((prev) => [...prev, data.userMessage, data.assistantMessage]);
+      onChatUpdated?.(data.chat);
+    } catch {
+      setMessages((prev) => [
+        ...prev,
+        { id: `err-${Date.now()}`, role: "assistant", content: "Couldn't regenerate. Please try again." },
+      ]);
+    } finally {
+      setLoading(false);
+    }
+  }
+
   // ── Edit (rewrites the message + regenerates the AI reply) ───────────
   function handleEdit(message) {
     const { imageDataUrl, text } = parseMessageContent(message.content);
@@ -550,9 +624,17 @@ export default function AIChatBox({
 
   const showGreeting = !chatId && messages.length === 0 && !loadingHistory;
 
+  // Compact sizes for phones
+  const mIcon = isMobile ? { width: 32, height: 32, fontSize: 14 } : {};
+  const mLang = isMobile ? { width: 92, maxWidth: 92, height: 32, fontSize: 12, padding: "0 6px" } : {};
+  const mSend = isMobile ? { height: 32, padding: "0 16px", fontSize: 13, marginLeft: "auto" } : {};
+
   return (
     <div style={styles.wrapper}>
-      <div style={styles.messages} ref={scrollRef}>
+      <div
+        style={{ ...styles.messages, ...(isMobile ? { padding: 10, minHeight: 0 } : {}) }}
+        ref={scrollRef}
+      >
         {loadingHistory && (
           <div style={{ ...styles.msg, ...styles.msgBot, fontStyle: "italic", color: "#999" }}>
             Loading conversation...
@@ -571,11 +653,23 @@ export default function AIChatBox({
           const isSaved = !String(m.id).startsWith("temp-") && !String(m.id).startsWith("err-");
           return (
             <div key={m.id} style={{ display: "flex", flexDirection: "column", ...(isUser ? { alignItems: "flex-end" } : { alignItems: "flex-start" }) }}>
-              <div style={{ ...styles.msg, ...(isUser ? styles.msgUser : styles.msgBot) }}>
-                {imageDataUrl && (
-                  <img src={imageDataUrl} alt="attachment" style={styles.msgImage} />
-                )}
-                {text && renderMarkdownLite(text)}
+              <div style={{ display: "flex", alignItems: "flex-start", gap: 8, maxWidth: isMobile ? "90%" : "75%" }}>
+                {!isUser && <div style={styles.orb} />}
+                <div
+                  style={{
+                    ...styles.msg,
+                    ...(isUser ? styles.msgUser : styles.msgBot),
+                    maxWidth: "100%",
+                    minWidth: 0,
+                    wordBreak: "break-word",
+                  }}
+                >
+                  {imageDataUrl && (
+                    <img src={imageDataUrl} alt="attachment" style={styles.msgImage} />
+                  )}
+                  {text && renderMarkdownLite(text)}
+                </div>
+                {isUser && <div style={styles.userAvatar}>A</div>}
               </div>
 
               {/* One button per created/updated record */}
@@ -598,23 +692,53 @@ export default function AIChatBox({
                 <QuestionForm questions={form.questions} onSubmit={(answersText) => sendMessage(answersText)} />
               )}
 
-              <div style={styles.msgActions}>
-                <button style={styles.msgActionBtn} onClick={() => handleCopy(m)} title="Copy">
-                  {copiedId === m.id ? "Copied!" : "Copy"}
-                </button>
-                {isUser && isSaved && (
-                  <button style={styles.msgActionBtn} onClick={() => handleEdit(m)} title="Edit">
-                    Edit
+              {isUser ? (
+                <div style={styles.msgActions}>
+                  <button style={styles.msgActionBtn} onClick={() => handleCopy(m)}>
+                    {copiedId === m.id ? "Copied!" : "Copy"}
                   </button>
-                )}
-              </div>
+                  {isSaved && (
+                    <button style={styles.msgActionBtn} onClick={() => handleEdit(m)}>Edit</button>
+                  )}
+                </div>
+              ) : (
+                <div style={styles.botFooter}>
+                  <button style={styles.circleBtn} onClick={() => handleCopy(m)} title="Copy">
+                    {copiedId === m.id ? "✓" : <CopyIcon />}
+                  </button>
+                  <button
+                    style={{ ...styles.circleBtn, ...(liked[m.id] ? { color: THEME.accent } : {}) }}
+                    onClick={() => setLiked((l) => ({ ...l, [m.id]: !l[m.id] }))}
+                    title="Like"
+                  >
+                    <ThumbIcon filled={!!liked[m.id]} />
+                  </button>
+                  <button style={styles.circleBtn} onClick={() => speak(text)} title="Read aloud">
+                    <SpeakerIcon />
+                  </button>
+                  {idx === messages.length - 1 && isSaved && (
+                    <button
+                      style={{ ...styles.circleBtn, marginLeft: "auto" }}
+                      onClick={() => regenerate(idx)}
+                      title="Regenerate"
+                    >
+                      <RefreshIcon />
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
           );
         })}
 
         {loading && (
-          <div style={{ ...styles.msg, ...styles.msgBot, fontStyle: "italic", color: "#999" }}>
-            Typing...
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <div style={{ ...styles.orb, animation: "orbThink 1s ease-in-out infinite" }} />
+            <div style={{ ...styles.msg, ...styles.msgBot, display: "flex", gap: 5, padding: "14px 16px" }}>
+              <span style={styles.dot} />
+              <span style={{ ...styles.dot, animationDelay: "0.2s" }} />
+              <span style={{ ...styles.dot, animationDelay: "0.4s" }} />
+            </div>
           </div>
         )}
       </div>
@@ -648,6 +772,21 @@ export default function AIChatBox({
           0%, 100% { transform: scaleY(0.35); }
           50% { transform: scaleY(1); }
         }
+        @keyframes orbFloat {
+          0%, 100% { transform: translateY(0) scale(1); box-shadow: 0 2px 6px rgba(31,122,99,0.25); }
+          50% { transform: translateY(-2px) scale(1.06); box-shadow: 0 4px 12px rgba(31,122,99,0.45); }
+        }
+        @keyframes orbThink {
+          0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(31,122,99,0.45); }
+          50% { transform: scale(1.12); box-shadow: 0 0 0 8px rgba(31,122,99,0); }
+        }
+        @keyframes dotBounce {
+          0%, 80%, 100% { transform: translateY(0); opacity: 0.4; }
+          40% { transform: translateY(-4px); opacity: 1; }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          * { animation: none !important; }
+        }
       `}</style>
 
       {isRecording ? (
@@ -676,7 +815,12 @@ export default function AIChatBox({
           </button>
         </div>
       ) : (
-        <div style={styles.inputBar}>
+        <div
+          style={{
+            ...styles.inputBar,
+            ...(isMobile ? { flexWrap: "wrap", padding: 8, gap: 6 } : {}),
+          }}
+        >
           <input
             ref={fileInputRef}
             type="file"
@@ -685,7 +829,7 @@ export default function AIChatBox({
             onChange={handleImageSelect}
           />
           <button
-            style={styles.iconBtn}
+            style={{ ...styles.iconBtn, ...mIcon }}
             onClick={() => fileInputRef.current?.click()}
             title="Attach image"
             aria-label="Attach image"
@@ -696,7 +840,7 @@ export default function AIChatBox({
           {SpeechRecognitionAPI && (
             <>
               <button
-                style={styles.iconBtn}
+                style={{ ...styles.iconBtn, ...mIcon }}
                 onClick={toggleRecording}
                 title="Voice input"
                 aria-label="Voice input"
@@ -704,7 +848,7 @@ export default function AIChatBox({
                 🎤
               </button>
               <select
-                style={styles.langSelect}
+                style={{ ...styles.langSelect, ...mLang }}
                 value={voiceLang}
                 onChange={(e) => {
                   setVoiceLang(e.target.value);
@@ -721,14 +865,19 @@ export default function AIChatBox({
           )}
 
           <input
-            style={styles.input}
+            style={{
+              ...styles.input,
+              ...(isMobile
+                ? { order: -1, flex: "1 1 100%", minWidth: 0, padding: "7px 14px", fontSize: 13 }
+                : {}),
+            }}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder={editingMessageId ? "Edit your message..." : "Type your question..."}
           />
           <button
-            style={styles.sendBtn}
+            style={{ ...styles.sendBtn, ...mSend }}
             onClick={editingMessageId ? saveEdit : sendMessage}
             aria-label={editingMessageId ? "Save edit" : "Send"}
           >
@@ -745,39 +894,40 @@ const styles = {
     display: "flex",
     flexDirection: "column",
     height: "100%",
-    border: "1px solid #eee",
-    borderRadius: 12,
+    border: "none",
+    borderRadius: 20,
     overflow: "hidden",
-    background: "#fff",
+    background: THEME.solidBg,
   },
   messages: {
     flex: 1,
     overflowY: "auto",
-    padding: 20,
+    padding: 16,
     display: "flex",
     flexDirection: "column",
     gap: 4,
-    background: "#f7f7fb",
+    background: THEME.pageBg,
     minHeight: 300,
   },
   msg: {
     maxWidth: "70%",
-    padding: "10px 15px",
-    borderRadius: 14,
+    padding: "12px 16px",
+    borderRadius: 20,
     fontSize: 14,
-    lineHeight: 1.5,
+    lineHeight: 1.55,
   },
   msgBot: {
     background: "#fff",
-    border: "1px solid #eee",
+    color: "#1f2937",
+    border: "none",
+    boxShadow: `0 2px 12px ${THEME.shadow}`,
     alignSelf: "flex-start",
-    borderBottomLeftRadius: 4,
   },
   msgUser: {
-    background: "#4f6bf0",
+    background: THEME.userBubble,
     color: "#fff",
+    boxShadow: `0 2px 12px ${THEME.shadowStrong}`,
     alignSelf: "flex-end",
-    borderBottomRightRadius: 4,
   },
   msgImage: {
     maxWidth: "100%",
@@ -789,7 +939,7 @@ const styles = {
   msgActions: {
     display: "flex",
     gap: 6,
-    margin: "2px 4px 10px",
+    margin: "2px 44px 10px 4px", // clears the 36px avatar
   },
   msgActionBtn: {
     border: "none",
@@ -827,10 +977,122 @@ const styles = {
   inputBar: {
     display: "flex",
     alignItems: "center",
-    gap: 8,
-    padding: 14,
-    borderTop: "1px solid #eee",
+    gap: 10,
+    padding: "10px 12px 14px",
+    background: THEME.solidBg,
+  },
+  pill: {
+    flex: 1,
+    minWidth: 0,
+    display: "flex",
+    alignItems: "center",
+    gap: 4,
     background: "#fff",
+    borderRadius: 999,
+    padding: "4px 8px",
+    boxShadow: "0 2px 12px rgba(0,0,0,0.06)",
+  },
+  pillIconBtn: {
+    border: "none",
+    background: "transparent",
+    color: "#64748b",
+    width: 34,
+    height: 34,
+    flexShrink: 0,
+    borderRadius: "50%",
+    cursor: "pointer",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  pillInput: {
+    flex: 1,
+    minWidth: 0,
+    border: "none",
+    outline: "none",
+    background: "transparent",
+    fontSize: 14,
+    padding: "8px 4px",
+  },
+  langChip: {
+    border: "none",
+    background: "#f1f5f9",
+    color: "#475569",
+    borderRadius: 999,
+    padding: "4px 8px",
+    fontSize: 11,
+    fontWeight: 700,
+    cursor: "pointer",
+    flexShrink: 0,
+  },
+  sendCircle: {
+    width: 46,
+    height: 46,
+    flexShrink: 0,
+    borderRadius: "50%",
+    border: "none",
+    background: "#fff",
+    color: THEME.accent,
+    boxShadow: "0 2px 12px rgba(0,0,0,0.08)",
+    cursor: "pointer",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontSize: 18,
+    fontWeight: 700,
+  },
+
+  // bot footer (orb + action icons) and user avatar
+  botFooter: {
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+    width: "min(100%, 340px)",
+    margin: "6px 0 10px 34px", // 26px orb + 8px gap, so icons line up with the bubble
+  },
+  orb: {
+    width: 26,
+    height: 26,
+    borderRadius: "50%",
+    background: THEME.orb,
+    flexShrink: 0,
+    animation: "orbFloat 3s ease-in-out infinite",
+  },
+  dot: {
+    width: 7,
+    height: 7,
+    borderRadius: "50%",
+    background: THEME.accent,
+    display: "inline-block",
+    animation: "dotBounce 1.2s ease-in-out infinite",
+  },
+  circleBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: "50%",
+    border: "none",
+    background: "rgba(255,255,255,0.85)",
+    color: "#334155",
+    boxShadow: "0 1px 6px rgba(0,0,0,0.06)",
+    cursor: "pointer",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    fontSize: 13,
+    fontWeight: 700,
+  },
+  userAvatar: {
+    width: 36,
+    height: 36,
+    borderRadius: "50%",
+    flexShrink: 0,
+    background: "linear-gradient(135deg, #1f2937, #475569)",
+    color: "#fff",
+    fontSize: 14,
+    fontWeight: 700,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
   },
   iconBtn: {
     border: "1px solid #ddd",
@@ -849,7 +1111,7 @@ const styles = {
     background: "#fee2e2",
     border: "1px solid #fecaca",
   },
-    langSelect: {
+  langSelect: {
     border: "1px solid #ddd",
     background: "#fff",
     borderRadius: 999,
@@ -950,6 +1212,8 @@ const styles = {
     padding: 14,
     marginTop: 6,
     width: "min(480px, 100%)",
+    boxSizing: "border-box",
+    overflow: "hidden",
     display: "flex",
     flexDirection: "column",
     gap: 10,
@@ -958,6 +1222,8 @@ const styles = {
   formLabel: { fontSize: 13, fontWeight: 600, color: "#334155" },
   formInput: {
     flex: 1,
+    minWidth: 0,
+    boxSizing: "border-box",
     border: "1px solid #ddd",
     borderRadius: 8,
     padding: "8px 10px",
@@ -1020,9 +1286,9 @@ const styles = {
     margin: "6px 4px 2px",
   },
   refBtn: {
-    border: "1px solid #c7d2fe",
-    background: "#eef2ff",
-    color: "#4f46e5",
+    border: "1px solid #a7e3cf",
+    background: "#e8f7f1",
+    color: "#1f7a63",
     borderRadius: 999,
     padding: "5px 12px",
     fontSize: 12,

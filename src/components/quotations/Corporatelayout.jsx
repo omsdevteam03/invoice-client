@@ -1,4 +1,4 @@
-import { getQuotationView, getCostLines, getCostItems, splitCostLine, htmlToPlainText } from "./quotationLayoutUtils";import { useState } from "react";
+import { getQuotationView, getCostLines, getCostItems,splitCostLine, htmlToPlainText, mobileCss } from "./quotationLayoutUtils";import { useState } from "react";
 import { EditText, EditArea, LogoEdit, SignatureEdit, CostItemsTable, CustomSectionsEdit, CompanySelect, CustomerSelect, RichOrPlainView } from "./EditableField";
 
 const styles = `.qd-corporate{
@@ -114,6 +114,15 @@ const TERMS_TEMPLATES = [
   { label: "Simple Freelance", text: "Scope: Work will proceed strictly as described in this quotation. Anything outside this scope will be quoted separately.\n\nPayment: 50% upfront, 50% on completion. Late payments beyond 7 days of the due date may incur a 2% monthly late fee.\n\nRevisions: Up to 2 rounds of revisions are included. Additional revisions are billed at the standard hourly rate.\n\nOwnership: Full ownership of final files transfers to the Client upon receipt of full payment.\n\nCancellation: If the Client cancels after work has begun, the advance payment is non-refundable and covers work completed to date.\n\nValidity: This quotation is valid for 15 days from the date of issue." },
 ];
 
+const CORPORATE_MOBILE = `
+  & .header-bars{ height:36px !important; }
+  & .header-row{ padding:14px 16px 6px !important; gap:10px !important; }
+  & .header .doc h1{ font-size:22px !important; letter-spacing:2px !important; }
+  & .header .brand{ gap:10px !important; }
+  & .header .brand img{ height:44px !important; }
+  & .body{ padding:20px 16px 28px !important; }
+`;
+
 export default function CorporateLayout({ quotation, companyInfo, customers = [], editMode = false, onChange = () => { }, onCustomSectionChange = () => { }, onAddCustomSection = () => { }, onRemoveCustomSection = () => { },
   onLogoUpload = () => { }, onRemoveLogo = () => { },
   onSignatureUpload = () => { }, onRemoveSignature = () => { },
@@ -140,7 +149,7 @@ export default function CorporateLayout({ quotation, companyInfo, customers = []
 
 return (
   <div className="qd-corporate">
-    <style>{styles}</style>
+    <style>{styles}{mobileCss(".qd-corporate", CORPORATE_MOBILE)}</style>
     <div className="sheet">
       <div className="header">
         <svg className="header-bars" viewBox="0 0 800 60" preserveAspectRatio="none" aria-hidden="true">

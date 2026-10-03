@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { FaArrowLeft, FaSave, FaPlus, FaTrash, FaEye, FaEyeSlash, FaTimes, FaChevronDown } from "react-icons/fa";
-import { INVOICE_LABELS, INVOICE_FONT, InvoiceLangToggle } from "./invoiceLang";
+import { INVOICE_LABELS, INVOICE_FONT, InvoiceLangToggle, useTamilDescriptions } from "./invoiceLang";
 
 function logoStyle(shape, size) {
   if (shape === "circle") return { width: size, height: size, borderRadius: "50%", objectFit: "cover" };
@@ -406,8 +406,34 @@ function useIsMobile(breakpoint = 900) {
 }
 
 // ── Live Preview (full mirror of InvoiceDocument, shown alongside the form) ─
+const PREVIEW_DOC_WIDTH = 560; // natural width of the invoice table
+
 function InvoicePreview({ form, isMobile, onClose }) {
-  const L = INVOICE_LABELS[form.invoiceLang === "ta" ? "ta" : "en"];
+  // Mobile: scale the whole invoice down so it fits the screen width
+  const wrapRef = useRef(null);
+  const innerRef = useRef(null);
+  const [scale, setScale] = useState(1);
+  const [scaledHeight, setScaledHeight] = useState(null);
+
+  useEffect(() => {
+    if (!isMobile) return;
+    const update = () => {
+      if (!wrapRef.current) return;
+      const s = Math.min(1, wrapRef.current.clientWidth / PREVIEW_DOC_WIDTH);
+      setScale(s);
+      if (innerRef.current) setScaledHeight(innerRef.current.offsetHeight * s);
+    };
+    update();
+    const ro = new ResizeObserver(update);
+    if (wrapRef.current) ro.observe(wrapRef.current);
+    if (innerRef.current) ro.observe(innerRef.current);
+    window.addEventListener("resize", update);
+    return () => { ro.disconnect(); window.removeEventListener("resize", update); };
+  }, [isMobile]);
+
+  const previewLang = form.invoiceLang === "ta" ? "ta" : "en";
+  const L = INVOICE_LABELS[previewLang];
+  const tDesc = useTamilDescriptions(form.items, previewLang);
   const rawSum = form.items.reduce((a, b) => a + Number(b.amount || 0), 0);
   const gstPercent = Number(form.gstPercent || 18);
   let subtotal, tax, total;
@@ -467,8 +493,22 @@ function InvoicePreview({ form, isMobile, onClose }) {
       </div>
 
       <div style={{ padding: isMobile ? "10px" : "16px", overflowY: isMobile ? "visible" : "auto", flex: isMobile ? "none" : 1, backgroundColor: "#f1f5f9" }}>
-        <div style={{ backgroundColor: "#fff", padding: isMobile ? "10px" : "14px", fontFamily: INVOICE_FONT, overflowX: isMobile ? "auto" : "visible" }}>
-          <table style={{ width: "100%", minWidth: isMobile ? "560px" : "auto", borderCollapse: "collapse", border: "1px solid #000" }}>
+        <div
+          ref={wrapRef}
+          style={isMobile ? { width: "100%", height: scaledHeight ?? "auto", overflow: "hidden" } : undefined}
+        >
+        <div
+          ref={innerRef}
+          style={{
+            backgroundColor: "#fff",
+            padding: "14px",
+            fontFamily: INVOICE_FONT,
+            ...(isMobile
+              ? { width: PREVIEW_DOC_WIDTH, transform: `scale(${scale})`, transformOrigin: "top left" }
+              : {}),
+          }}
+        >
+          <table style={{ width: "100%", borderCollapse: "collapse", border: "1px solid #000" }}>
             <tbody>
               <tr>
                 <td colSpan={3} style={{ border: "1px solid #000", padding: "8px 10px", width: "60%" }}>                  <div className="d-flex align-items-start gap-2">
@@ -530,7 +570,7 @@ function InvoicePreview({ form, isMobile, onClose }) {
               {form.items.map((item, i) => (
                 <tr key={i}>
                   {cell(item.sl, { textAlign: "center" })}
-                  {cell(item.description || <span style={{ color: "#cbd5e1" }}>—</span>)}
+                  {cell(tDesc(item) || <span style={{ color: "#cbd5e1" }}>—</span>)}
                   {cell(`${item.qty}${item.unit ? " " + item.unit : ""}`, { textAlign: "center", whiteSpace: "nowrap" })}
                   {cell(formatAmount(item.rate), { textAlign: "right" })}
                   {cell(formatAmount(item.amount), { textAlign: "right" })}
@@ -598,11 +638,7 @@ function InvoicePreview({ form, isMobile, onClose }) {
               </tr>
             </tbody>
           </table>
-          {isMobile && (
-            <div style={{ textAlign: "center", fontSize: "0.65rem", color: "#94a3b8", marginTop: 6, fontStyle: "italic" }}>
-              ← Scroll sideways to see the full invoice →
-            </div>
-          )}
+        </div>
         </div>
       </div>
     </div>

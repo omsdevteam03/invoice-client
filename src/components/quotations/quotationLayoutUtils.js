@@ -162,3 +162,40 @@ export function htmlToPlainText(html) {
     .filter(Boolean)
     .join("\n");
 }
+
+// Phone rules shared by every quotation layout.
+// Applies only on screens <= 640px, only inside the `.qt-fluid` wrapper
+// (the real document, not the scaled live preview), and never when printing.
+// In `extra`, "&" stands for the layout's own root selector.
+export const mobileCss = (root, extra = "") => {
+  const R = `.qt-fluid ${root}`;
+  return `
+@media screen and (max-width: 640px) {
+  ${R}{ padding:0 !important; }
+  ${R} .sheet{ max-width:100% !important; border-radius:0 !important; }
+
+  /* To / From stack instead of sitting side by side */
+  ${R} .info-row{ flex-direction:column !important; }
+  ${R} .info-cell{ padding:12px 14px !important; min-width:0; }
+  ${R} .info-cell + .info-cell{ border-left:none !important; border-top:1px solid rgba(128,128,128,.35) !important; }
+  ${R} .info-lines div{ overflow-wrap:anywhere; }
+
+  /* signatures stack */
+  ${R} .sign{ display:flex !important; flex-direction:column !important; gap:26px !important; margin-top:28px !important; }
+  ${R} .sign > div{ display:block !important; width:100% !important; min-width:0 !important; flex:none !important; padding-right:0 !important; text-align:left !important; }
+  ${R} .sign .space{ justify-content:flex-start !important; }
+
+  /* contact line at the bottom stacks */
+  ${R} .footer-bar{ flex-direction:column !important; align-items:flex-start !important; gap:4px !important; }
+
+  /* tables: tighter cells, long text wraps */
+  ${R} table.cost-summary th, ${R} table.cost-summary td,
+  ${R} table.cost-table th, ${R} table.cost-table td{ padding:7px 8px !important; font-size:12px !important; overflow-wrap:anywhere; }
+
+  /* long words / emails never push the page wider */
+  ${R} .block, ${R} .terms{ overflow-wrap:anywhere; }
+  ${R} img{ max-width:100%; }
+
+  ${extra.replace(/&/g, R)}
+}`;
+};

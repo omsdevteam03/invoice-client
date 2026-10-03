@@ -10,7 +10,23 @@ const LAST_CHAT_KEY = "nexa:lastActiveChatId";
 const NAME_KEY = "ai:assistantName";
 const DEFAULT_AI_NAME = "Nexa";
 
+function useIsMobile(breakpoint = 768) {
+  const [isMobile, setIsMobile] = useState(
+    () => typeof window !== "undefined" && window.innerWidth < breakpoint
+  );
+  useEffect(() => {
+    const mq = window.matchMedia(`(max-width: ${breakpoint - 1}px)`);
+    const onChange = (e) => setIsMobile(e.matches);
+    setIsMobile(mq.matches);
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  }, [breakpoint]);
+  return isMobile;
+}
+
 export default function AIPage() {
+  const isMobile = useIsMobile();
+  const [sidebarOpen, setSidebarOpen] = useState(false); // mobile drawer
   const [chats, setChats] = useState([]);
 
   const [aiName, setAiName] = useState(
@@ -67,10 +83,12 @@ export default function AIPage() {
 
   function handleNewChat() {
     setActiveChatId(null); // AIChatBox creates the row lazily on first send
+    setSidebarOpen(false);
   }
 
   function handleSelectChat(chatId) {
     setActiveChatId(chatId);
+    setSidebarOpen(false);
   }
 
   function handleChatCreated(chat) {
@@ -117,7 +135,7 @@ export default function AIPage() {
   }
 
   return (
-    <div style={styles.page}>
+    <div style={{ ...styles.page, ...(isMobile ? styles.pageMobile : {}) }}>
       <div style={styles.headerRow}>
         {editingName ? (
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -143,26 +161,52 @@ export default function AIPage() {
             <button style={styles.nameEditBtn} onClick={startEditName} title="Rename your assistant" aria-label="Rename assistant">
               ✏️
             </button>
+            {isMobile && (
+              <button style={styles.chatsBtn} onClick={() => setSidebarOpen(true)}>
+                ☰ Chats
+              </button>
+            )}
           </div>
         )}
-        <p style={styles.subtitle}>
-          Ask about customers, invoices, quotations, or anything else in your dashboard.
-        </p>
+        {!isMobile && (
+          <p style={styles.subtitle}>
+            Ask about customers, invoices, quotations, or anything else in your dashboard.
+          </p>
+        )}
       </div>
 
-      <div style={styles.body}>
-        <ChatSidebar
-          chats={chats}
-          activeChatId={activeChatId}
-          onSelectChat={handleSelectChat}
-          onNewChat={handleNewChat}
-          onDeleteChat={handleDeleteChat}
-          onRenameChat={handleRenameChat}
-        />
+      <div style={{ ...styles.body, ...(isMobile ? styles.bodyMobile : {}) }}>
+        {isMobile ? (
+          sidebarOpen && (
+            <>
+              <div style={styles.backdrop} onClick={() => setSidebarOpen(false)} />
+              <div style={styles.drawer}>
+                <ChatSidebar
+                  chats={chats}
+                  activeChatId={activeChatId}
+                  onSelectChat={handleSelectChat}
+                  onNewChat={handleNewChat}
+                  onDeleteChat={handleDeleteChat}
+                  onRenameChat={handleRenameChat}
+                />
+              </div>
+            </>
+          )
+        ) : (
+          <ChatSidebar
+            chats={chats}
+            activeChatId={activeChatId}
+            onSelectChat={handleSelectChat}
+            onNewChat={handleNewChat}
+            onDeleteChat={handleDeleteChat}
+            onRenameChat={handleRenameChat}
+          />
+        )}
         <div style={styles.chatArea}>
           <AIChatBox
             key={activeChatId || "new"}
             chatId={activeChatId}
+            isMobile={isMobile}
             aiName={aiName}
             greeting={`Hi, I'm ${aiName} — your Invoice Pro assistant. What would you like to do?`}
             onChatCreated={handleChatCreated}
@@ -207,6 +251,39 @@ const styles = {
   },
   chatArea: {
     flex: 1,
+    minWidth: 0, // lets the chat shrink instead of overflowing
     minHeight: 400,
+  },
+
+  // ── mobile ──
+  // 150px ≈ top header + floating bottom nav. Adjust if your layout differs.
+  pageMobile: { padding: 12, gap: 10, height: "calc(100dvh - 150px)" },
+  bodyMobile: { position: "relative", minHeight: 0 },
+  chatsBtn: {
+    marginLeft: "auto",
+    border: "1px solid #ddd",
+    background: "#fff",
+    borderRadius: 999,
+    padding: "6px 12px",
+    fontSize: 13,
+    fontWeight: 600,
+    cursor: "pointer",
+  },
+  backdrop: {
+    position: "absolute",
+    inset: 0,
+    background: "rgba(0,0,0,0.3)",
+    zIndex: 19,
+  },
+  drawer: {
+    position: "absolute",
+    top: 0,
+    bottom: 0,
+    left: 0,
+    width: 270,
+    maxWidth: "85%",
+    zIndex: 20,
+    background: "#fafafc",
+    boxShadow: "4px 0 16px rgba(0,0,0,0.15)",
   },
 };

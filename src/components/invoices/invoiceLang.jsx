@@ -1,6 +1,70 @@
 // Labels for the English / Tamil invoice, plus the toggle button.
+import { useState, useEffect } from "react";
 
 export const INVOICE_FONT = "Arial, 'Noto Sans Tamil', 'Nirmala UI', Latha, sans-serif";
+
+// ── Tamil translation of free-text fields (item descriptions) ─────────────
+const TA_CACHE_KEY = "invoice_ta_cache";
+
+function readTaCache() {
+  try { return JSON.parse(localStorage.getItem(TA_CACHE_KEY) || "{}"); } catch { return {}; }
+}
+function writeTaCache(c) {
+  try { localStorage.setItem(TA_CACHE_KEY, JSON.stringify(c)); } catch { }
+}
+
+export async function translateToTamil(text) {
+  const t = (text || "").trim();
+  if (!t) return "";
+  const cache = readTaCache();
+  if (cache[t]) return cache[t];
+
+  const res = await fetch(
+    `https://api.mymemory.translated.net/get?q=${encodeURIComponent(t.slice(0, 500))}&langpair=en|ta`
+  );
+  const data = await res.json();
+  const out = data?.responseData?.translatedText;
+  if (!out || Number(data.responseStatus) !== 200) throw new Error("Translation failed");
+
+  cache[t] = out;
+  writeTaCache(cache);
+  return out;
+}
+
+// Returns a function: tDesc(item) -> description in the selected language.
+// English: returns the original text. Tamil: returns the translation
+// (or the original text until the translation arrives / if it fails).
+export function useTamilDescriptions(items = [], lang) {
+  const [map, setMap] = useState({});
+  const key = lang === "ta" ? items.map(i => i.description || "").join("\u0000") : "";
+
+  useEffect(() => {
+    if (lang !== "ta") return;
+    let cancelled = false;
+    const texts = [...new Set(items.map(i => (i.description || "").trim()).filter(Boolean))];
+
+    // Small delay so we don't translate on every keystroke in the form preview
+    const timer = setTimeout(async () => {
+      for (const t of texts) {
+        try {
+          const out = await translateToTamil(t);
+          if (!cancelled) setMap(prev => (prev[t] === out ? prev : { ...prev, [t]: out }));
+        } catch (err) {
+          console.error("Tamil translation failed for:", t, err);
+        }
+      }
+    }, 600);
+
+    return () => { cancelled = true; clearTimeout(timer); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key, lang]);
+
+  return (item) => {
+    if (lang !== "ta") return item.description;
+    const t = (item.description || "").trim();
+    return item.descriptionTa || map[t] || readTaCache()[t] || item.description;
+  };
+}
 
 export const INVOICE_LABELS = {
   en: {

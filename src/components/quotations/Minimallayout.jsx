@@ -1,4 +1,4 @@
-import { getQuotationView, getCostLines, getCostItems, splitCostLine, htmlToPlainText } from "./quotationLayoutUtils";
+import { getQuotationView, getCostLines, getCostItems, splitCostLine, htmlToPlainText, mobileCss } from "./quotationLayoutUtils";
 import { useState } from "react";
 import { EditText, EditArea, LogoEdit, SignatureEdit, CostItemsTable, CustomSectionsEdit, CompanySelect, CustomerSelect, RichOrPlainView } from "./EditableField";
 
@@ -144,6 +144,16 @@ function formatDateLong(value) {
   return `${parseInt(d, 10)} ${monthName} ${y}`;
 }
 
+const MINIMAL_MOBILE = `
+  & .page-frame > tbody > tr > td{ padding:0 16px !important; }
+  & .brand img{ height:48px !important; }
+  & .titleblock{ margin:24px 0 24px !important; }
+  & .titleblock h1{ font-size:32px !important; }
+  & .info-grid{ grid-template-columns:1fr !important; gap:18px !important; }
+  & .doc-meta{ flex-wrap:wrap; }
+`;
+
+
 export default function MinimalLayout({ quotation, companyInfo, customers = [], editMode = false, onChange = () => { }, onCustomSectionChange = () => { }, onAddCustomSection = () => { }, onRemoveCustomSection = () => { },
   onLogoUpload = () => { }, onRemoveLogo = () => { },
   onSignatureUpload = () => { }, onRemoveSignature = () => { },
@@ -169,7 +179,7 @@ export default function MinimalLayout({ quotation, companyInfo, customers = [], 
 
   return (
     <div className="qd-minimal">
-      <style>{styles}</style>
+    <style>{styles}{mobileCss(".qd-minimal", MINIMAL_MOBILE)}</style>
       <div className="sheet">
              <table className="page-frame">
           <thead><tr><td /></tr></thead>

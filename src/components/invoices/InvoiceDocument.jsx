@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { FaArrowLeft, FaPrint, FaEdit, FaFileInvoiceDollar } from "react-icons/fa";
-import { INVOICE_LABELS, INVOICE_FONT, InvoiceLangToggle } from "./invoiceLang";
+import { INVOICE_LABELS, INVOICE_FONT, InvoiceLangToggle, useTamilDescriptions } from "./invoiceLang";
 
 function logoStyle(shape, size) {
   if (shape === "circle") return { width: size, height: size, borderRadius: "50%", objectFit: "cover" };
@@ -58,6 +58,7 @@ export default function InvoiceDocument({ invoice, onBack, onEdit, onConvertToFi
   const isMobile = useIsMobile(700);
   const [lang, setLang] = useState(invoice.invoiceLang === "ta" ? "ta" : "en");
   const L = INVOICE_LABELS[lang];
+  const tDesc = useTamilDescriptions(invoice.items, lang);
   const rawSum = invoice.items.reduce((a, b) => a + Number(b.amount), 0);
   const gstPercent = Number(invoice.gstPercent || 18);
   let subtotal, tax, total;
@@ -87,8 +88,8 @@ export default function InvoiceDocument({ invoice, onBack, onEdit, onConvertToFi
 
   // On mobile, shrink font sizes / padding so the (still) table-based
   // invoice document scrolls horizontally instead of squashing illegibly.
-  const cellFontSize = isMobile ? "0.68rem" : "0.82rem";
-  const cellPad = isMobile ? "4px 5px" : "6px 8px";
+  const cellFontSize = isMobile ? "0.64rem" : "0.82rem";
+  const cellPad = isMobile ? "4px 4px" : "6px 8px";
 
   const mobileCell = (content, style = {}) => (
     <td style={{ border: "1px solid #000", padding: cellPad, fontSize: cellFontSize, verticalAlign: "top", ...style }}>
@@ -197,7 +198,20 @@ export default function InvoiceDocument({ invoice, onBack, onEdit, onConvertToFi
             {L.proforma}
           </div>
         )}
-        <table style={{ width: "100%", minWidth: isMobile ? "620px" : "auto", borderCollapse: "collapse", border: "1px solid #000" }}>
+        <table style={{
+          width: "100%", borderCollapse: "collapse", border: "1px solid #000",
+          tableLayout: isMobile ? "fixed" : "auto",
+          overflowWrap: "anywhere",
+        }}>
+          {isMobile && (
+            <colgroup>
+              <col style={{ width: "8%" }} />
+              <col style={{ width: "38%" }} />
+              <col style={{ width: "14%" }} />
+              <col style={{ width: "20%" }} />
+              <col style={{ width: "20%" }} />
+            </colgroup>
+          )}
           <tbody>
 
             {/* Header Row — Company + Invoice Info */}
@@ -226,7 +240,7 @@ export default function InvoiceDocument({ invoice, onBack, onEdit, onConvertToFi
               </td>
               <td style={{ border: "1px solid #000", padding: isMobile ? "8px" : "10px 12px", verticalAlign: "top" }}>
                 <div style={{ fontSize: isMobile ? "0.65rem" : "0.78rem", color: "#64748b" }}>{L.dated}</div>
-                <div style={{ fontWeight: 700, fontSize: isMobile ? "0.75rem" : "0.88rem", color: "#0f172a", whiteSpace: "nowrap" }}>{formatDate(invoice.date)}</div>
+                <div style={{ fontWeight: 700, fontSize: isMobile ? "0.65rem" : "0.88rem", color: "#0f172a", whiteSpace: isMobile ? "normal" : "nowrap" }}>{formatDate(invoice.date)}</div>
               </td>
             </tr>
 
@@ -261,15 +275,15 @@ export default function InvoiceDocument({ invoice, onBack, onEdit, onConvertToFi
               {mobileCell(L.sl, { fontWeight: 700, textAlign: "center", width: "6%" })}
               {mobileCell(L.description, { fontWeight: 700, width: "46%" })}
               {mobileCell(L.qty, { fontWeight: 700, textAlign: "center", width: "14%" })}
-              {mobileCell(L.rate, { fontWeight: 700, textAlign: "right", width: "17%", whiteSpace: "nowrap" })}
-              {mobileCell(L.amount, { fontWeight: 700, textAlign: "right", width: "17%", whiteSpace: "nowrap" })}
+              {mobileCell(L.rate, { fontWeight: 700, textAlign: "right", width: "17%", whiteSpace: isMobile ? "normal" : "nowrap" })}
+              {mobileCell(L.amount, { fontWeight: 700, textAlign: "right", width: "17%", whiteSpace: isMobile ? "normal" : "nowrap" })}
             </tr>
 
             {/* Items */}
             {invoice.items.map((item, i) => (
               <tr key={i}>
                 {mobileCell(item.sl, { textAlign: "center" })}
-                {mobileCell(item.description)}
+                {mobileCell(tDesc(item))}
                 {mobileCell(`${item.qty}${item.unit ? " " + item.unit : ""}`, { textAlign: "center", whiteSpace: "nowrap" })}
                 {mobileCell(formatAmount(item.rate), { textAlign: "right" })}
                 {mobileCell(formatAmount(item.amount), { textAlign: "right" })}
@@ -366,11 +380,7 @@ export default function InvoiceDocument({ invoice, onBack, onEdit, onConvertToFi
           </tbody>
         </table>
 
-        {isMobile && (
-          <div className="no-print" style={{ textAlign: "center", fontSize: "0.68rem", color: "#94a3b8", marginTop: 8, fontStyle: "italic" }}>
-            ← Scroll sideways to see the full invoice →
-          </div>
-        )}
+        {/* Table now fits the screen width, so no sideways-scroll hint is needed */}
 
       </div>
     </div>

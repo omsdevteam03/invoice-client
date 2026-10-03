@@ -313,7 +313,7 @@ export default function CustomerDetail({ customer: c, onBack, onEdit, quotations
   ].filter(Boolean);
 
   return (
-    <div style={{
+    <div className="cd-wrap" style={{
       maxWidth: "1280px",
       width: "100%",
       display: "flex",
@@ -322,7 +322,7 @@ export default function CustomerDetail({ customer: c, onBack, onEdit, quotations
       flexWrap: "wrap",
       minHeight: "calc(100vh - 140px)",
     }}>
-      <div style={{ flex: "1 1 480px", minWidth: 320, display: "flex", flexDirection: "column" }}>
+      <div className="cd-col" style={{ flex: "1 1 480px", minWidth: 320, display: "flex", flexDirection: "column" }}>
         <style>{`
           .cd-topbar {
             display: flex;
@@ -423,6 +423,26 @@ export default function CustomerDetail({ customer: c, onBack, onEdit, quotations
             color: #0f172a;
             cursor: pointer;
           }
+
+          @media (max-width: 640px) {
+            .cd-wrap { min-height: 0 !important; gap: 14px !important; }
+            .cd-col { flex: 1 1 100% !important; min-width: 0 !important; }
+
+            /* tighter card padding, long emails/addresses wrap */
+            .cd-card { overflow-wrap: anywhere; }
+            .cd-card .p-4 { padding: 16px !important; }
+            .cd-card .px-4 { padding-left: 16px !important; padding-right: 16px !important; }
+            .cd-card .pb-4 { padding-bottom: 16px !important; }
+            .cd-card .mx-4 { margin-left: 16px !important; margin-right: 16px !important; }
+
+            /* Email / Call / WhatsApp: smaller, and the menu opens across the full row */
+            .cd-qa { position: relative; }
+            .cd-qa > .col-4 > div { position: static !important; }
+            .cd-qa .cd-action-main { font-size: 0.72rem; gap: 4px; padding: 11px 2px; }
+            .cd-qa .cd-action-main svg { width: 13px; height: 13px; }
+            .cd-qa .cd-menu { left: 0; right: 0; width: auto; max-width: none; bottom: calc(100% + 6px); }
+            .cd-menu.cd-menu-down { max-width: calc(100vw - 110px); }
+          }
         `}</style>
 
         {/* Top Bar */}
@@ -440,7 +460,7 @@ export default function CustomerDetail({ customer: c, onBack, onEdit, quotations
         </div>
 
         {/* One continuous page — hairline section dividers */}
-        <div style={{ backgroundColor: "#fff", borderRadius: "14px", border: "1px solid #eef2f0", flex: 1, display: "flex", flexDirection: "column" }}>
+        <div className="cd-card" style={{ backgroundColor: "#fff", borderRadius: "14px", border: "1px solid #eef2f0", flex: 1, display: "flex", flexDirection: "column" }}>
 
           {/* Header: identity + company + status */}
           <div className="d-flex align-items-center gap-3 flex-wrap p-4">
@@ -505,7 +525,7 @@ export default function CustomerDetail({ customer: c, onBack, onEdit, quotations
           <div style={{ flex: 1 }} />
 
           {/* Quick Actions */}
-          <div className="row g-2 px-4 pb-4">
+          <div className="row g-2 px-4 pb-4 cd-qa">
             <div className="col-4">
               <ActionCombo
                 href={`mailto:${activeEmail}`}
@@ -546,7 +566,7 @@ export default function CustomerDetail({ customer: c, onBack, onEdit, quotations
       </div>
 
       {/* RIGHT: Activity summary — quotations & invoices linked to this customer */}
-      <div style={{ flex: "1 1 340px", minWidth: 300, display: "flex", flexDirection: "column" }}>
+      <div className="cd-col" style={{ flex: "1 1 340px", minWidth: 300, display: "flex", flexDirection: "column" }}>
         <div style={{ backgroundColor: "#fff", borderRadius: "14px", border: "1px solid #eef2f0", padding: "20px", flex: 1, display: "flex", flexDirection: "column" }}>
           <div className="fw-bold mb-3" style={{ color: "#0f172a", fontSize: "0.95rem" }}>Activity Summary</div>
 

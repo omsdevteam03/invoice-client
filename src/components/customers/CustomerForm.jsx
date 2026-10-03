@@ -559,7 +559,9 @@ export default function CustomerForm({ customer, allCustomers = [], onSave, onBa
   );
   const [errors, setErrors] = useState({});
   const [saving, setSaving] = useState(false);
-  const [showPreview, setShowPreview] = useState(true);
+  const [showPreview, setShowPreview] = useState(
+    () => typeof window === "undefined" || window.innerWidth > 900
+  );
   const [tagInput, setTagInput] = useState("");
 
   // Draft state: while `pendingDraft` is set, we're waiting on the user to
@@ -771,6 +773,20 @@ export default function CustomerForm({ customer, allCustomers = [], onSave, onBa
             max-height: none;
           }
         }
+        @media (max-width: 640px) {
+          .cf-split { gap: 14px; }
+          .cf-form-side, .cf-form-side.cf-half { min-width: 0; }
+
+          /* Row 1: Back + title.  Row 2: Preview toggle + Save, full width */
+          .cf-topbar { gap: 10px !important; }
+          .cf-title { flex: 1 1 auto; text-align: left; font-size: 1.05rem !important; }
+          .cf-actions { width: 100%; flex-wrap: nowrap !important; }
+          .cf-actions > button { flex: 1 1 0; justify-content: center; white-space: nowrap; }
+          .cf-cancel-btn { display: none !important; } /* Back already does this */
+
+          .cf-form-panel { padding: 4px 14px 16px; border-radius: 12px; }
+          .cf-form-panel .d-flex > select { width: 92px !important; }
+        }
       `}</style>
 
       <div className="cf-split">
@@ -778,7 +794,7 @@ export default function CustomerForm({ customer, allCustomers = [], onSave, onBa
         {/* ══ LEFT: Form ══ */}
         <div className={`cf-form-side${showPreview ? " cf-half" : ""}`}>
           {/* Top Bar — plain (no sticky bg bar) */}
-          <div className="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+          <div className="cf-topbar d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
             <button
               onClick={onBack}
               className="d-flex align-items-center gap-1 border-0 rounded-3 fw-semibold px-2 py-1"
@@ -786,10 +802,10 @@ export default function CustomerForm({ customer, allCustomers = [], onSave, onBa
             >
               <FaArrowLeft size={10} /> Back
             </button>
-            <h4 className="fw-bold mb-0" style={{ color: "#0f172a", fontSize: "1.2rem" }}>
+            <h4 className="cf-title fw-bold mb-0" style={{ color: "#0f172a", fontSize: "1.2rem" }}>
               {isEdit ? "Edit Customer" : "New Customer"}
             </h4>
-            <div className="d-flex align-items-center gap-2 flex-wrap">
+            <div className="cf-actions d-flex align-items-center gap-2 flex-wrap">
               <button
                 onClick={() => setShowPreview(s => !s)}
                 className="d-flex align-items-center gap-2 border-0 rounded-3 fw-semibold px-3 py-2"
@@ -805,7 +821,7 @@ export default function CustomerForm({ customer, allCustomers = [], onSave, onBa
                 {showPreview ? "Preview On" : "Preview Off"}
               </button>
 
-              <button onClick={onBack} className="border-0 rounded-3 fw-semibold px-3 py-2"
+              <button onClick={onBack} className="cf-cancel-btn border-0 rounded-3 fw-semibold px-3 py-2"
                 style={{ backgroundColor: "#f1f5f9", color: "#475569", cursor: "pointer", fontSize: "0.82rem" }}>
                 Cancel
               </button>

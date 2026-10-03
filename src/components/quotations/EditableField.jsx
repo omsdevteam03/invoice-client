@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef } from "react";
 import DOMPurify from "dompurify";
 import axiosInstance from "../../api/axiosInstance";
+import { htmlToPlainText } from "./quotationLayoutUtils";
 
 const base = {
   font: "inherit",
@@ -374,7 +375,7 @@ export function CustomSectionsEdit({ sections, accent, onChange, onAdd, onRemove
               onChange={(patch) => onChange(i, "__patch", patch)}
             />
           ) : (
-            <textarea rows={3} value={s.content || ""} onChange={(e) => onChange(i, "content", e.target.value)} placeholder="Section content..." style={{ ...base, resize: "vertical" }} />
+            <textarea rows={4} value={htmlToPlainText(s.content || "")} onChange={(e) => onChange(i, "content", e.target.value)} placeholder="Section content..." style={{ ...base, resize: "vertical" }} />
           )}
         </div>
       ))}
