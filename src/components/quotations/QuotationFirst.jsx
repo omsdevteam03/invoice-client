@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import InvoiceDocument from "../invoices/InvoiceDocument";
+import InvoiceForm from "../invoices/InvoiceForm";
 import {
   FaFileAlt, FaPlus, FaRupeeSign, FaSearch, FaEye, FaCalendarAlt, FaUser,
   FaCheckCircle, FaFileSignature, FaTrash, FaEdit, FaHistory, FaCopy,
@@ -130,6 +131,60 @@ const tableStyles = `
 .qt-action-edit { background: #fff7ed; color: #ea580c; }
 .qt-action-delete { background: #fef2f2; color: #dc2626; }
 .qt-action-convert { background: #ecfdf5; color: #059669; }
+
+/* ---------- Custom tooltips for the icon buttons ---------- */
+.qt-action-btn { position: relative; }
+
+.qt-action-btn[data-tip]::after,
+.qt-action-btn[data-tip]::before {
+  position: absolute;
+  left: 50%;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 0.15s ease, transform 0.15s ease;
+  z-index: 60;
+}
+/* the label */
+.qt-action-btn[data-tip]::after {
+  content: attr(data-tip);
+  bottom: calc(100% + 9px);
+  transform: translateX(-50%) translateY(4px);
+  background: #0f172a;
+  color: #fff;
+  font-size: 0.72rem;
+  font-weight: 600;
+  line-height: 1;
+  padding: 7px 10px;
+  border-radius: 8px;
+  white-space: nowrap;
+  box-shadow: 0 6px 16px rgba(15,23,42,0.25);
+}
+/* the little arrow */
+.qt-action-btn[data-tip]::before {
+  content: "";
+  bottom: calc(100% + 3px);
+  transform: translateX(-50%) translateY(4px);
+  border: 6px solid transparent;
+  border-top-color: #0f172a;
+  border-bottom: 0;
+}
+.qt-action-btn[data-tip]:hover::after,
+.qt-action-btn[data-tip]:hover::before {
+  opacity: 1;
+  visibility: visible;
+  transform: translateX(-50%) translateY(0);
+  transition-delay: 0.2s;
+}
+/* red tooltip for Delete */
+.qt-action-delete[data-tip]::after { background: #dc2626; }
+.qt-action-delete[data-tip]::before { border-top-color: #dc2626; }
+
+/* phones/tablets have no hover, so hide tooltips there */
+@media (hover: none) {
+  .qt-action-btn[data-tip]::after,
+  .qt-action-btn[data-tip]::before { display: none; }
+}
 .qt-search-input:focus {
   border-color: #6FA894 !important;
   box-shadow: 0 0 0 3px rgba(31,111,92,0.12);
@@ -479,20 +534,64 @@ const tableStyles = `
 }
 
 /* ---------- Saved draft quotations section ---------- */
-.qt-draft-row {
+.qt-draft-panel {
+  background: #fff;
+  border: 1px solid #eef0f3;
+  border-radius: 14px;
+  overflow: visible;
+}
+.qt-draft-item:first-child { border-radius: 14px 14px 0 0; }
+.qt-draft-more { border-radius: 0 0 14px 14px; }
+.qt-draft-item {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
   gap: 14px;
-  padding: 14px 16px;
+  padding: 14px 18px;
   border-bottom: 1px solid #f1f5f9;
   transition: background-color 0.15s ease;
 }
-.qt-draft-row:last-child { border-bottom: none; }
-.qt-draft-row:hover { background-color: #faf9ff; }
-.qt-draft-row.qt-row-selected { background-color: #E6F1EC; }
-.qt-draft-info { flex: 1 1 220px; min-width: 0; }
-.qt-draft-actions { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+.qt-draft-item:last-child { border-bottom: none; }
+.qt-draft-item:hover { background-color: #fafbfc; }
+.qt-draft-item.qt-row-selected { background-color: #E6F1EC; }
+.qt-draft-info { flex: 1 1 200px; min-width: 0; }
+.qt-draft-title, .qt-draft-project {
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.qt-draft-title { font-weight: 600; color: #0f172a; font-size: 0.9rem; }
+.qt-draft-project { color: #64748b; font-size: 0.8rem; margin-top: 1px; }
+.qt-draft-time { color: #94a3b8; font-size: 0.75rem; white-space: nowrap; }
+.qt-draft-actions { display: flex; align-items: center; gap: 8px; }
+.qt-draft-edit-btn {
+  border: 1.5px solid #BFDED2;
+  background: #fff;
+  color: #1F6F5C;
+  font-weight: 600;
+  font-size: 0.78rem;
+  padding: 6px 14px;
+  border-radius: 8px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+.qt-draft-edit-btn:hover { background: #1F6F5C; color: #fff; border-color: #1F6F5C; }
+.qt-draft-more {
+  display: block;
+  width: 100%;
+  border: none;
+  border-top: 1px solid #f1f5f9;
+  background: #fafbfc;
+  color: #1F6F5C;
+  font-weight: 600;
+  font-size: 0.82rem;
+  padding: 11px 0;
+  cursor: pointer;
+}
+.qt-draft-more:hover { background: #f1f5f9; }
+
+@media (max-width: 640px) {
+  .qt-draft-actions { width: 100%; justify-content: flex-end; }
+}
 `;
 
 // ConfirmDialog Component — handles single-row delete and bulk delete
@@ -685,23 +784,10 @@ function InvoiceSelectorPanel({ quotation, invoiceList, selectedIndex, onSelect 
   return (
     <div className="no-print" style={{ marginBottom: 4 }}>
       <div style={{ fontSize: "0.7rem", fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.04em" }}>
-        Quotation #{quotation.id}
+        Quotation {quotation.quotationNumber || ""}
       </div>
       <div style={{ fontSize: "1.05rem", fontWeight: 800, color: "#0f172a", marginBottom: 12 }}>
         Invoices ({invoiceList.length})
-      </div>
-
-      {/* Tabs */}
-      <div className="d-flex gap-2 flex-wrap mb-3">
-        {invoiceList.map((inv, idx) => (
-          <button
-            key={inv.invoiceNo || idx}
-            onClick={() => onSelect(idx)}
-            className={`qt-inv-tab${idx === selectedIndex ? " active" : ""}`}
-          >
-            Invoice {idx + 1}
-          </button>
-        ))}
       </div>
 
       {/* Details table */}
@@ -763,7 +849,7 @@ function NoInvoicesPanel({ quotation, onClose, onCreateInvoice }) {
         No invoices created for this quotation.
       </h5>
       <p style={{ color: "#64748b", fontSize: "0.88rem", marginBottom: 22 }}>
-        Quotation #{quotation.id} doesn't have any invoices yet.
+        Quotation {quotation.quotationNumber || "(not numbered yet)"} doesn't have any invoices yet.
       </p>
       <div className="d-flex gap-3 justify-content-center flex-wrap">
         <button onClick={onClose}
@@ -789,6 +875,7 @@ export default function QuotationFirst({
   invoices = [], onCreateInvoiceFromQuotation,
   onResetNumbering,
   onSend,
+  onSaveInvoice,
 }) {
   const navigate = useNavigate();
 
@@ -820,6 +907,10 @@ export default function QuotationFirst({
   const [editApprovedTarget, setEditApprovedTarget] = useState(null);
   // Row selection state
   const [selectedIds, setSelectedIds] = useState([]);
+
+  // Draft Quotations: show only the latest few, expand with "Show more"
+  const [showAllDrafts, setShowAllDrafts] = useState(false);
+  const DRAFT_PREVIEW_COUNT = 2;
   const headerCheckboxRef = useRef(null);
 
   // ── Recovered (auto-saved) drafts — crash/navigate-away recovery, NOT a
@@ -860,15 +951,14 @@ export default function QuotationFirst({
   const [customerSearch, setCustomerSearch] = useState("");
 
   useEffect(() => {
-    if (!showCustomerPicker) return;
+    if (!showCustomerPicker && !invoicePreview?.editing) return;
     setCustomersLoading(true);
     fetch(`${import.meta.env.VITE_API_URL}/customers`)
       .then(res => res.json())
       .then(data => setCustomers(data))
       .catch(err => console.error("Failed to load customers:", err))
       .finally(() => setCustomersLoading(false));
-  }, [showCustomerPicker]);
-
+  }, [showCustomerPicker, invoicePreview?.editing]);
   const activeCustomers = customers.filter(c => (c.status ?? "Active") === "Active");
 
   const filteredCustomers = activeCustomers.filter(c => {
@@ -900,7 +990,86 @@ export default function QuotationFirst({
       invoiceList,
       selectedIndex: invoiceList.length ? 0 : null,
       isSynthetic: false,
+      editing: false,
     });
+  };
+
+  // Saves an invoice through the parent's handler if given, otherwise POSTs directly.
+  const persistInvoice = async (inv, isNew, message) => {
+    if (onSaveInvoice) {
+      const result = await onSaveInvoice(inv, isNew, message);
+      return result && result.items ? result : inv;
+    }
+    const res = await fetch(`${import.meta.env.VITE_API_URL}/invoices`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...inv, isNew }),
+    });
+    if (!res.ok) throw new Error(`Request failed with status ${res.status}`);
+    const saved = await res.json();
+    return saved && saved.items ? saved : inv;
+  };
+
+  // EDIT button → open the invoice form inside the popup
+  const handleEditInvoice = () =>
+    setInvoicePreview(prev => ({ ...prev, editing: true }));
+
+  // "Update Invoice" inside the form → save, then go back to the preview
+  const handleSaveEditedInvoice = async (updated) => {
+    try {
+      const saved = await persistInvoice(updated, false);
+      setInvoicePreview(prev => ({
+        ...prev,
+        editing: false,
+        invoiceList: prev.invoiceList.map((x, i) => (i === prev.selectedIndex ? saved : x)),
+      }));
+    } catch (err) {
+      console.error("Failed to update invoice:", err);
+      alert("Could not save the invoice. Please try again.");
+    }
+  };
+
+  // CONVERT TO INVOICE button → make a final INV- invoice, mark proforma "Converted"
+  const handleConvertToFinal = async (proforma) => {
+    const isPro = (i) => i.invoiceType === "Proforma" || (i.invoiceNo || "").startsWith("PI-");
+    const prefix = docSettings?.invoicePrefix || "INV-";
+    const nums = invoices
+      .filter(i => !isPro(i))
+      .map(i => parseInt((i.invoiceNo || "").match(/(\d+)$/)?.[1] || "0", 10));
+    const next = (nums.length ? Math.max(...nums) : 0) + 1;
+
+    const finalInvoice = {
+      ...proforma,
+      id: `INV-${Date.now()}`,
+      invoiceType: "Final",
+      invoiceNo: `${prefix}${String(next).padStart(3, "0")}`,
+      status: "Unpaid",
+      date: new Date().toISOString().split("T")[0],
+      convertedFromId: proforma.id,
+      payments: [],
+      amountPaid: 0,
+    };
+
+    if (!window.confirm(`Convert ${proforma.invoiceNo} into a Final Invoice?`)) return;
+
+    try {
+      const savedFinal = await persistInvoice(
+        finalInvoice, true, `Converted from Proforma ${proforma.invoiceNo}`
+      );
+      const savedProforma = await persistInvoice(
+        { ...proforma, status: "Converted", convertedInvoiceId: savedFinal.id },
+        false,
+        `Converted to Final Invoice ${finalInvoice.invoiceNo}`
+      );
+      setInvoicePreview(prev => {
+        const list = prev.invoiceList.map(x => (x.id === proforma.id ? savedProforma : x));
+        list.push(savedFinal);
+        return { ...prev, invoiceList: list, selectedIndex: list.length - 1 };
+      });
+    } catch (err) {
+      console.error("Failed to convert invoice:", err);
+      alert("Could not convert the invoice. Please try again.");
+    }
   };
 
   const handleCustomerSelect = (customer) => {
@@ -1038,6 +1207,16 @@ export default function QuotationFirst({
 
   const savedDrafts = filtered.filter(q => !q.quotationNumber);
   const numberedQuotations = filtered.filter(q => q.quotationNumber);
+
+  // Latest edited first, since each row shows "Last edited ..."
+  const sortedDrafts = [...savedDrafts].sort(
+    (a, b) => new Date(b.updatedAt || b.date) - new Date(a.updatedAt || a.date)
+  );
+  // While searching, show every match so results are never hidden
+  const draftsCollapsible = !searchTrim && sortedDrafts.length > DRAFT_PREVIEW_COUNT;
+  const visibleDrafts = draftsCollapsible && !showAllDrafts
+    ? sortedDrafts.slice(0, DRAFT_PREVIEW_COUNT)
+    : sortedDrafts;
 
   const allSelected = filtered.length > 0 && selectedIds.length === filtered.length;
   const someSelected = selectedIds.length > 0 && !allSelected;
@@ -1410,26 +1589,22 @@ export default function QuotationFirst({
               </span>
             </div>
 
-            <div className="qt-table-wrap">
-              {savedDrafts.map(q => (
-                <div key={q.id} className={`qt-draft-row${selectedIds.includes(q.id) ? " qt-row-selected" : ""}`}>
+            <div className="qt-draft-panel">
+              {visibleDrafts.map(q => (
+                <div key={q.id} className={`qt-draft-item${selectedIds.includes(q.id) ? " qt-row-selected" : ""}`}>
                   <input
                     type="checkbox"
                     className="qt-checkbox"
                     checked={selectedIds.includes(q.id)}
                     onChange={() => toggleSelectOne(q.id)}
                   />
+
                   <div className="qt-draft-info">
-                    <div className="fw-semibold" style={{ color: "#0f172a", fontSize: "0.9rem" }}>
-                      {q.company || q.name}
-                    </div>
-                    <div style={{ color: "#64748b", fontSize: "0.8rem" }}>
-                      {q.projectTitle || "Untitled quotation"}
-                    </div>
-                    <div style={{ color: "#94a3b8", fontSize: "0.78rem", marginTop: 2 }}>
-                      ₹{q.amount.toLocaleString()} · Last edited {timeAgoIso(q.updatedAt)}
-                    </div>
+                    <div className="qt-draft-title">{q.company || q.name || "Untitled"}</div>
+                    <div className="qt-draft-project">{q.projectTitle || "Untitled quotation"}</div>
                   </div>
+
+                  <span className="qt-draft-time">Edited {timeAgoIso(q.updatedAt)}</span>
 
                   {/* Status: Draft / Sent */}
                   <select
@@ -1453,25 +1628,33 @@ export default function QuotationFirst({
                   <div className="qt-draft-actions">
                     <button
                       onClick={() => { setSelected(q); setEditMode(true); }}
-                      className="d-flex align-items-center gap-1 border-0 fw-semibold px-3 py-2 rounded-3"
-                      style={{ backgroundColor: "#E6F1EC", color: "#1F6F5C", cursor: "pointer", fontSize: "0.78rem", whiteSpace: "nowrap" }}
+                      className="qt-draft-edit-btn"
                     >
-                      Continue Editing
+                      Continue editing
                     </button>
                     <button
                       onClick={() => handleDuplicateDraft(q)}
-                      title="Duplicate"
+                      data-tip="Duplicate"
+                      aria-label="Duplicate"
                       className="qt-action-btn"
                       style={{ background: "#f1f5f9", color: "#475569" }}
                     >
                       <FaCopy size={12} />
                     </button>
-                    <button onClick={() => handleDeleteClick(q.id)} title="Delete" className="qt-action-btn qt-action-delete">
+                    <button onClick={() => handleDeleteClick(q.id)} data-tip="Delete" aria-label="Delete" className="qt-action-btn qt-action-delete">
                       <FaTrash size={13} />
                     </button>
                   </div>
                 </div>
               ))}
+
+              {draftsCollapsible && (
+                <button className="qt-draft-more" onClick={() => setShowAllDrafts(prev => !prev)}>
+                  {showAllDrafts
+                    ? "Show less ▲"
+                    : `Show ${sortedDrafts.length - DRAFT_PREVIEW_COUNT} more drafts ▼`}
+                </button>
+              )}
             </div>
           </div>
         )}
@@ -1567,7 +1750,7 @@ export default function QuotationFirst({
                               aria-hidden="true"
                             ></span>
                             <div className="d-flex gap-2 justify-content-end">
-                              <button onClick={() => { setSelected(q); setEditMode(false); }} title="View" className="qt-action-btn qt-action-view">
+                              <button onClick={() => { setSelected(q); setEditMode(false); }} data-tip="View" aria-label="View" className="qt-action-btn qt-action-view">
                                 <FaEye size={13} />
                               </button>
                               <button
@@ -1579,7 +1762,8 @@ export default function QuotationFirst({
                                   setSelected(q);
                                   setEditMode(true);
                                 }}
-                                title="Edit"
+                                data-tip="Edit"
+                                aria-label="Edit"
                                 className="qt-action-btn qt-action-edit"
                               >
                                 <FaEdit size={13} />
@@ -1587,7 +1771,8 @@ export default function QuotationFirst({
                               {q.status === "Approved" && (
                                 <button
                                   onClick={() => handlePreviewInvoice(q)}
-                                  title="Preview Invoice"
+                                  data-tip="Preview Invoice"
+                                  aria-label="Preview Invoice"
                                   className="qt-action-btn qt-action-convert"
                                 >
                                   <FaFileInvoiceDollar size={13} />
@@ -1595,13 +1780,14 @@ export default function QuotationFirst({
                               )}
                               <button
                                 onClick={() => handleDuplicateDraft(q)}
-                                title="Duplicate"
+                                data-tip="Duplicate"
+                                aria-label="Duplicate"
                                 className="qt-action-btn"
                                 style={{ background: "#f1f5f9", color: "#475569" }}
                               >
                                 <FaCopy size={13} />
                               </button>
-                              <button onClick={() => handleDeleteClick(q.id)} title="Delete" className="qt-action-btn qt-action-delete">
+                              <button onClick={() => handleDeleteClick(q.id)} data-tip="Delete" aria-label="Delete" className="qt-action-btn qt-action-delete">
                                 <FaTrash size={13} />
                               </button>
                             </div>
@@ -1632,13 +1818,27 @@ export default function QuotationFirst({
           <div
             className="print-modal-card"
             style={{
-              backgroundColor: "#fff", borderRadius: "16px", width: "100%", maxWidth: "900px",
+              backgroundColor: "#fff", borderRadius: "16px", width: "100%",
+              maxWidth: invoicePreview.editing ? "1280px" : "900px",
               maxHeight: "90vh", overflow: "auto", position: "relative",
               boxShadow: "0 24px 64px rgba(0,0,0,0.25)",
             }}
             onClick={e => e.stopPropagation()}
           >
-            {invoicePreview.invoiceList.length === 0 ? (
+            {invoicePreview.editing ? (
+              <div style={{ padding: "20px" }}>
+                <InvoiceForm
+                  invoice={invoicePreview.invoiceList[invoicePreview.selectedIndex]}
+                  invoices={invoices}
+                  customers={customers}
+                  companyInfo={companyInfo}
+                  docSettings={docSettings}
+                  onCompanyChange={() => { }}
+                  onSave={handleSaveEditedInvoice}
+                  onBack={() => setInvoicePreview(prev => ({ ...prev, editing: false }))}
+                />
+              </div>
+            ) : invoicePreview.invoiceList.length === 0 ? (
               <NoInvoicesPanel
                 quotation={invoicePreview.quotation}
                 onClose={() => setInvoicePreview(null)}
@@ -1668,7 +1868,8 @@ export default function QuotationFirst({
                 <InvoiceDocument
                   invoice={invoicePreview.invoiceList[invoicePreview.selectedIndex]}
                   onBack={() => setInvoicePreview(null)}
-                  onEdit={() => { }}
+                  onEdit={handleEditInvoice}
+                  onConvertToFinal={handleConvertToFinal}
                 />
               </div>
             )}

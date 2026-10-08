@@ -82,9 +82,15 @@ export default function InvoicesPage() {
   const navigate = useNavigate();
   const { id } = useParams();
 
+  // Remembers if this page was opened from the AI chat's "View" button
+  const aiReturnRef = useRef(
+    location.state?.fromAI ? location.state.returnTo || "/ai" : null
+  );
+
 const [invoices, setInvoices] = useState([]);
 const [customers, setCustomers] = useState([]);
 const [invoicesLoaded, setInvoicesLoaded] = useState(false);
+const [singleInvoice, setSingleInvoice] = useState(null);
   // Only used for an UNSAVED draft (New / Choose Customer / Choose Quotation
   // flows) — once an invoice is saved it's identified purely by URL :id,
   // so a page refresh always re-derives the correct screen from invoices[].
@@ -97,7 +103,9 @@ const [invoicesLoaded, setInvoicesLoaded] = useState(false);
   const isNewRoute = location.pathname === "/invoices/new";
   const isEditRoute = Boolean(id) && location.pathname.endsWith("/edit");
   const isDocRoute = Boolean(id) && !isEditRoute;
-  const selected = id ? invoices.find((i) => i.id === id) : draftInvoice;
+  const selected = id
+    ? invoices.find((i) => i.id === id) || (singleInvoice?.id === id ? singleInvoice : null)
+    : draftInvoice;
 
   const [companyInfo, setCompanyInfo] = useState({
     companyName: "",
@@ -129,6 +137,17 @@ const [allQuotations, setAllQuotations] = useState([]);
       .catch(err => console.error('Failed to load invoices:', err))
       .finally(() => setInvoicesLoaded(true));
   }, []);
+
+  // Fetch just the opened invoice so the page doesn't wait for the full list
+  useEffect(() => {
+    if (!id) { setSingleInvoice(null); return; }
+    let cancelled = false;
+    fetch(`${API}/${id}`)
+      .then(res => (res.ok ? res.json() : null))
+      .then(data => { if (!cancelled && data && data.id) setSingleInvoice(data); })
+      .catch(() => { });
+    return () => { cancelled = true; };
+  }, [id]);
   // Load customers (used by the Buyer Name picker in the invoice form)
 useEffect(() => {
   fetch(CUSTOMERS_API)
@@ -601,6 +620,12 @@ const quotationGstType =
 
   const handleBack = () => { setDraftInvoice(null); navigate("/invoices"); };
 
+  // Back button on the invoice view page only
+  const handleDocBack = () => {
+    if (aiReturnRef.current) navigate(aiReturnRef.current);
+    else handleBack();
+  };
+
   const toastEl = toast && (
     <div
       style={{
@@ -625,6 +650,15 @@ const quotationGstType =
     </div>
   );
 
+  const loadingEl = (
+    <div className="d-flex align-items-center justify-content-center" style={{ height: "60vh" }}>
+      <div className="text-center">
+        <div className="spinner-border" style={{ color: "#1F6F5C" }} />
+        <div className="mt-2 small" style={{ color: "#8A8578" }}>Loading invoice…</div>
+      </div>
+    </div>
+  );
+
    if (isNewRoute) {
     return (
       <>
@@ -646,7 +680,7 @@ const quotationGstType =
   }
 
    if (isEditRoute) {
-    if (!invoicesLoaded) return <>{toastEl}</>; // brief loading pause while invoices fetch
+    if (!invoicesLoaded) return <>{toastEl}{loadingEl}</>;
     if (!selected) return null; // redirect effect above will kick in
     return (
       <>
@@ -669,14 +703,13 @@ const quotationGstType =
   }
 
   if (isDocRoute) {
-    if (!invoicesLoaded) return <>{toastEl}</>;
-    if (!selected) return null;
+    if (!selected) return invoicesLoaded ? null : <>{toastEl}{loadingEl}</>;
     return (
       <>
         {toastEl}
                <InvoiceDocument
           invoice={selected}
-          onBack={handleBack}
+          onBack={handleDocBack}
           onEdit={() => handleEdit(selected)}
           companyInfo={companyInfo}
           onUpdateInvoice={handleUpdateInvoice}

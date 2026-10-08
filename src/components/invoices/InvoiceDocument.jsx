@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { FaArrowLeft, FaPrint, FaEdit, FaFileInvoiceDollar } from "react-icons/fa";
-import { INVOICE_LABELS, INVOICE_FONT, InvoiceLangToggle, useTamilDescriptions } from "./invoiceLang";
+import { INVOICE_LABELS, INVOICE_FONT, InvoiceLangToggle, useTamilDescriptions, unitLabel } from "./invoiceLang";
 
 function logoStyle(shape, size) {
   if (shape === "circle") return { width: size, height: size, borderRadius: "50%", objectFit: "cover" };
@@ -284,7 +284,7 @@ export default function InvoiceDocument({ invoice, onBack, onEdit, onConvertToFi
               <tr key={i}>
                 {mobileCell(item.sl, { textAlign: "center" })}
                 {mobileCell(tDesc(item))}
-                {mobileCell(`${item.qty}${item.unit ? " " + item.unit : ""}`, { textAlign: "center", whiteSpace: "nowrap" })}
+                {mobileCell(`${item.qty}${item.unit ? " " + unitLabel(item.unit, lang) : ""}`, { textAlign: "center", whiteSpace: "nowrap" })}
                 {mobileCell(formatAmount(item.rate), { textAlign: "right" })}
                 {mobileCell(formatAmount(item.amount), { textAlign: "right" })}
               </tr>

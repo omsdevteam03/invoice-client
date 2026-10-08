@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 
 // Reusable AI chat box, backed by the server.
 //
@@ -33,6 +33,7 @@ const RefreshIcon = () => (<Svg><polyline points="17 1 21 5 17 9" /><path d="M3 
 const ClipIcon = () => (<Svg size={18}><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" /></Svg>);
 const MicIcon = () => (<Svg size={18}><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" /><path d="M19 10v2a7 7 0 0 1-14 0v-2" /><line x1="12" y1="19" x2="12" y2="23" /></Svg>);
 const SendIcon = () => (<Svg size={20}><line x1="22" y1="2" x2="11" y2="13" /><polygon points="22 2 15 22 11 13 2 9 22 2" /></Svg>);
+const EditIcon = () => (<Svg><path d="M12 20h9" /><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" /></Svg>);
 
 // Dictation languages
 const VOICE_LANGUAGES = [
@@ -257,6 +258,24 @@ function QuestionForm({ questions, onSubmit }) {
     </div>
   );
 }
+const TicksIcon = ({ color = "#94a3b8" }) => (
+  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={color}
+    strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+    <polyline points="1 13 6 18 15 7" />
+    <polyline points="9 15 11.5 17.5 22 6" />
+  </svg>
+);
+
+// "07.05 am" style, from the saved message time
+function formatMsgTime(m) {
+  const raw = m.created_at || m.createdAt;
+  if (!raw) return "";
+  const d = new Date(raw);
+  if (isNaN(d)) return "";
+  return d
+    .toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: true })
+    .replace(":", ".");
+}
 
 export default function AIChatBox({
   chatId,
@@ -288,6 +307,7 @@ export default function AIChatBox({
   const [barCount, setBarCount] = useState(60);
   const shouldRecordRef = useRef(false);
   const navigate = useNavigate();  //tracks recording intent without stale-closure issues
+const location = useLocation();
 
   // Load full conversation whenever a different chat is selected
   useEffect(() => {
@@ -587,7 +607,7 @@ export default function AIChatBox({
       const res = await fetch(`${API_BASE}/${activeChatId}/messages`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content: text, image: imageToSend || undefined }),
+        body: JSON.stringify({ content: text, image: imageToSend || undefined, aiName }),
       });
 
       if (!res.ok) throw new Error("Request failed");
@@ -635,6 +655,7 @@ export default function AIChatBox({
         style={{ ...styles.messages, ...(isMobile ? { padding: 10, minHeight: 0 } : {}) }}
         ref={scrollRef}
       >
+        <div style={styles.dateLabel}>Today</div>
         {loadingHistory && (
           <div style={{ ...styles.msg, ...styles.msgBot, fontStyle: "italic", color: "#999" }}>
             Loading conversation...
@@ -652,12 +673,32 @@ export default function AIChatBox({
           const isUser = m.role === "user";
           const isSaved = !String(m.id).startsWith("temp-") && !String(m.id).startsWith("err-");
           return (
-            <div key={m.id} style={{ display: "flex", flexDirection: "column", ...(isUser ? { alignItems: "flex-end" } : { alignItems: "flex-start" }) }}>
-              <div style={{ display: "flex", alignItems: "flex-start", gap: 8, maxWidth: isMobile ? "90%" : "75%" }}>
-                {!isUser && <div style={styles.orb} />}
-                <div
-                  style={{
-                    ...styles.msg,
+<div key={m.id} style={{ display: "flex", flexDirection: "column", ...(isUser ? { alignItems: "flex-end" } : { alignItems: "flex-start" }) }}>
+  <div style={styles.metaRow}>
+    {isUser ? (
+      <>
+        <span>{formatMsgTime(m)}</span>
+        <TicksIcon color={THEME.accent} />
+        <span style={styles.metaName}>You</span>
+      </>
+    ) : (
+      <>
+        <span style={styles.metaName}>{aiName}</span>
+        <TicksIcon />
+        <span>{formatMsgTime(m)}</span>
+      </>
+    )}
+  </div>
+  <div
+    style={{
+      display: "flex",
+      alignItems: "flex-start",
+      maxWidth: isMobile ? "92%" : "80%",
+    }}
+  >
+    <div
+      style={{
+        ...styles.msg,
                     ...(isUser ? styles.msgUser : styles.msgBot),
                     maxWidth: "100%",
                     minWidth: 0,
@@ -669,7 +710,6 @@ export default function AIChatBox({
                   )}
                   {text && renderMarkdownLite(text)}
                 </div>
-                {isUser && <div style={styles.userAvatar}>A</div>}
               </div>
 
               {/* One button per created/updated record */}
@@ -679,7 +719,11 @@ export default function AIChatBox({
                     <button
                       key={`${ref.type}-${ref.id}-${i}`}
                       style={styles.refBtn}
-                      onClick={() => navigate(REF_ROUTES[ref.type]?.(ref.id) || "/")}
+                      onClick={() =>
+  navigate(REF_ROUTES[ref.type]?.(ref.id) || "/", {
+    state: { fromAI: true, returnTo: location.pathname },
+  })
+}
                     >
                       {REF_LABELS[ref.type] || "View"}
                       {ref.label ? ` · ${ref.label}` : ""}
@@ -693,12 +737,24 @@ export default function AIChatBox({
               )}
 
               {isUser ? (
-                <div style={styles.msgActions}>
-                  <button style={styles.msgActionBtn} onClick={() => handleCopy(m)}>
-                    {copiedId === m.id ? "Copied!" : "Copy"}
+                            <div style={styles.msgActions}>
+                  <button
+                    style={{ ...styles.circleBtn, width: 30, height: 30 }}
+                    onClick={() => handleCopy(m)}
+                    title="Copy"
+                    aria-label="Copy"
+                  >
+                    {copiedId === m.id ? "✓" : <CopyIcon />}
                   </button>
                   {isSaved && (
-                    <button style={styles.msgActionBtn} onClick={() => handleEdit(m)}>Edit</button>
+                    <button
+                      style={{ ...styles.circleBtn, width: 30, height: 30 }}
+                      onClick={() => handleEdit(m)}
+                      title="Edit"
+                      aria-label="Edit"
+                    >
+                      <EditIcon />
+                    </button>
                   )}
                 </div>
               ) : (
@@ -732,9 +788,8 @@ export default function AIChatBox({
         })}
 
         {loading && (
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <div style={{ ...styles.orb, animation: "orbThink 1s ease-in-out infinite" }} />
-            <div style={{ ...styles.msg, ...styles.msgBot, display: "flex", gap: 5, padding: "14px 16px" }}>
+<div style={{ display: "flex", alignItems: "center" }}>
+  <div style={{ ...styles.msg, ...styles.msgBot, display: "flex", gap: 5, padding: "14px 16px" }}>
               <span style={styles.dot} />
               <span style={{ ...styles.dot, animationDelay: "0.2s" }} />
               <span style={{ ...styles.dot, animationDelay: "0.4s" }} />
@@ -784,7 +839,7 @@ export default function AIChatBox({
           0%, 80%, 100% { transform: translateY(0); opacity: 0.4; }
           40% { transform: translateY(-4px); opacity: 1; }
         }
-        @media (prefers-reduced-motion: reduce) {
+           @media (prefers-reduced-motion: reduce) {
           * { animation: none !important; }
         }
       `}</style>
@@ -890,6 +945,7 @@ export default function AIChatBox({
 }
 
 const styles = {
+  dateLabel: { textAlign: "center", fontSize: 12, color: "#8e8e93", margin: "4px 0 8px" },
   wrapper: {
     display: "flex",
     flexDirection: "column",
@@ -939,16 +995,9 @@ const styles = {
   msgActions: {
     display: "flex",
     gap: 6,
-    margin: "2px 44px 10px 4px", // clears the 36px avatar
+    margin: "2px 4px 10px 4px",
   },
-  msgActionBtn: {
-    border: "none",
-    background: "transparent",
-    color: "#94a3b8",
-    fontSize: 11,
-    cursor: "pointer",
-    padding: "2px 4px",
-  },
+
   attachPreviewBar: {
     display: "flex",
     alignItems: "center",
@@ -1048,11 +1097,11 @@ const styles = {
     alignItems: "center",
     gap: 8,
     width: "min(100%, 340px)",
-    margin: "6px 0 10px 34px", // 26px orb + 8px gap, so icons line up with the bubble
+    margin: "6px 0 10px 46px", // 36px orb + 10px gap
   },
   orb: {
-    width: 26,
-    height: 26,
+    width: 36,
+    height: 36,
     borderRadius: "50%",
     background: THEME.orb,
     flexShrink: 0,
@@ -1278,6 +1327,15 @@ const styles = {
     fontWeight: 600,
     cursor: "pointer",
   },
+    metaRow: {
+    display: "flex",
+    alignItems: "center",
+    gap: 6,
+    fontSize: 12,
+    color: "#64748b",
+    margin: "8px 0 4px",
+  },
+  metaName: { color: "#1f2937", fontWeight: 500 },
 
   refButtonRow: {
     display: "flex",

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { FaArrowLeft, FaSave, FaPlus, FaTrash, FaEye, FaEyeSlash, FaTimes, FaChevronDown } from "react-icons/fa";
-import { INVOICE_LABELS, INVOICE_FONT, InvoiceLangToggle, useTamilDescriptions } from "./invoiceLang";
+import { INVOICE_LABELS, INVOICE_FONT, InvoiceLangToggle, useTamilDescriptions, translateToTamil, unitLabel } from "./invoiceLang";
 
 function logoStyle(shape, size) {
   if (shape === "circle") return { width: size, height: size, borderRadius: "50%", objectFit: "cover" };
@@ -571,7 +571,7 @@ function InvoicePreview({ form, isMobile, onClose }) {
                 <tr key={i}>
                   {cell(item.sl, { textAlign: "center" })}
                   {cell(tDesc(item) || <span style={{ color: "#cbd5e1" }}>—</span>)}
-                  {cell(`${item.qty}${item.unit ? " " + item.unit : ""}`, { textAlign: "center", whiteSpace: "nowrap" })}
+                  {cell(`${item.qty}${item.unit ? " " + unitLabel(item.unit, previewLang) : ""}`, { textAlign: "center", whiteSpace: "nowrap" })}
                   {cell(formatAmount(item.rate), { textAlign: "right" })}
                   {cell(formatAmount(item.amount), { textAlign: "right" })}
                 </tr>
@@ -791,6 +791,7 @@ export default function InvoiceForm({ invoice, invoices = [], customers = [], on
   const updateItem = (i, field, value) => {
     const items = [...form.items];
     items[i] = { ...items[i], [field]: value };
+    if (field === "description") items[i].descriptionTa = undefined;
     if (field === "qty" || field === "rate") {
       items[i].amount = Number(items[i].qty) * Number(items[i].rate);
     }
@@ -827,7 +828,7 @@ export default function InvoiceForm({ invoice, invoices = [], customers = [], on
   }
   const due = total - Number(form.amountPaid || 0);
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!form.buyerName || !form.invoiceNo) {
       alert("Please fill Invoice No and Buyer Name.");
       return;
@@ -851,8 +852,27 @@ export default function InvoiceForm({ invoice, invoices = [], customers = [], on
     const amountDue = total - Number(form.amountPaid || 0);
 
 
+    // Store the Tamil text with each item so the invoice stays Tamil on any device
+    let items = form.items;
+    if (form.invoiceLang === "ta") {
+      items = await Promise.all(
+        form.items.map(async (it) => {
+          const text = (it.description || "").trim();
+          if (!text) return it;
+          if (/[\u0B80-\u0BFF]/.test(text)) return { ...it, descriptionTa: text }; // already Tamil
+          try {
+            return { ...it, descriptionTa: await translateToTamil(text) };
+          } catch {
+            return it;
+          }
+        })
+      );
+    }
+
     onSave({
       ...form,
+      items,
+      invoiceLang: form.invoiceLang === "ta" ? "ta" : "en",
       id: invoice?.id || `INV-${Date.now()}`,
       logo: form.logo,
       total,

@@ -37,7 +37,7 @@ const styles = `
 }
 .qd-modern .body{ padding:0 44px 40px; }
 .qd-modern .subline{ font-size:14px; font-weight:700; margin:0 0 24px; color:var(--tealDark); display:block; text-align:center; padding:10px 0; }
-.qd-modern .info-table{ background:var(--bg); border:1px solid var(--line); border-radius:12px; margin-bottom:32px; break-inside:avoid; overflow:hidden; }
+.qd-modern .info-table{ background:var(--bg); border:1px solid var(--line); border-radius:12px; margin-bottom:32px; break-inside:avoid; overflow:visible; }
 .qd-modern .info-row{ display:flex; }
 .qd-modern .info-row + .info-row{ border-top:1px solid var(--line); }
 .qd-modern .info-cell{ flex:1; padding:16px 20px; font-size:13px; }

@@ -152,11 +152,21 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    Promise.all([
-      fetch(CUSTOMERS_API).then(r => r.json()),
-      fetch(QUOTATIONS_API).then(r => r.json()),
-      fetch(INVOICES_API).then(r => r.json()),
-    ]).then(([c, q, i]) => {
+  // add this above `export default function DashboardPage()`
+const timed = (label, url) => {
+  const t = performance.now();
+  return fetch(url).then(r => r.json()).then(d => {
+    console.log(label, Math.round(performance.now() - t), "ms");
+    return d;
+  });
+};
+
+// inside useEffect
+Promise.all([
+  timed("customers", CUSTOMERS_API),
+  timed("quotations", QUOTATIONS_API),
+  timed("invoices", INVOICES_API),
+]).then(([c, q, i]) => {
       setCustomers(Array.isArray(c) ? c : []);
       setQuotations(Array.isArray(q) ? q : []);
       setInvoices(Array.isArray(i) ? i : []);
@@ -190,14 +200,13 @@ export default function DashboardPage() {
     .reduce((a, b) => a + (getTotal(b) - Number(b.amountPaid || 0)), 0);
 
   // Chart / ledger data
-  const invoiceStatusData = [
-    { name: "Paid", value: paidInvoices },
-    { name: "Unpaid", value: unpaidInvoices },
-    { name: "Overdue", value: invoices.filter(i => i.status === "Overdue").length },
-    { name: "Draft", value: invoices.filter(i => i.status === "Draft").length },
-  ].filter(d => d.value > 0);
-  const invoiceStatusTotal = invoiceStatusData.reduce((a, b) => a + b.value, 0) || 1;
-
+const invoiceStatusData = [
+  { name: "Paid", value: paidInvoices },
+  { name: "Unpaid", value: unpaidInvoices },
+  { name: "Overdue", value: invoices.filter(i => i.status === "Overdue").length },
+  { name: "Draft", value: invoices.filter(i => i.status === "Draft").length },
+];
+const invoiceStatusTotal = invoiceStatusData.reduce((a, b) => a + b.value, 0) || 1;
   // Rolling 6-month window ending on the current month (today, not hardcoded),
   // with each paid invoice's revenue bucketed into the month it actually falls in.
   const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -326,16 +335,16 @@ export default function DashboardPage() {
               <div className="dash-eyebrow mb-1">Breakdown</div>
               <div className="dash-serif fw-bold mb-3" style={{ color: "#16241F", fontSize: "1rem" }}>Invoice Status</div>
 
-              {invoiceStatusData.length > 0 ? (
-                <>
-                  <div style={{ display: "flex", width: "100%", height: 10, borderRadius: 6, overflow: "hidden", marginBottom: 16 }}>
-                    {invoiceStatusData.map(({ name, value }) => (
-                      <div key={name} style={{ width: `${(value / invoiceStatusTotal) * 100}%`, backgroundColor: invoiceStatusColors[name] }} />
-                    ))}
-                  </div>
-                  <div className="d-flex flex-column">
-                    {invoiceStatusData.map(({ name, value }) => (
-                      <div key={name} className="d-flex justify-content-between align-items-center" style={{ padding: "7px 0", borderBottom: "1px solid #F0EDE3" }}>
+  {invoices.length > 0 ? (
+  <>
+    <div style={{ display: "flex", width: "100%", height: 10, borderRadius: 6, overflow: "hidden", marginBottom: 16, backgroundColor: "#F0EDE3" }}>
+      {invoiceStatusData.filter(d => d.value > 0).map(({ name, value }) => (
+        <div key={name} style={{ width: `${(value / invoiceStatusTotal) * 100}%`, backgroundColor: invoiceStatusColors[name] }} />
+      ))}
+    </div>
+    <div className="d-flex flex-column">
+      {invoiceStatusData.map(({ name, value }) => (
+        <div key={name} className="d-flex justify-content-between align-items-center" style={{ padding: "7px 0", borderBottom: "1px solid #F0EDE3", opacity: value === 0 ? 0.45 : 1 }}>
                         <div className="d-flex align-items-center gap-2">
                           <div className="dash-status-dot" style={{ backgroundColor: invoiceStatusColors[name] }} />
                           <span style={{ fontSize: "0.8rem", color: "#4A4E48" }}>{name}</span>
@@ -454,7 +463,7 @@ export default function DashboardPage() {
                   {invoices.slice(0, 4).map(inv => (
                     <div key={inv.id} className="dash-ledger-row" onClick={() => navigate("/invoices")}>
                       <div className="dash-status-dot" style={{ backgroundColor: invoiceStatusColors[inv.status] || "#8A8578" }} />
-                   <div className="flex-grow-1 min-w-0">
+                      <div className="flex-grow-1 min-w-0">
                         <div className="fw-semibold text-truncate" style={{ color: "#16241F", fontSize: "0.84rem" }}>{inv.buyerName}</div>
                         <div className="dash-mono" style={{ color: "#8A8578", fontSize: "0.7rem" }}>{inv.invoiceNo || inv.id}</div>
                       </div>
@@ -496,12 +505,14 @@ export default function DashboardPage() {
                 return (
                   <div className="col-12 col-md-4" key={q.id}>
                     <div className="dash-stub p-3 h-100" onClick={() => navigate("/quotations")}>
-                      <div className="d-flex justify-content-between align-items-start mb-2">
-                        <div className="dash-mono fw-bold" style={{ color: "#1F6F5C", fontSize: "0.72rem" }}>{q.id}</div>
-                        <span style={{ fontSize: "0.64rem", fontWeight: 700, color: sColor, textTransform: "uppercase", letterSpacing: "0.04em" }}>
-                          {q.status}
-                        </span>
-                      </div>
+                  <div className="d-flex justify-content-between align-items-start mb-2">
+  <div className="dash-mono fw-bold" style={{ color: "#1F6F5C", fontSize: "0.72rem" }}>
+    {q.status === "Draft" ? "" : q.id}
+  </div>
+  <span style={{ fontSize: "0.64rem", fontWeight: 700, color: sColor, textTransform: "uppercase", letterSpacing: "0.04em" }}>
+    {q.status}
+  </span>
+</div>
                       <div className="dash-serif fw-bold mb-1" style={{ color: "#16241F", fontSize: "0.92rem" }}>{q.name}</div>
                       <div style={{ color: "#8A8578", fontSize: "0.74rem", marginBottom: 10 }}>{q.company}</div>
                       <div className="d-flex justify-content-between align-items-center pt-2" style={{ borderTop: "1px dashed #E7E3D6" }}>

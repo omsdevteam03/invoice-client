@@ -10,7 +10,7 @@ import BoldLayout from "./Boldlayout";
 import ModernLayout from "./Modernlayout";
 import CorporateLayout from "./Corporatelayout";
 import MinimalLayout from "./Minimallayout";
-import { CompanySelectField, CostItemsTable } from "./EditableField";
+import { CompanySelectField, CostItemsTable, CustomerSelectField } from "./EditableField";
 import { getCostItems, getCostLines, computeCostTotals, getGstMode } from "./quotationLayoutUtils";
 import QuotationTemplate from "./QuotationTemplate";
 import { templates } from "./QuotationTable";
@@ -528,6 +528,24 @@ const updateField = (field, value) => {
       }),
     }));
   };
+    const handleCustomerSelect = (cust) => {
+    dirtyRef.current = true;
+    setForm((prev) => ({
+      ...prev,
+      customerId: cust.id,
+      company: capitalizeWords(cust.company || ""),
+      name: capitalizeWords(cust.name || ""),
+      phone: cust.phone || "",
+      email: cust.email || "",
+      clientAddress: cust.address || "",
+    }));
+  };
+
+  // Typed a company that isn't a saved customer: keep it as free text
+  const handleCustomerManualChange = (typedName) => {
+    dirtyRef.current = true;
+    setForm((prev) => ({ ...prev, customerId: null, company: capitalizeWords(typedName) }));
+  };
 
   const handleThemeColorChange = (color) => {
     dirtyRef.current = true;
@@ -719,8 +737,15 @@ const updateField = (field, value) => {
               <div style={{ ...cellLabel, marginBottom: 4 }}>To:</div>
               {editMode ? (
                 <>
+                  <CustomerSelectField
+                    customers={customers}
+                    value={form.company}
+                    onSelect={handleCustomerSelect}
+                    onManualChange={handleCustomerManualChange}
+                    placeholder="Select or search customer"
+                    style={{ ...cellInput, fontWeight: 700 }}
+                  />
                   <input value={form.name || ""} onChange={(e) => updateField("name", e.target.value)} placeholder="Client contact name" style={cellInput} />
-                  <input value={form.company || ""} onChange={(e) => updateField("company", e.target.value)} placeholder="Client Company Name" style={cellInput} />
                   <input value={form.clientAddress || ""} onChange={(e) => updateField("clientAddress", e.target.value)} placeholder="Client address" style={cellInput} />
                   <input value={form.phone || ""} onChange={(e) => updateField("phone", e.target.value)} placeholder="Mob / Phone" style={cellInput} />
                   <input value={form.email || ""} onChange={(e) => updateField("email", e.target.value)} placeholder="Email" style={cellInput} />

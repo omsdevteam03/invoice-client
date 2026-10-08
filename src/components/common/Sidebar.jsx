@@ -2,7 +2,7 @@ import { useState } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import {
   FiHome, FiUsers, FiFileText, FiFile,
-  FiSettings, FiLogOut, FiZap
+  FiSettings, FiLogOut, FiZap, FiUserCheck
 } from "react-icons/fi";
 import useAuth from "../../hooks/useAuth";
 
@@ -20,6 +20,7 @@ const mainLinks = [
   { to: "/customers", icon: FiUsers, label: "Customers" },
   { to: "/quotations", icon: FiFileText, label: "Quotations" },
   { to: "/invoices", icon: FiFile, label: "Invoices" },
+  { to: "/users", icon: FiUserCheck, label: "Users" },
   { to: "/ai", icon: FiZap, label: "AI Assistant" },
 ];
 

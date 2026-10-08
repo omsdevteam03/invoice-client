@@ -10,6 +10,7 @@ import InvoicesPage from "./pages/InvoicesPage";
 import SettingsPage from "./pages/SettingsPage";
 import AiPage from "./pages/AiPage";
 import Trash from "./pages/trash";
+import UsersPage from "./pages/UsersPage";
 
 function ScrollToTop() {
   const { pathname } = useLocation();
@@ -24,18 +25,9 @@ function ScrollToTop() {
     // Reset the window itself...
     window.scrollTo(0, 0);
 
-    // ...AND reset every element on the page that is actually scrollable,
-    // in case the real scroll container is an inner <div> (common in
-    // sidebar layouts) rather than the window. Cheap to run since it only
-    // touches elements whose content overflows their box.
-    const scrollableSelector = "*";
-    document.querySelectorAll(scrollableSelector).forEach((el) => {
-      const style = window.getComputedStyle(el);
-      const canScrollY = /(auto|scroll)/.test(style.overflowY);
-      if (canScrollY && el.scrollTop > 0) {
-        el.scrollTop = 0;
-      }
-    });
+    // The app scrolls inside .main-content as well as the window
+    const mainContent = document.querySelector(".main-content");
+    if (mainContent) mainContent.scrollTop = 0;
   }, [pathname]);
 
   return null;
@@ -72,8 +64,9 @@ export default function App() {
               <Route path="/ai" element={<AiPage />} />
 
               <Route path="/trash" element={<Trash />} />
-            </Route>
 
+              <Route path="/users" element={<UsersPage />} />
+            </Route>
           </Routes>
         </BrowserRouter>
       </AuthProvider>

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import CustomerList from "../components/customers/CustomerList.jsx";
 import CustomerForm from "../components/customers/CustomerForm.jsx";
@@ -12,6 +12,11 @@ export default function CustomersPage() {
   const location = useLocation();
   const navigate = useNavigate();
   const { id } = useParams();
+
+  // Remembers if this page was opened from the AI chat's "View" button
+  const aiReturnRef = useRef(
+    location.state?.fromAI ? location.state.returnTo || "/ai" : null
+  );
 
   const [customers, setCustomers] = useState([]);
   const [customersLoaded, setCustomersLoaded] = useState(false);
@@ -166,6 +171,12 @@ export default function CustomersPage() {
     navigate("/customers");
   };
 
+  // Back button on the detail page only
+  const handleDetailBack = () => {
+    if (aiReturnRef.current) navigate(aiReturnRef.current);
+    else handleBack();
+  };
+
   if (isNewRoute) {
     return (
       <CustomerForm
@@ -200,7 +211,7 @@ export default function CustomersPage() {
     return (
       <CustomerDetail
         customer={customersWithComputedBilled.find(c => c.id === selected.id) ?? selected}
-        onBack={handleBack}
+        onBack={handleDetailBack}
         onEdit={() => handleEdit(selected)}
         quotations={quotations}
         invoices={invoices}

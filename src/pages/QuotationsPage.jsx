@@ -111,6 +111,11 @@ export default function QuotationsPage() {
   const navigate = useNavigate();
   const { id } = useParams();
 
+  // Remembers if this page was opened from the AI chat's "View" button
+  const aiReturnRef = useRef(
+    location.state?.fromAI ? location.state.returnTo || "/ai" : null
+  );
+
   const [quotations, setQuotations] = useState([]);
   const [quotationsLoaded, setQuotationsLoaded] = useState(false);
   const [invoices, setInvoices] = useState([]);
@@ -375,6 +380,40 @@ export default function QuotationsPage() {
     navigate("/invoices", { state: { chooseQuotation: quotation } });
   };
 
+  // Same activity-log helper as InvoicesPage.jsx
+  const logInvoiceActivity = (invoice, message) => ({
+    ...invoice,
+    activityLog: [...(invoice.activityLog || []), { message, date: new Date().toISOString() }],
+  });
+
+  // Called by the invoice popup in QuotationFirst (Edit → Update Invoice,
+  // and Convert to Invoice). Saves to the DB and keeps this page's
+  // `invoices` state in sync so the popup list updates instantly.
+  const handleSaveInvoice = async (inv, isNew, message) => {
+    const withLog = logInvoiceActivity(
+      inv,
+      message || (isNew ? "Invoice created" : "Invoice details updated")
+    );
+
+    const res = await fetch(INVOICES_API, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(withLog),
+    });
+    if (!res.ok) {
+      const errBody = await res.json().catch(() => ({}));
+      throw new Error(errBody.message || `Save failed with status ${res.status}`);
+    }
+    const saved = await res.json();
+
+    setInvoices(prev =>
+      prev.some(i => i.id === saved.id)
+        ? prev.map(i => (i.id === saved.id ? saved : i))
+        : [saved, ...prev]
+    );
+    return saved;
+  };
+
   const openDraftFromCustomer = (customer) => {
     setPendingCustomer(customer);
     setShowTemplates(true);
@@ -538,6 +577,10 @@ export default function QuotationsPage() {
           isNewTemplate={selected.isTemplate}
           isSaving={isSaving}
           onBack={() => {
+            if (aiReturnRef.current) {
+              navigate(aiReturnRef.current);
+              return;
+            }
             setSelected(null);
             setEditMode(false);
             setSaveError(null);
@@ -569,6 +612,7 @@ export default function QuotationsPage() {
         docSettings={docSettings}
         invoices={invoices}
         onCreateInvoiceFromQuotation={handleCreateInvoiceFromQuotation}
+        onSaveInvoice={handleSaveInvoice}
         onResetNumbering={handleResetNumbering}
         onSend={handleSend}
       />

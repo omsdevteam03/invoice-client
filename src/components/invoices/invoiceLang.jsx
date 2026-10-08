@@ -4,7 +4,8 @@ import { useState, useEffect } from "react";
 export const INVOICE_FONT = "Arial, 'Noto Sans Tamil', 'Nirmala UI', Latha, sans-serif";
 
 // ── Tamil translation of free-text fields (item descriptions) ─────────────
-const TA_CACHE_KEY = "invoice_ta_cache";
+// v2: new key so the old bad translations (e.g. "தமிழ் பொருள் அரிசி") are ignored
+const TA_CACHE_KEY = "invoice_ta_cache_v2";
 
 function readTaCache() {
   try { return JSON.parse(localStorage.getItem(TA_CACHE_KEY) || "{}"); } catch { return {}; }
@@ -16,17 +17,34 @@ function writeTaCache(c) {
 export async function translateToTamil(text) {
   const t = (text || "").trim();
   if (!t) return "";
+  const key = t.toLowerCase();
   const cache = readTaCache();
-  if (cache[t]) return cache[t];
+  if (cache[key]) return cache[key];
 
-  const res = await fetch(
-    `https://api.mymemory.translated.net/get?q=${encodeURIComponent(t.slice(0, 500))}&langpair=en|ta`
-  );
-  const data = await res.json();
-  const out = data?.responseData?.translatedText;
-  if (!out || Number(data.responseStatus) !== 200) throw new Error("Translation failed");
+  let out = "";
 
-  cache[t] = out;
+  // 1) Google Translate (accurate for single words like "rice" -> "அரிசி")
+  try {
+    const res = await fetch(
+      `https://translate.googleapis.com/translate_a/single?client=gtx&sl=en&tl=ta&dt=t&q=${encodeURIComponent(t.slice(0, 500))}`
+    );
+    const data = await res.json();
+    out = (data?.[0] || []).map(part => part?.[0] || "").join("").trim();
+  } catch (err) {
+    console.error("Google translate failed, trying fallback:", err);
+  }
+
+  // 2) Fallback: MyMemory (only if Google failed)
+  if (!out) {
+    const res = await fetch(
+      `https://api.mymemory.translated.net/get?q=${encodeURIComponent(t.slice(0, 500))}&langpair=en|ta`
+    );
+    const data = await res.json();
+    out = data?.responseData?.translatedText;
+    if (!out || Number(data.responseStatus) !== 200) throw new Error("Translation failed");
+  }
+
+  cache[key] = out;
   writeTaCache(cache);
   return out;
 }
@@ -65,6 +83,12 @@ export function useTamilDescriptions(items = [], lang) {
     return item.descriptionTa || map[t] || readTaCache()[t] || item.description;
   };
 }
+const TA_UNITS = {
+  Nos: "எண்", Pcs: "துண்டு", Kg: "கிலோ", Gram: "கிராம்", Ton: "டன்",
+  Litre: "லிட்டர்", ml: "மி.லி", Meter: "மீட்டர்", "Sq.ft": "சதுர அடி",
+  Box: "பெட்டி", Bag: "பை", Set: "செட்", Hour: "மணி", Day: "நாள்", Month: "மாதம்",
+};
+export const unitLabel = (unit, lang) => (lang === "ta" ? TA_UNITS[unit] || unit : unit);
 
 export const INVOICE_LABELS = {
   en: {

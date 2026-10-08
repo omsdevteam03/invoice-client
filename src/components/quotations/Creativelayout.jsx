@@ -56,7 +56,7 @@ const styles = `
 
 .qd-creative .header-brand .logo{ min-width:72px; height:72px; display:flex; align-items:center; justify-content:center; color:#fff; font-weight:700; flex-shrink:0; }.qd-creative .header-brand .logo.no-logo{ background:var(--coral); border-radius:10px; }
 
-.qd-creative .info-table{ background:transparent; border-radius:0; box-shadow:none; margin-bottom:24px; break-inside:avoid; overflow:hidden; }.qd-creative .info-row{ display:flex; }
+.qd-creative .info-table{ background:transparent; border-radius:0; box-shadow:none; margin-bottom:24px; break-inside:avoid; overflow:visible; }.qd-creative .info-row{ display:flex; }
 .qd-creative .info-row + .info-row{ border-top:1px solid var(--lineclr); }
 .qd-creative .info-cell{ flex:1; padding:16px 20px; font-size:13px; }
 .qd-creative .info-cell + .info-cell{ border-left:1px solid var(--lineclr); }
