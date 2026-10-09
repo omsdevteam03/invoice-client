@@ -87,7 +87,7 @@ export default function Navbar() {
                   display: "flex", alignItems: "center", justifyContent: "center",
                   fontWeight: 800, fontSize: "0.75rem", flexShrink: 0,
                 }}>
-                  {user?.name?.charAt(0).toUpperCase() || "A"}
+                  {(user?.name || user?.email || "?").charAt(0).toUpperCase()}
                 </div>
                 <span style={{ color: "#fff", fontSize: "0.8rem", fontWeight: 600 }}
                   className="d-none d-sm-inline">
@@ -122,7 +122,7 @@ export default function Navbar() {
                       </div>
                       <div>
                         <div style={{ fontWeight: 700, fontSize: "0.88rem", color: "#0f172a" }}>
-                          {user?.name || "Admin User"}
+                          {user?.name || user?.email}
                         </div>
                         <div style={{ fontSize: "0.75rem", color: "#94a3b8" }}>
                           {user?.email || "admin@test.com"}
@@ -274,16 +274,16 @@ export default function Navbar() {
                 {user?.name || "Admin User"}
               </div>
               <div style={{ fontSize: "0.82rem", color: "#94a3b8" }}>
-                {user?.email || "admin@test.com"}
+                {user?.email}
               </div>
             </div>
 
             {/* Account Info (read-only) */}
             <div style={{ backgroundColor: "#f8fafc", borderRadius: 12, padding: 16, marginBottom: 20 }}>
               {[
-                { label: "Name", value: user?.name || "Admin User" },
-                { label: "Email", value: user?.email || "admin@test.com" },
-                { label: "Role", value: "Administrator" },
+       { label: "Name", value: user?.name || user?.email },
+{ label: "Email", value: user?.email },
+{ label: "Role", value: user?.role || "User" },
               ].map(({ label, value }) => (
                 <div key={label} style={{
                   display: "flex", justifyContent: "space-between",

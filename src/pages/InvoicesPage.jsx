@@ -5,13 +5,14 @@ import InvoiceForm from "../components/invoices/InvoiceForm";
 import InvoiceDocument from "../components/invoices/InvoiceDocument";
 import ReceivePaymentModal from "../components/invoices/ReceivePaymentModal";
 import { FaFileInvoiceDollar } from "react-icons/fa";
+import axiosInstance from "../api/axiosInstance";
 
 const API = `${import.meta.env.VITE_API_URL}/invoices`;
 const SETTINGS_API = `${import.meta.env.VITE_API_URL}/settings/company`;
 const DOC_SETTINGS_API = `${import.meta.env.VITE_API_URL}/settings/invoice`;
 const QUOTATIONS_API = `${import.meta.env.VITE_API_URL}/quotations`;
 const CUSTOMERS_API = `${import.meta.env.VITE_API_URL}/customers`;
-
+const COMPANIES_API = `${import.meta.env.VITE_API_URL}/settings/companies`;
 // ── Numbering helpers ────────────────────────────────────────────────────
 // A record is Proforma if it's explicitly tagged that way, OR — for older
 // records saved before invoiceType existed — if its number carries the
@@ -89,6 +90,7 @@ export default function InvoicesPage() {
 
 const [invoices, setInvoices] = useState([]);
 const [customers, setCustomers] = useState([]);
+const [companies, setCompanies] = useState([]);
 const [invoicesLoaded, setInvoicesLoaded] = useState(false);
 const [singleInvoice, setSingleInvoice] = useState(null);
   // Only used for an UNSAVED draft (New / Choose Customer / Choose Quotation
@@ -125,7 +127,7 @@ const [singleInvoice, setSingleInvoice] = useState(null);
     defaultNotes: "",
   });
   const [approvedQuotations, setApprovedQuotations] = useState([]);
-const [allQuotations, setAllQuotations] = useState([]);
+  const [allQuotations, setAllQuotations] = useState([]);
   const [toast, setToast] = useState(null); // { message } | null
   const saveTimer = useRef(null);
 
@@ -148,12 +150,19 @@ const [allQuotations, setAllQuotations] = useState([]);
       .catch(() => { });
     return () => { cancelled = true; };
   }, [id]);
-  // Load customers (used by the Buyer Name picker in the invoice form)
+   // Load customers (used by the Buyer Name picker in the invoice form)
 useEffect(() => {
   fetch(CUSTOMERS_API)
     .then(res => res.json())
     .then(data => setCustomers(Array.isArray(data) ? data : []))
     .catch(err => console.error('Failed to load customers:', err));
+}, []);
+
+// Load company profiles from Settings (same list the Quotation page uses)
+useEffect(() => {
+  axiosInstance.get('/settings/companies')
+    .then(res => setCompanies(Array.isArray(res.data) ? res.data : []))
+    .catch(err => console.error('Failed to load companies:', err));
 }, []);
 
   // If someone lands on /invoices/:id (view or edit) for an invoice that
@@ -279,7 +288,7 @@ useEffect(() => {
 
   // Opens a pre-filled, unsaved invoice draft for a given customer, straight
   // into the edit form — nothing is saved until "Generate Invoice" is clicked.
-    const openDraftFromCustomer = async (customer) => {
+  const openDraftFromCustomer = async (customer) => {
     // Always fetch the latest active company profile right before creating
     // a document, instead of relying on whatever was fetched at page load —
     // this way switching the active company takes effect immediately, with
@@ -307,7 +316,7 @@ useEffect(() => {
     const nextNum = (finalInvoiceNumbers.length ? Math.max(...finalInvoiceNumbers) : 0) + 1;
     const nextInvoiceNo = `${prefix}${String(nextNum).padStart(3, "0")}`;
 
-        const draftInvoice = {
+    const draftInvoice = {
       invoiceNo: nextInvoiceNo,
       date: new Date().toISOString().split("T")[0],
       dueDate: "",
@@ -327,7 +336,7 @@ useEffect(() => {
       amountPaid: 0,
       notes: docSettings.defaultNotes || "",
       invoiceType: "Final",
-           items: [{ sl: 1, description: "", qty: 1, rate: 0, amount: 0 }],
+      items: [{ sl: 1, description: "", qty: 1, rate: 0, amount: 0 }],
     };
     setDraftInvoice(draftInvoice);
     navigate("/invoices/new");
@@ -339,7 +348,7 @@ useEffect(() => {
   // Also reused by the "Create Invoice" button in the Quotations page's
   // Invoice Selector (see the chooseQuotation effect above), so a quotation
   // with zero linked invoices can get its first one started from either page.
-    const openDraftFromQuotation = async (quotation) => {
+  const openDraftFromQuotation = async (quotation) => {
     let freshCompanyInfo = companyInfo;
     try {
       const res = await fetch(SETTINGS_API);
@@ -374,11 +383,11 @@ useEffect(() => {
     // Map the quotation's GST style onto the invoice's gstType — the
     // quotation stores this as gstMode ("with" / "without" / "inclusive"),
     // so all three states need to carry over, not just with/without.
-const quotationGstType =
-  quotation.gstMode === "inclusive" ? "GST Included" :
-  quotation.gstMode === "without" ? "No GST" :
-  quotation.gstMode === "with" ? "With GST" :
-  quotation.includeGst === true ? "With GST" : "No GST"; // fallback for older quotations without gstMode
+    const quotationGstType =
+      quotation.gstMode === "inclusive" ? "GST Included" :
+        quotation.gstMode === "without" ? "No GST" :
+          quotation.gstMode === "with" ? "With GST" :
+            quotation.includeGst === true ? "With GST" : "No GST"; // fallback for older quotations without gstMode
 
     const draftInvoice = {
       invoiceNo: nextInvoiceNo,
@@ -393,7 +402,7 @@ const quotationGstType =
       companyGSTIN: freshCompanyInfo.gstin,
       logo: freshCompanyInfo.logo || null,
       signature: "/signature.png",
-           buyerName: quotation.name || quotation.company || "",
+      buyerName: quotation.name || quotation.company || "",
       buyerCompanyName: quotation.company || "",
       buyerAddress: quotation.clientAddress || "",
       buyerMobile: quotation.phone || "",
@@ -608,7 +617,7 @@ const quotationGstType =
         return [saved, ...withUpdatedProforma];
       });
       navigate(`/invoices/${saved.id}`, { replace: true });
-       } catch (err) {
+    } catch (err) {
       console.error('Convert to final invoice failed:', err);
       alert('Failed to convert invoice: ' + err.message);
     }
@@ -659,7 +668,7 @@ const quotationGstType =
     </div>
   );
 
-   if (isNewRoute) {
+  if (isNewRoute) {
     return (
       <>
         {toastEl}
@@ -667,7 +676,8 @@ const quotationGstType =
           key={draftInvoice?.id || "new"}
           invoice={draftInvoice}
           invoices={invoices}
-            customers={customers}
+          customers={customers}
+          companies={companies}
           onSave={handleSave}
           onBack={handleBack}
           companyInfo={companyInfo}
@@ -679,18 +689,18 @@ const quotationGstType =
     );
   }
 
-   if (isEditRoute) {
+  if (isEditRoute) {
     if (!invoicesLoaded) return <>{toastEl}{loadingEl}</>;
     if (!selected) return null; // redirect effect above will kick in
     return (
       <>
         {toastEl}
-        <InvoiceForm
+       <InvoiceForm
           key={selected?.id || "new"}
           invoice={selected}
           invoices={invoices}
-            customers={customers}
-
+          customers={customers}
+          companies={companies}
           onSave={handleSave}
           onBack={handleBack}
           companyInfo={companyInfo}
@@ -707,7 +717,7 @@ const quotationGstType =
     return (
       <>
         {toastEl}
-               <InvoiceDocument
+        <InvoiceDocument
           invoice={selected}
           onBack={handleDocBack}
           onEdit={() => handleEdit(selected)}

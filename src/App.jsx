@@ -1,6 +1,7 @@
 import { useEffect } from "react";
-import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { AuthProvider } from "./context/AuthContext";
+import useAuth from "./hooks/useAuth";
 import ProtectedRoute from "./components/common/ProtectedRoute";
 import LoginPage from "./pages/LoginPage";
 import DashboardPage from "./pages/DashboardPage";
@@ -33,6 +34,11 @@ function ScrollToTop() {
   return null;
 }
 
+function AdminOnly({ children }) {
+  const { user } = useAuth();
+  return user?.role === "Admin" ? children : <Navigate to="/" replace />;
+}
+
 export default function App() {
   return (
     <div style={{ margin: 0, padding: 0, width: "100vw", overflowX: "hidden" }}>
@@ -59,13 +65,13 @@ export default function App() {
               <Route path="/invoices/:id" element={<InvoicesPage />} />
               <Route path="/invoices/:id/edit" element={<InvoicesPage />} />
 
-              <Route path="/settings" element={<SettingsPage />} />
+              <Route path="/settings" element={<AdminOnly><SettingsPage /></AdminOnly>} />
 
               <Route path="/ai" element={<AiPage />} />
 
               <Route path="/trash" element={<Trash />} />
 
-              <Route path="/users" element={<UsersPage />} />
+              <Route path="/users" element={<AdminOnly><UsersPage /></AdminOnly>} />
             </Route>
           </Routes>
         </BrowserRouter>

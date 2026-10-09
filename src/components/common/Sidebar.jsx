@@ -204,7 +204,10 @@ function NavItem({ to, icon, label, end }) {
 }
 
 export default function Sidebar() {
-  const { logout } = useAuth();
+  const { user, logout } = useAuth();
+  const visibleLinks = mainLinks.filter(
+    (link) => link.to !== "/users" || user?.role === "Admin"
+  );
   const navigate = useNavigate();
   const [showConfirm, setShowConfirm] = useState(false);
   const [logoutHovered, setLogoutHovered] = useState(false);
@@ -222,22 +225,24 @@ export default function Sidebar() {
       <div className="no-print sidebar-rail">
         {/* Logo mark — hidden on mobile, already shown in the app top bar */}
         <div className="sidebar-top">
-          <div className="logo-mark" title="Admin User · admin@test.com">
-            A
-          </div>
+        <div className="logo-mark" title={`${user?.name || ""} · ${user?.email || ""}`}>
+  {(user?.name || user?.email || "?").charAt(0).toUpperCase()}
+</div>
         </div>
 
         {/* Nav */}
         <div className="sidebar-nav">
-          {mainLinks.map(link => (
-            <NavItem key={link.to} {...link} end={link.to === "/"} />
-          ))}
+         {visibleLinks.map(link => (
+  <NavItem key={link.to} {...link} end={link.to === "/"} />
+))}
 
           <div className="sidebar-divider" />
 
-          {generalLinks.map(link => (
-            <NavItem key={link.to} {...link} />
-          ))}
+         {generalLinks
+  .filter((link) => link.to !== "/settings" || user?.role === "Admin")
+  .map(link => (
+    <NavItem key={link.to} {...link} />
+  ))}
 
           {/* Logout — kept on desktop, hidden on mobile where it's already
               reachable from the navbar's profile dropdown */}

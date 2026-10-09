@@ -33,7 +33,6 @@ const RefreshIcon = () => (<Svg><polyline points="17 1 21 5 17 9" /><path d="M3 
 const ClipIcon = () => (<Svg size={18}><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" /></Svg>);
 const MicIcon = () => (<Svg size={18}><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" /><path d="M19 10v2a7 7 0 0 1-14 0v-2" /><line x1="12" y1="19" x2="12" y2="23" /></Svg>);
 const SendIcon = () => (<Svg size={20}><line x1="22" y1="2" x2="11" y2="13" /><polygon points="22 2 15 22 11 13 2 9 22 2" /></Svg>);
-const EditIcon = () => (<Svg><path d="M12 20h9" /><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" /></Svg>);
 
 // Dictation languages
 const VOICE_LANGUAGES = [
@@ -307,7 +306,7 @@ export default function AIChatBox({
   const [barCount, setBarCount] = useState(60);
   const shouldRecordRef = useRef(false);
   const navigate = useNavigate();  //tracks recording intent without stale-closure issues
-const location = useLocation();
+  const location = useLocation();
 
   // Load full conversation whenever a different chat is selected
   useEffect(() => {
@@ -635,12 +634,9 @@ const location = useLocation();
     }
   }
 
-  function handleKeyDown(e) {
-    if (e.key === "Enter") {
-      if (editingMessageId) saveEdit();
-      else sendMessage();
-    }
-  }
+function handleKeyDown(e) {
+  if (e.key === "Enter") sendMessage();
+}
 
   const showGreeting = !chatId && messages.length === 0 && !loadingHistory;
 
@@ -673,32 +669,32 @@ const location = useLocation();
           const isUser = m.role === "user";
           const isSaved = !String(m.id).startsWith("temp-") && !String(m.id).startsWith("err-");
           return (
-<div key={m.id} style={{ display: "flex", flexDirection: "column", ...(isUser ? { alignItems: "flex-end" } : { alignItems: "flex-start" }) }}>
-  <div style={styles.metaRow}>
-    {isUser ? (
-      <>
-        <span>{formatMsgTime(m)}</span>
-        <TicksIcon color={THEME.accent} />
-        <span style={styles.metaName}>You</span>
-      </>
-    ) : (
-      <>
-        <span style={styles.metaName}>{aiName}</span>
-        <TicksIcon />
-        <span>{formatMsgTime(m)}</span>
-      </>
-    )}
-  </div>
-  <div
-    style={{
-      display: "flex",
-      alignItems: "flex-start",
-      maxWidth: isMobile ? "92%" : "80%",
-    }}
-  >
-    <div
-      style={{
-        ...styles.msg,
+            <div key={m.id} style={{ display: "flex", flexDirection: "column", ...(isUser ? { alignItems: "flex-end" } : { alignItems: "flex-start" }) }}>
+              <div style={styles.metaRow}>
+                {isUser ? (
+                  <>
+                    <span>{formatMsgTime(m)}</span>
+                    <TicksIcon color={THEME.accent} />
+                    <span style={styles.metaName}>You</span>
+                  </>
+                ) : (
+                  <>
+                    <span style={styles.metaName}>{aiName}</span>
+                    <TicksIcon />
+                    <span>{formatMsgTime(m)}</span>
+                  </>
+                )}
+              </div>
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "flex-start",
+                  maxWidth: isMobile ? "92%" : "80%",
+                }}
+              >
+                <div
+                  style={{
+                    ...styles.msg,
                     ...(isUser ? styles.msgUser : styles.msgBot),
                     maxWidth: "100%",
                     minWidth: 0,
@@ -720,10 +716,10 @@ const location = useLocation();
                       key={`${ref.type}-${ref.id}-${i}`}
                       style={styles.refBtn}
                       onClick={() =>
-  navigate(REF_ROUTES[ref.type]?.(ref.id) || "/", {
-    state: { fromAI: true, returnTo: location.pathname },
-  })
-}
+                        navigate(REF_ROUTES[ref.type]?.(ref.id) || "/", {
+                          state: { fromAI: true, returnTo: location.pathname },
+                        })
+                      }
                     >
                       {REF_LABELS[ref.type] || "View"}
                       {ref.label ? ` · ${ref.label}` : ""}
@@ -736,28 +732,18 @@ const location = useLocation();
                 <QuestionForm questions={form.questions} onSubmit={(answersText) => sendMessage(answersText)} />
               )}
 
-              {isUser ? (
-                            <div style={styles.msgActions}>
-                  <button
-                    style={{ ...styles.circleBtn, width: 30, height: 30 }}
-                    onClick={() => handleCopy(m)}
-                    title="Copy"
-                    aria-label="Copy"
-                  >
-                    {copiedId === m.id ? "✓" : <CopyIcon />}
-                  </button>
-                  {isSaved && (
-                    <button
-                      style={{ ...styles.circleBtn, width: 30, height: 30 }}
-                      onClick={() => handleEdit(m)}
-                      title="Edit"
-                      aria-label="Edit"
-                    >
-                      <EditIcon />
-                    </button>
-                  )}
-                </div>
-              ) : (
+{isUser ? (
+  <div style={styles.msgActions}>
+    <button
+      style={{ ...styles.circleBtn, width: 30, height: 30 }}
+      onClick={() => handleCopy(m)}
+      title="Copy"
+      aria-label="Copy"
+    >
+      {copiedId === m.id ? "✓" : <CopyIcon />}
+    </button>
+  </div>
+) : (
                 <div style={styles.botFooter}>
                   <button style={styles.circleBtn} onClick={() => handleCopy(m)} title="Copy">
                     {copiedId === m.id ? "✓" : <CopyIcon />}
@@ -788,8 +774,8 @@ const location = useLocation();
         })}
 
         {loading && (
-<div style={{ display: "flex", alignItems: "center" }}>
-  <div style={{ ...styles.msg, ...styles.msgBot, display: "flex", gap: 5, padding: "14px 16px" }}>
+          <div style={{ display: "flex", alignItems: "center" }}>
+            <div style={{ ...styles.msg, ...styles.msgBot, display: "flex", gap: 5, padding: "14px 16px" }}>
               <span style={styles.dot} />
               <span style={{ ...styles.dot, animationDelay: "0.2s" }} />
               <span style={{ ...styles.dot, animationDelay: "0.4s" }} />
@@ -929,15 +915,15 @@ const location = useLocation();
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder={editingMessageId ? "Edit your message..." : "Type your question..."}
-          />
-          <button
-            style={{ ...styles.sendBtn, ...mSend }}
-            onClick={editingMessageId ? saveEdit : sendMessage}
-            aria-label={editingMessageId ? "Save edit" : "Send"}
-          >
-            {editingMessageId ? "Save" : "Send"}
-          </button>
+           placeholder="Type your question..."
+/>
+<button
+  style={{ ...styles.sendBtn, ...mSend }}
+  onClick={() => sendMessage()}
+  aria-label="Send"
+>
+  Send
+</button>
         </div>
       )}
     </div>
@@ -1327,7 +1313,7 @@ const styles = {
     fontWeight: 600,
     cursor: "pointer",
   },
-    metaRow: {
+  metaRow: {
     display: "flex",
     alignItems: "center",
     gap: 6,

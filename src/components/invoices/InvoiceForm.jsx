@@ -211,135 +211,29 @@ function UnitSelectField({ value, onChange, style }) {
 }
 
 
-/* ────────────────────────────────────────────────────────────────────────
- * Company Name dropdown — local to Invoices only (kept separate from the
- * Quotation module's EditableField.jsx on purpose, so the two document
- * types don't share state/behavior).
- * ──────────────────────────────────────────────────────────────────── */
-
-const INVOICE_CUSTOM_COMPANIES_KEY = "invoice_custom_companies";
-const INVOICE_ADD_CUSTOM_VALUE = "__add_custom_invoice_company__";
-
-const INVOICE_DEFAULT_COMPANIES = [
-  "Orange Mega Software Pvt Ltd",
-  "Nova Tech Solutions",
-  "BluePeak Innovations",
-  "Zenith Digital Works",
-  "Skyline Software Labs",
-  "Vertex Cloud Systems",
-  "Silver Lotus Technologies",
-  "Crimson Bytes Pvt Ltd",
-  "Northstar IT Services",
-  "Pearl Coast Software",
-];
-
-function readInvoiceCustomCompanies() {
-  try {
-    const raw = localStorage.getItem(INVOICE_CUSTOM_COMPANIES_KEY);
-    const parsed = raw ? JSON.parse(raw) : [];
-    return Array.isArray(parsed) ? parsed.filter(Boolean) : [];
-  } catch (err) {
-    console.error("Failed to read saved invoice companies:", err);
-    return [];
-  }
-}
-
-function writeInvoiceCustomCompanies(list) {
-  try {
-    localStorage.setItem(INVOICE_CUSTOM_COMPANIES_KEY, JSON.stringify(list));
-  } catch (err) {
-    console.error("Failed to save invoice companies:", err);
-  }
-}
-
-function useInvoiceCustomCompanies() {
-  const [customCompanies, setCustomCompanies] = useState(readInvoiceCustomCompanies);
-
-  useEffect(() => {
-    const handleStorage = (e) => {
-      if (e.key === INVOICE_CUSTOM_COMPANIES_KEY) setCustomCompanies(readInvoiceCustomCompanies());
-    };
-    window.addEventListener("storage", handleStorage);
-    return () => window.removeEventListener("storage", handleStorage);
-  }, []);
-
-  const addCustomCompany = (name) => {
-    const trimmed = (name || "").trim();
-    if (!trimmed) return null;
-    const current = readInvoiceCustomCompanies();
-    const exists = [...INVOICE_DEFAULT_COMPANIES, ...current].some((c) => c.toLowerCase() === trimmed.toLowerCase());
-    if (!exists) {
-      const next = [...current, trimmed];
-      writeInvoiceCustomCompanies(next);
-      setCustomCompanies(next);
-    }
-    return trimmed;
-  };
-
-  return { customCompanies, addCustomCompany };
-}
-
-// Native <select> of preset + custom companies, with a "+ Add Custom
-// Company" option that reveals an inline text field to save a brand-new
-// company (which then becomes selectable here going forward).
-function CompanySelectField({ value, onChange, placeholder = "Select company", style }) {
-  const { customCompanies, addCustomCompany } = useInvoiceCustomCompanies();
-  const [addingCustom, setAddingCustom] = useState(false);
-  const [draftName, setDraftName] = useState("");
-
-  const options = [...INVOICE_DEFAULT_COMPANIES, ...customCompanies.filter((c) => !INVOICE_DEFAULT_COMPANIES.includes(c))];
-  if (value && !options.includes(value)) options.push(value);
-
-  const confirmCustom = () => {
-    const saved = addCustomCompany(draftName);
-    if (saved) onChange(saved);
-    setDraftName("");
-    setAddingCustom(false);
-  };
-  const cancelCustom = () => {
-    setDraftName("");
-    setAddingCustom(false);
-  };
-
-  if (addingCustom) {
-    return (
-      <div style={{ display: "flex", gap: 6, alignItems: "center", width: "100%" }}>
-        <input
-          autoFocus
-          type="text"
-          value={draftName}
-          onChange={(e) => setDraftName(e.target.value)}
-          placeholder="Enter company name"
-          onKeyDown={(e) => {
-            if (e.key === "Enter") { e.preventDefault(); confirmCustom(); }
-            if (e.key === "Escape") { e.preventDefault(); cancelCustom(); }
-          }}
-          style={{ ...style, cursor: "text" }}
-        />
-        <button type="button" onClick={confirmCustom}
-          style={{ border: "none", borderRadius: 4, padding: "3px 8px", fontSize: 12, fontWeight: 600, background: "#16A34A", color: "#fff", cursor: "pointer", flexShrink: 0 }}>
-          Save
-        </button>
-        <button type="button" onClick={cancelCustom}
-          style={{ border: "none", borderRadius: 4, padding: "3px 8px", fontSize: 12, fontWeight: 600, background: "#e5e7eb", color: "#374151", cursor: "pointer", flexShrink: 0 }}>
-          Cancel
-        </button>
-      </div>
-    );
-  }
+// Dropdown of company profiles coming from Settings ➜ Company.
+// No hardcoded names, no localStorage.
+function CompanySelectField({ value, companies = [], onSelect, placeholder = "Select company", style }) {
+  const options = companies.filter(c => c.companyName);
+  // keep an old invoice's company visible even if it's no longer in Settings
+  const valueMissing = value && !options.some(c => c.companyName === value);
 
   return (
     <select
       value={value ?? ""}
       onChange={(e) => {
-        if (e.target.value === INVOICE_ADD_CUSTOM_VALUE) { setAddingCustom(true); return; }
-        onChange(e.target.value);
+        const company = options.find(c => c.companyName === e.target.value);
+        if (company) onSelect(company);
       }}
       style={{ ...style, cursor: "pointer" }}
     >
       <option value="" disabled>{placeholder}</option>
-      {options.map((c) => <option key={c} value={c}>{c}</option>)}
-      <option value={INVOICE_ADD_CUSTOM_VALUE}>+ Add Custom Company</option>
+      {valueMissing && <option value={value}>{value}</option>}
+      {options.map(c => (
+        <option key={c.id} value={c.companyName}>
+          {c.companyName}{c.status === "active" ? " (Active)" : ""}
+        </option>
+      ))}
     </select>
   );
 }
@@ -826,9 +720,21 @@ export default function InvoiceForm({ invoice, invoices = [], customers = [], on
     tax = 0;
     total = subtotal;
   }
-  const due = total - Number(form.amountPaid || 0);
+const due = total - Number(form.amountPaid || 0);
 
-  const handleSave = async () => {
+// Keep Amount Paid in sync with the chosen status (same rule as InvoicesPage)
+const handleStatusSelect = (newStatus) => {
+  setForm(prev => ({
+    ...prev,
+    status: newStatus,
+    amountPaid:
+      newStatus === "Paid" ? total :
+      (newStatus === "Unpaid" || newStatus === "Overdue") ? 0 :
+      prev.amountPaid, // Draft / Sent / Converted: leave as is
+  }));
+};
+
+const handleSave = async () => {
     if (!form.buyerName || !form.invoiceNo) {
       alert("Please fill Invoice No and Buyer Name.");
       return;
@@ -1073,7 +979,7 @@ export default function InvoiceForm({ invoice, invoices = [], customers = [], on
                 </div>
                 <div className="col-12 col-md-4">
                   <label style={{ fontSize: "0.75rem", fontWeight: 600, color: "#64748b", display: "block", marginBottom: 4 }}>Status</label>
-                  <select value={form.status} onChange={e => updateField("status", e.target.value)} style={inp}>
+                  <select value={form.status} onChange={e => handleStatusSelect(e.target.value)} style={inp}>
                     {form.invoiceType === "Proforma" ? (
                       <>
                         <option>Draft</option>
