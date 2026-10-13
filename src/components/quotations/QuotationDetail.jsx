@@ -379,7 +379,7 @@ function ConfirmEditApprovedModal({ show, onCancel, onConfirm, accent = "#F97316
   );
 }
 export default function QuotationDetail({
-  quotation, companyInfo, docSettings, customers = [], isNew, editMode, isNewTemplate,
+  quotation, companyInfo, docSettings, customers = [], products = [], isNew, editMode, isNewTemplate,
   onBack, onEdit, onSave, onSend, onCancelEdit,
 }) {
   const [form, setForm] = useState(() => normalizeFormQuotation(quotation));
@@ -434,10 +434,12 @@ export default function QuotationDetail({
     return () => clearTimeout(timer);
   }, [form, editMode]);
 
-  // Force-disable all scrolling for a few seconds after entering edit mode,
-  // so nothing (our code or the TinyMCE library) can jump the page.
+  // Keeps TinyMCE from jumping the page when edit mode opens. Only needed on the
+  // default template (the only one that uses TinyMCE), and it stops as soon as
+  // the user scrolls, clicks or touches the page.
   useEffect(() => {
     if (!editMode) return;
+    if (form.templateStyle && form.templateStyle !== "default") return;
 
     const patchIframe = (win) => {
       try {
@@ -470,7 +472,17 @@ export default function QuotationDetail({
 
     const stop = setTimeout(() => observer.disconnect(), 4000);
 
-    return () => { observer.disconnect(); timers.forEach(clearTimeout); clearTimeout(stop); };
+    // the moment the user interacts, stop pulling the page back to the top
+    const cancelAll = () => timers.forEach(clearTimeout);
+    const events = ["wheel", "touchstart", "keydown", "mousedown"];
+    events.forEach((ev) => window.addEventListener(ev, cancelAll, { passive: true, capture: true }));
+
+    return () => {
+      observer.disconnect();
+      timers.forEach(clearTimeout);
+      clearTimeout(stop);
+      events.forEach((ev) => window.removeEventListener(ev, cancelAll, { capture: true }));
+    };
   }, [editMode, form.templateStyle]);
 
   const [showPreview, setShowPreview] = useState(true);
@@ -565,7 +577,6 @@ const updateField = (field, value) => {
 
     scrollToTop();
     requestAnimationFrame(scrollToTop);
-    [200, 600, 1200, 2000].forEach((ms) => setTimeout(scrollToTop, ms));
   };
 
   const addCustomSection = () => { dirtyRef.current = true; setForm((prev) => ({ ...prev, customSections: [...prev.customSections, { heading: "", content: "" }] })); };
@@ -1024,6 +1035,7 @@ const updateField = (field, value) => {
           {isEditable ? (
         <CostItemsTable
   items={getCostItems(form)}
+  products={products}
   onChange={(items) => updateField("costItems", items)}
   gstMode={form.gstMode || (form.includeGst === true ? "with" : "without")}
   gstPercent={form.gstPercent}
@@ -1394,6 +1406,7 @@ const updateField = (field, value) => {
               quotation={form}
               companyInfo={companyInfo}
               customers={customers}
+              products={products}
               editMode={editMode}
               onChange={updateField}
               onCustomSectionChange={updateCustomSection}

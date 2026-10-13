@@ -10,6 +10,7 @@ const SETTINGS_API = `${import.meta.env.VITE_API_URL}/settings/company`;
 const DOC_SETTINGS_API = `${import.meta.env.VITE_API_URL}/settings/invoice`;
 const INVOICES_API = `${import.meta.env.VITE_API_URL}/invoices`;
 const CUSTOMERS_API = `${import.meta.env.VITE_API_URL}/customers`;
+const PRODUCTS_API = `${import.meta.env.VITE_API_URL}/products`;
 
 const DRAFT_STORAGE_PREFIX = "quotation_draft_";
 const TEMPLATE_MODAL_STORAGE_KEY = "quotation_show_templates";
@@ -119,8 +120,9 @@ export default function QuotationsPage() {
   const [quotations, setQuotations] = useState([]);
   const [quotationsLoaded, setQuotationsLoaded] = useState(false);
   const [invoices, setInvoices] = useState([]);
-  const [customers, setCustomers] = useState([]);
-  const [selected, setSelected] = useState(null);
+const [customers, setCustomers] = useState([]);
+const [products, setProducts] = useState([]);
+const [selected, setSelected] = useState(null);
   const [editMode, setEditMode] = useState(false);
   const [showTemplates, setShowTemplates] = useState(() => {
     try {
@@ -183,12 +185,19 @@ export default function QuotationsPage() {
       .catch(err => console.error('Failed to load invoices:', err));
   }, []);
 
-  useEffect(() => {
-    fetch(CUSTOMERS_API)
-      .then(res => res.json())
-      .then(data => setCustomers(data))
-      .catch(err => console.error('Failed to load customers:', err));
-  }, []);
+useEffect(() => {
+  fetch(CUSTOMERS_API)
+    .then(res => res.json())
+    .then(data => setCustomers(data))
+    .catch(err => console.error('Failed to load customers:', err));
+}, []);
+
+useEffect(() => {
+  fetch(PRODUCTS_API)
+    .then(res => res.json())
+    .then(data => setProducts(Array.isArray(data) ? data : []))
+    .catch(err => console.error('Failed to load products:', err));
+}, []);
 
   useEffect(() => {
     fetch(SETTINGS_API)
@@ -572,6 +581,7 @@ export default function QuotationsPage() {
           companyInfo={companyInfo}
           docSettings={docSettings}
           customers={customers}
+          products={products}
           isNew={Boolean(selected._isNewQuotation) || !quotations.some(q => q.id === selected.id)}
           editMode={editMode}
           isNewTemplate={selected.isTemplate}

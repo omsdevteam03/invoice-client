@@ -12,6 +12,7 @@ import SettingsPage from "./pages/SettingsPage";
 import AiPage from "./pages/AiPage";
 import Trash from "./pages/trash";
 import UsersPage from "./pages/UsersPage";
+import ProductsPage from "./pages/ProductsPage";
 
 function ScrollToTop() {
   const { pathname } = useLocation();
@@ -70,6 +71,7 @@ export default function App() {
               <Route path="/ai" element={<AiPage />} />
 
               <Route path="/trash" element={<Trash />} />
+              <Route path="/products" element={<ProductsPage />} />
 
               <Route path="/users" element={<AdminOnly><UsersPage /></AdminOnly>} />
             </Route>

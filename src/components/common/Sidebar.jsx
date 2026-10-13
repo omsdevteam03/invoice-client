@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import {
-  FiHome, FiUsers, FiFileText, FiFile,
+  FiHome, FiUsers, FiFileText, FiFile, FiBox,
   FiSettings, FiLogOut, FiZap, FiUserCheck
 } from "react-icons/fi";
 import useAuth from "../../hooks/useAuth";
@@ -18,6 +18,7 @@ const SIDEBAR_EXPANDED_WIDTH = 216; // expanded width shown on hover (desktop on
 const mainLinks = [
   { to: "/", icon: FiHome, label: "Dashboard" },
   { to: "/customers", icon: FiUsers, label: "Customers" },
+  { to: "/products", icon: FiBox, label: "Products" },
   { to: "/quotations", icon: FiFileText, label: "Quotations" },
   { to: "/invoices", icon: FiFile, label: "Invoices" },
   { to: "/users", icon: FiUserCheck, label: "Users" },

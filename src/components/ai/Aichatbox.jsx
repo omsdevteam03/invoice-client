@@ -32,8 +32,12 @@ const SpeakerIcon = () => (<Svg><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11
 const RefreshIcon = () => (<Svg><polyline points="17 1 21 5 17 9" /><path d="M3 11V9a4 4 0 0 1 4-4h14" /><polyline points="7 23 3 19 7 15" /><path d="M21 13v2a4 4 0 0 1-4 4H3" /></Svg>);
 const ClipIcon = () => (<Svg size={18}><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48" /></Svg>);
 const MicIcon = () => (<Svg size={18}><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" /><path d="M19 10v2a7 7 0 0 1-14 0v-2" /><line x1="12" y1="19" x2="12" y2="23" /></Svg>);
-const SendIcon = () => (<Svg size={20}><line x1="22" y1="2" x2="11" y2="13" /><polygon points="22 2 15 22 11 13 2 9 22 2" /></Svg>);
-
+const SendIcon = () => (
+  <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" style={{ marginLeft: 2 }}>
+    <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" />
+  </svg>
+);
+const CameraIcon = () => (<Svg size={18}><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" /><circle cx="12" cy="13" r="4" /></Svg>);
 // Dictation languages
 const VOICE_LANGUAGES = [
   { code: "ta-IN", label: "தமிழ் (Tamil)" },
@@ -307,6 +311,16 @@ export default function AIChatBox({
   const shouldRecordRef = useRef(false);
   const navigate = useNavigate();  //tracks recording intent without stale-closure issues
   const location = useLocation();
+  const [usage, setUsage] = useState(null); // { limit, used } or null (no limit)
+  const limitReached = Boolean(usage?.limit && usage.used >= usage.limit);
+
+  // Load today's usage once
+  useEffect(() => {
+    fetch(`${API_BASE}/usage`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => data && setUsage(data))
+      .catch(() => {});
+  }, []);
 
   // Load full conversation whenever a different chat is selected
   useEffect(() => {
@@ -448,13 +462,30 @@ export default function AIChatBox({
   }
 
   // ── Image attach ──────────────────────────────────────────────────────
-  function handleImageSelect(e) {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  function readImageFile(file) {
+    if (!file || !file.type.startsWith("image/")) return;
     const reader = new FileReader();
     reader.onloadend = () => setAttachedImage(reader.result);
     reader.readAsDataURL(file);
+  }
+
+  function handleImageSelect(e) {
+    readImageFile(e.target.files?.[0]);
     e.target.value = ""; // allow re-selecting the same file later
+  }
+
+  // Ctrl+V: if the clipboard has an image, attach it. Plain text falls
+  // through to the browser's normal paste into the input.
+  function handlePaste(e) {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    for (const item of items) {
+      if (item.kind === "file" && item.type.startsWith("image/")) {
+        e.preventDefault();
+        readImageFile(item.getAsFile());
+        return;
+      }
+    }
   }
 
   function removeAttachedImage() {
@@ -508,6 +539,7 @@ export default function AIChatBox({
       });
       if (!res.ok) throw new Error("Request failed");
       const data = await res.json();
+      if (data.usage) setUsage(data.usage);
       setMessages((prev) => [...prev, data.userMessage, data.assistantMessage]);
       onChatUpdated?.(data.chat);
     } catch {
@@ -576,7 +608,7 @@ export default function AIChatBox({
 
   async function sendMessage(overrideText) {
     const text = (typeof overrideText === "string" ? overrideText : input).trim();
-    if ((!text && !attachedImage) || loading) return;
+    if ((!text && !attachedImage) || loading || limitReached) return;
 
     const imageToSend = attachedImage;
     const savedContent = imageToSend
@@ -609,10 +641,26 @@ export default function AIChatBox({
         body: JSON.stringify({ content: text, image: imageToSend || undefined, aiName }),
       });
 
+      if (res.status === 429) {
+        const d = await res.json();
+        setUsage({ limit: d.limit, used: d.used });
+        setInput(text); // give the text back
+        setMessages((prev) => [
+          ...prev.filter((m) => m.id !== optimisticUserMsg.id),
+          {
+            id: `err-${Date.now()}`,
+            role: "assistant",
+            content: `You've used all ${d.limit} messages for today. Your limit resets at 12:00 AM. Upgrade to the paid plan to continue.`,
+          },
+        ]);
+        return;
+      }
+
       if (!res.ok) throw new Error("Request failed");
 
       const data = await res.json();
 
+      if (data.usage) setUsage(data.usage);
       setMessages((prev) => [
         ...prev.filter((m) => m.id !== optimisticUserMsg.id),
         data.userMessage,
@@ -639,14 +687,15 @@ function handleKeyDown(e) {
 }
 
   const showGreeting = !chatId && messages.length === 0 && !loadingHistory;
+  const canSend = Boolean((input.trim() || attachedImage) && !loading && !limitReached);
 
   // Compact sizes for phones
   const mIcon = isMobile ? { width: 32, height: 32, fontSize: 14 } : {};
   const mLang = isMobile ? { width: 92, maxWidth: 92, height: 32, fontSize: 12, padding: "0 6px" } : {};
-  const mSend = isMobile ? { height: 32, padding: "0 16px", fontSize: 13, marginLeft: "auto" } : {};
+  const mSend = isMobile ? { width: 38, height: 38, marginLeft: "auto" } : {};
 
   return (
-    <div style={styles.wrapper}>
+    <div style={styles.wrapper} onPaste={handlePaste}>
       <div
         style={{ ...styles.messages, ...(isMobile ? { padding: 10, minHeight: 0 } : {}) }}
         ref={scrollRef}
@@ -674,13 +723,11 @@ function handleKeyDown(e) {
                 {isUser ? (
                   <>
                     <span>{formatMsgTime(m)}</span>
-                    <TicksIcon color={THEME.accent} />
                     <span style={styles.metaName}>You</span>
                   </>
                 ) : (
                   <>
                     <span style={styles.metaName}>{aiName}</span>
-                    <TicksIcon />
                     <span>{formatMsgTime(m)}</span>
                   </>
                 )}
@@ -830,6 +877,14 @@ function handleKeyDown(e) {
         }
       `}</style>
 
+      {usage?.limit && (
+        <div style={{ ...styles.usageBar, ...(limitReached ? styles.usageBarFull : {}) }}>
+          {limitReached
+            ? "Daily limit reached. Resets at 12:00 AM."
+            : `${usage.limit - usage.used} of ${usage.limit} messages left today`}
+        </div>
+      )}
+
       {isRecording ? (
         <div style={styles.recordingBar}>
           <button style={styles.recordingCancelBtn} onClick={cancelRecording} aria-label="Cancel recording">
@@ -875,7 +930,7 @@ function handleKeyDown(e) {
             title="Attach image"
             aria-label="Attach image"
           >
-            📷
+            <CameraIcon />
           </button>
 
           {SpeechRecognitionAPI && (
@@ -886,7 +941,7 @@ function handleKeyDown(e) {
                 title="Voice input"
                 aria-label="Voice input"
               >
-                🎤
+                <MicIcon />
               </button>
               <select
                 style={{ ...styles.langSelect, ...mLang }}
@@ -918,11 +973,13 @@ function handleKeyDown(e) {
            placeholder="Type your question..."
 />
 <button
-  style={{ ...styles.sendBtn, ...mSend }}
+  style={{ ...styles.sendBtn, ...(canSend ? {} : styles.sendBtnDisabled), ...mSend }}
   onClick={() => sendMessage()}
+  disabled={!canSend}
   aria-label="Send"
+  title="Send"
 >
-  Send
+  <SendIcon />
 </button>
         </div>
       )}
@@ -1130,8 +1187,10 @@ const styles = {
     justifyContent: "center",
   },
   iconBtn: {
-    border: "1px solid #ddd",
+    border: "none",
     background: "#fff",
+    color: THEME.accent,
+    boxShadow: "0 2px 10px rgba(0,0,0,0.08)",
     borderRadius: "50%",
     width: 38,
     height: 38,
@@ -1166,16 +1225,25 @@ const styles = {
     outline: "none",
   },
   sendBtn: {
-    background: "#4f6bf0",
+    background: THEME.userBubble,
     color: "#fff",
     border: "none",
-    borderRadius: 999,
-    padding: "0 20px",
-    height: 38,
+    borderRadius: "50%",
+    width: 44,
+    height: 44,
+    padding: 0,
     cursor: "pointer",
-    fontSize: 14,
-    fontWeight: 600,
     flexShrink: 0,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    boxShadow: `0 2px 8px ${THEME.shadowStrong}`,
+    transition: "opacity 0.15s",
+  },
+  sendBtnDisabled: {
+    opacity: 0.45,
+    cursor: "not-allowed",
+    boxShadow: "none",
   },
 
   recordingBar: {
@@ -1230,7 +1298,7 @@ const styles = {
   },
   recordingSendBtn: {
     border: "none",
-    background: "#4f6bf0",
+    background: THEME.accent,
     color: "#fff",
     borderRadius: "50%",
     width: 38,
@@ -1322,6 +1390,15 @@ const styles = {
     margin: "8px 0 4px",
   },
   metaName: { color: "#1f2937", fontWeight: 500 },
+
+  usageBar: {
+    padding: "6px 16px 0",
+    fontSize: 12,
+    color: "#64748b",
+    background: THEME.solidBg,
+    textAlign: "right",
+  },
+  usageBarFull: { color: "#dc2626", fontWeight: 600 },
 
   refButtonRow: {
     display: "flex",

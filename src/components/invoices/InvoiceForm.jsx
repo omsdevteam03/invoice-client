@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { FaArrowLeft, FaSave, FaPlus, FaTrash, FaEye, FaEyeSlash, FaTimes, FaChevronDown } from "react-icons/fa";
+import { FaArrowLeft, FaSave, FaPlus, FaTrash, FaEye, FaEyeSlash, FaTimes, FaChevronDown, FaSearch } from "react-icons/fa";
 import { INVOICE_LABELS, INVOICE_FONT, InvoiceLangToggle, useTamilDescriptions, translateToTamil, unitLabel } from "./invoiceLang";
 
 function logoStyle(shape, size) {
@@ -538,6 +538,342 @@ function InvoicePreview({ form, isMobile, onClose }) {
     </div>
   );
 }
+function ProductSelect({ products = [], value, onPick, style }) {
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState("");
+  const [tab, setTab] = useState("all"); // all | products | services
+  const [pos, setPos] = useState({});
+  const btnRef = useRef(null);
+  const menuRef = useRef(null);
+  const MENU_W = 340;
+
+  const selected = products.find(p => String(p.id) === String(value));
+  const closeMenu = () => { setOpen(false); setQ(""); setTab("all"); };
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e) => {
+      if (btnRef.current?.contains(e.target) || menuRef.current?.contains(e.target)) return;
+      closeMenu();
+    };
+    const onScroll = (e) => {
+      if (menuRef.current?.contains(e.target)) return;
+      closeMenu();
+    };
+    document.addEventListener("mousedown", onDown);
+    window.addEventListener("scroll", onScroll, true);
+    window.addEventListener("resize", closeMenu);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      window.removeEventListener("scroll", onScroll, true);
+      window.removeEventListener("resize", closeMenu);
+    };
+  }, [open]);
+
+  const toggle = () => {
+    if (open) { closeMenu(); return; }
+    const r = btnRef.current.getBoundingClientRect();
+    const w = Math.min(MENU_W, window.innerWidth - 16);
+    const left = Math.max(8, Math.min(r.left, window.innerWidth - w - 8));
+    const openUp = window.innerHeight - r.bottom < 400 && r.top > 400;
+    setPos(openUp ? { left, bottom: window.innerHeight - r.top + 6 } : { left, top: r.bottom + 6 });
+    setOpen(true);
+  };
+
+  const pick = (id) => { onPick(id); closeMenu(); };
+
+  const list = products.filter(p => {
+    const isService = p.type === "Service";
+    if (tab === "products" && isService) return false;
+    if (tab === "services" && !isService) return false;
+    const s = q.trim().toLowerCase();
+    return !s || (p.name || "").toLowerCase().includes(s);
+  });
+
+  const tabBtn = (key, label) => (
+    <button
+      type="button"
+      onClick={() => setTab(key)}
+      style={{
+        border: "none", borderRadius: 999, padding: "5px 14px", fontSize: "0.78rem", fontWeight: 700,
+        cursor: "pointer",
+        background: tab === key ? "#1F6F5C" : "#eef1f5",
+        color: tab === key ? "#fff" : "#475569",
+      }}
+    >
+      {label}
+    </button>
+  );
+
+  return (
+    <>
+      <button
+        ref={btnRef}
+        type="button"
+        onClick={toggle}
+        style={{
+          ...style,
+          display: "flex", alignItems: "center", justifyContent: "space-between", gap: 6,
+          cursor: "pointer", textAlign: "left",
+          borderColor: open ? "#1F6F5C" : "#e2e8f0",
+        }}
+      >
+        <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: selected ? "#0f172a" : "#94a3b8" }}>
+          {selected ? selected.name : "Select product / service"}
+        </span>
+        <FaChevronDown size={8} color="#64748b" style={{ flexShrink: 0, transform: open ? "rotate(180deg)" : "none", transition: "transform 0.15s" }} />
+      </button>
+
+      {open && (
+        <div
+          ref={menuRef}
+          style={{
+            position: "fixed", zIndex: 10000, width: Math.min(MENU_W, window.innerWidth - 16),
+            boxSizing: "border-box", background: "#fff", border: "1px solid #e2e8f0",
+            borderRadius: 14, boxShadow: "0 12px 32px rgba(15,23,42,0.18)", ...pos,
+          }}
+        >
+          <div style={{ padding: "12px 12px 8px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, border: "1.5px solid #e2e8f0", borderRadius: 10, padding: "8px 12px" }}>
+              <FaSearch size={12} color="#94a3b8" />
+              <input
+                autoFocus
+                value={q}
+                onChange={e => setQ(e.target.value)}
+                placeholder="Search product or service..."
+                style={{ border: "none", outline: "none", width: "100%", fontSize: "0.85rem", background: "transparent" }}
+              />
+            </div>
+          </div>
+
+          <div style={{ display: "flex", gap: 6, padding: "0 12px 10px" }}>
+            {tabBtn("all", "All")}
+            {tabBtn("products", "Products")}
+            {tabBtn("services", "Services")}
+          </div>
+
+          <div style={{ maxHeight: 260, overflowY: "auto", borderTop: "1px solid #f1f5f9" }}>
+            {list.length === 0 ? (
+              <div style={{ padding: 20, textAlign: "center", color: "#94a3b8", fontSize: "0.82rem" }}>No items found.</div>
+            ) : list.map(p => {
+              const isService = p.type === "Service";
+              const stock = Number(p.stock_qty ?? 0);
+              const rate = Number(p.sale_rate ?? 0);
+              return (
+                <div
+                  key={p.id}
+                  onClick={() => pick(p.id)}
+                  style={{ padding: "10px 14px", cursor: "pointer", borderBottom: "1px solid #f1f5f9" }}
+                  onMouseEnter={e => e.currentTarget.style.background = "#E6F1EC"}
+                  onMouseLeave={e => e.currentTarget.style.background = "#fff"}
+                >
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+                    <span style={{ fontWeight: 700, fontSize: "0.85rem", color: "#0f172a" }}>{p.name}</span>
+                    <span style={{ fontWeight: 700, fontSize: "0.85rem", color: "#0f172a", whiteSpace: "nowrap" }}>
+                      ₹{rate.toLocaleString("en-IN")}
+                    </span>
+                  </div>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 4 }}>
+                    <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <span style={{
+                        fontSize: "0.68rem", fontWeight: 700, borderRadius: 999, padding: "2px 10px",
+                        background: isService ? "#f5f3ff" : "#E6F1EC",
+                        color: isService ? "#7c3aed" : "#1F6F5C",
+                      }}>
+                        {isService ? "Service" : "Product"}
+                      </span>
+                      {p.unit && <span style={{ fontSize: "0.7rem", color: "#94a3b8" }}>per {p.unit}</span>}
+                    </span>
+                    {!isService && (
+                      <span style={{ fontSize: "0.72rem", fontWeight: 700, color: stock > 0 ? "#059669" : "#ef4444" }}>
+                        {stock > 0 ? `In stock: ${stock}` : "Out of stock"}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          <button
+            type="button"
+            onClick={() => pick("")}
+            style={{
+              width: "100%", border: "none", borderTop: "1px solid #f1f5f9", background: "#f8fafc",
+              padding: "10px 14px", fontSize: "0.78rem", fontWeight: 700, color: "#475569",
+              cursor: "pointer", borderRadius: "0 0 14px 14px",
+            }}
+          >
+            ✎ Custom item (type manually, no stock)
+          </button>
+        </div>
+      )}
+    </>
+  );
+}
+function ItemDescriptionField({ products = [], item, onType, onPick, style, stockFor }) {
+  const [open, setOpen] = useState(false);
+  const [tab, setTab] = useState("all"); // all | products | services
+  const [pos, setPos] = useState({});
+  const boxRef = useRef(null);
+  const menuRef = useRef(null);
+  const MENU_W = 340;
+
+  const linked = products.find(p => String(p.id) === String(item.productId));
+  const text = item.description || "";
+  // when a product is already picked, show the full list instead of only that product
+  const q = linked && linked.name === text ? "" : text.trim().toLowerCase();
+
+  const closeMenu = () => setOpen(false);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e) => {
+      if (boxRef.current?.contains(e.target) || menuRef.current?.contains(e.target)) return;
+      closeMenu();
+    };
+    const onScroll = (e) => {
+      if (menuRef.current?.contains(e.target)) return;
+      closeMenu();
+    };
+    document.addEventListener("mousedown", onDown);
+    window.addEventListener("scroll", onScroll, true);
+    window.addEventListener("resize", closeMenu);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      window.removeEventListener("scroll", onScroll, true);
+      window.removeEventListener("resize", closeMenu);
+    };
+  }, [open]);
+
+  const openMenu = () => {
+    if (open) return;
+    const r = boxRef.current.getBoundingClientRect();
+    const w = Math.min(MENU_W, window.innerWidth - 16);
+    const left = Math.max(8, Math.min(r.left, window.innerWidth - w - 8));
+    const openUp = window.innerHeight - r.bottom < 360 && r.top > 360;
+    setPos(openUp ? { left, bottom: window.innerHeight - r.top + 6 } : { left, top: r.bottom + 6 });
+    setOpen(true);
+  };
+
+  const pick = (id) => { onPick(id); closeMenu(); };
+
+  const list = products.filter(p => {
+    const isService = p.type === "Service";
+    if (tab === "products" && isService) return false;
+    if (tab === "services" && !isService) return false;
+    return !q || (p.name || "").toLowerCase().includes(q);
+  });
+
+  const tabBtn = (key, label) => (
+    <button
+      type="button"
+      onMouseDown={e => e.preventDefault()}
+      onClick={() => setTab(key)}
+      style={{
+        border: "none", borderRadius: 999, padding: "5px 14px", fontSize: "0.78rem", fontWeight: 700,
+        cursor: "pointer",
+        background: tab === key ? "#1F6F5C" : "#eef1f5",
+        color: tab === key ? "#fff" : "#475569",
+      }}
+    >
+      {label}
+    </button>
+  );
+
+  return (
+    <>
+      <div ref={boxRef}>
+        <textarea
+          rows={2}
+          value={text}
+          onFocus={openMenu}
+          onClick={openMenu}
+          onChange={e => { onType(e.target.value); openMenu(); }}
+          placeholder="Type to search product / service..."
+          style={{ ...style, resize: "vertical" }}
+        />
+        {linked && (() => {
+          const avail = stockFor ? stockFor(linked) : Infinity;
+          const over = linked.type !== "Service" && Number(item.qty || 0) > avail;
+          return over ? (
+            <div style={{ fontSize: "0.68rem", fontWeight: 700, color: "#ef4444", marginTop: 2 }}>
+              ⚠ Only {Math.max(avail, 0)} available
+            </div>
+          ) : null;
+        })()}
+      </div>
+
+      {open && (
+        <div
+          ref={menuRef}
+          style={{
+            position: "fixed", zIndex: 10000, width: Math.min(MENU_W, window.innerWidth - 16),
+            boxSizing: "border-box", background: "#fff", border: "1px solid #e2e8f0",
+            borderRadius: 14, boxShadow: "0 12px 32px rgba(15,23,42,0.18)", ...pos,
+          }}
+        >
+          <div style={{ display: "flex", gap: 6, padding: "10px 12px" }}>
+            {tabBtn("all", "All")}
+            {tabBtn("products", "Products")}
+            {tabBtn("services", "Services")}
+          </div>
+
+          <div style={{ maxHeight: 260, overflowY: "auto", borderTop: "1px solid #f1f5f9" }}>
+            {list.length === 0 ? (
+              <div style={{ padding: 16, textAlign: "center", color: "#94a3b8", fontSize: "0.8rem" }}>
+                No match — keep typing for a custom item.
+              </div>
+            ) : list.map(p => {
+              const isService = p.type === "Service";
+              const stock = stockFor ? stockFor(p) : Number(p.stock_qty ?? 0);
+              const rate = Number(p.sale_rate ?? 0);
+              const out = !isService && stock <= 0;
+              return (
+                <div
+                  key={p.id}
+                  onClick={() => { if (!out) pick(p.id); }}
+                  title={out ? "Out of stock" : undefined}
+                  style={{
+                    padding: "10px 14px", borderBottom: "1px solid #f1f5f9",
+                    cursor: out ? "not-allowed" : "pointer",
+                    opacity: out ? 0.5 : 1,
+                  }}
+                  onMouseEnter={e => { if (!out) e.currentTarget.style.background = "#E6F1EC"; }}
+                  onMouseLeave={e => e.currentTarget.style.background = "#fff"}
+                >
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: 8 }}>
+                    <span style={{ fontWeight: 700, fontSize: "0.85rem", color: "#0f172a" }}>{p.name}</span>
+                    <span style={{ fontWeight: 700, fontSize: "0.85rem", color: "#0f172a", whiteSpace: "nowrap" }}>
+                      ₹{rate.toLocaleString("en-IN")}
+                    </span>
+                  </div>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 4 }}>
+                    <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <span style={{
+                        fontSize: "0.68rem", fontWeight: 700, borderRadius: 999, padding: "2px 10px",
+                        background: isService ? "#f5f3ff" : "#E6F1EC",
+                        color: isService ? "#7c3aed" : "#1F6F5C",
+                      }}>
+                        {isService ? "Service" : "Product"}
+                      </span>
+                      {p.unit && <span style={{ fontSize: "0.7rem", color: "#94a3b8" }}>per {p.unit}</span>}
+                    </span>
+                    {!isService && (
+                      <span style={{ fontSize: "0.72rem", fontWeight: 700, color: stock > 0 ? "#059669" : "#ef4444" }}>
+                        {stock > 0 ? `In stock: ${stock}` : "Out of stock"}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
 
 export default function InvoiceForm({ invoice, invoices = [], customers = [], onSave, onBack, companyInfo, onCompanyChange, docSettings, invoiceType = "Final" }) {
   const isEdit = !!invoice;
@@ -545,9 +881,18 @@ export default function InvoiceForm({ invoice, invoices = [], customers = [], on
   const GST_PRESETS = [1, 3, 5, 12, 18, 28];
   const [customGst, setCustomGst] = useState(false);
   const [showCustomerList, setShowCustomerList] = useState(false);
+
+  const [products, setProducts] = useState([]);
+useEffect(() => {
+  fetch(`${import.meta.env.VITE_API_URL}/products`)
+    .then(r => r.json())
+    .then(d => setProducts(Array.isArray(d) ? d : []))
+    .catch(err => console.error("Failed to load products:", err));
+}, []);
   const [showPreview, setShowPreview] = useState(() =>
     typeof window !== "undefined" ? window.innerWidth > 900 : true
   );
+
 
   // Proforma invoices keep the "PI-" series regardless of Settings, since
   // that's a distinct document type. Final invoices use the prefix saved
@@ -691,6 +1036,61 @@ export default function InvoiceForm({ invoice, invoices = [], customers = [], on
     }
     setForm(prev => ({ ...prev, items }));
   };
+  const pickProduct = (i, productId) => {
+  const items = [...form.items];
+  if (!productId) {
+    items[i] = { ...items[i], productId: undefined };   // custom item
+  } else {
+    const p = products.find(x => String(x.id) === String(productId));
+    if (!p) return;
+    const rate = Number(p.sale_rate ?? 0);
+    items[i] = {
+      ...items[i],
+      productId: p.id,
+      description: p.name,
+      descriptionTa: undefined,
+      unit: p.unit || items[i].unit || "Nos",
+      rate,
+      amount: Number(items[i].qty || 1) * rate,
+    };
+  }
+  setForm(prev => ({ ...prev, items }));
+};
+  // Typing by hand: keeps the product link only while the text still equals the product name
+  const typeDescription = (i, value) => {
+    const items = [...form.items];
+    const linked = products.find(x => String(x.id) === String(items[i].productId));
+    items[i] = {
+      ...items[i],
+      description: value,
+      descriptionTa: undefined,
+      productId: linked && linked.name === value ? items[i].productId : undefined,
+    };
+    setForm(prev => ({ ...prev, items }));
+  };
+
+    // Stock still free for a product, as seen by the row at index rowIdx
+  const availableStock = (productId, rowIdx) => {
+    const p = products.find(x => String(x.id) === String(productId));
+    if (!p || p.type === "Service") return Infinity;
+    const base = Number(p.stock_qty ?? 0);
+    // editing a saved Final invoice: its old qty was already deducted, so give it back
+    const wasDeducted = invoice?.id && !isProformaRecord(invoice);
+    const alreadyDeducted = wasDeducted
+      ? (invoice.items || [])
+          .filter(it => String(it.productId) === String(productId))
+          .reduce((s, it) => s + (Number(it.qty) || 0), 0)
+      : 0;
+    // qty used by the OTHER rows of this same invoice
+    const usedElsewhere = form.items.reduce(
+      (s, it, idx) =>
+        idx !== rowIdx && String(it.productId) === String(productId)
+          ? s + (Number(it.qty) || 0)
+          : s,
+      0
+    );
+    return base + alreadyDeducted - usedElsewhere;
+  };
 
   const addItem = () => {
     setForm(prev => ({
@@ -738,6 +1138,17 @@ const handleSave = async () => {
     if (!form.buyerName || !form.invoiceNo) {
       alert("Please fill Invoice No and Buyer Name.");
       return;
+    }
+    if (form.invoiceType !== "Proforma") {
+      const badIdx = form.items.findIndex(
+        (it, i) => it.productId && Number(it.qty || 0) > availableStock(it.productId, i)
+      );
+      if (badIdx !== -1) {
+        const it = form.items[badIdx];
+        const avail = Math.max(availableStock(it.productId, badIdx), 0);
+        alert(`Not enough stock for "${it.description}". Only ${avail} available for item #${it.sl}.`);
+        return;
+      }
     }
     const rawSum = form.items.reduce((a, b) => a + Number(b.amount), 0);
     const gstPercent = Number(form.gstPercent || 18);
@@ -1172,11 +1583,19 @@ const handleSave = async () => {
                             <button onClick={() => removeItem(i)} className="border-0 bg-transparent p-0" style={{ color: "#ef4444", cursor: "pointer" }}>
                               <FaTrash size={12} />
                             </button>
-                          )}
-                        </div>
-                        <label style={{ fontSize: "0.72rem", fontWeight: 600, color: "#64748b", display: "block", marginBottom: 4 }}>Description</label>
-                        <textarea rows={2} value={item.description} onChange={e => updateItem(i, "description", e.target.value)}
-                          style={{ ...inp, resize: "vertical", fontSize: "0.82rem", marginBottom: 8 }} placeholder="Service description..." />
+                   )}
+    </div>
+    <label style={{ fontSize: "0.72rem", fontWeight: 600, color: "#64748b", display: "block", marginBottom: 4 }}>Description</label>
+    <div style={{ marginBottom: 8 }}>
+      <ItemDescriptionField
+        products={products}
+        item={item}
+        onType={v => typeDescription(i, v)}
+stockFor={p => availableStock(p.id, i)}
+        onPick={v => pickProduct(i, v)}
+        style={{ ...inp, fontSize: "0.82rem" }}
+      />
+    </div>
                         <div className="row g-2">
                           <div className="col-6">
                             <label style={{ fontSize: "0.72rem", fontWeight: 600, color: "#64748b", display: "block", marginBottom: 4 }}>Qty</label>
@@ -1221,8 +1640,13 @@ const handleSave = async () => {
                       <div key={i} className="row g-0 px-3 py-2 align-items-center" style={{ borderTop: "1px solid #f1f5f9" }}>
                         <div className="col" style={{ fontSize: "0.82rem", color: "#94a3b8" }}>{item.sl}</div>
                         <div className="col-4 pe-2">
-                          <textarea rows={2} value={item.description} onChange={e => updateItem(i, "description", e.target.value)}
-                            style={{ ...inp, resize: "vertical", fontSize: "0.82rem" }} placeholder="Service description..." />
+                          <ItemDescriptionField
+                            products={products}
+                            item={item}
+                            onType={v => typeDescription(i, v)}
+                            onPick={v => pickProduct(i, v)}
+                            style={{ ...inp, fontSize: "0.82rem" }}
+                          />
                         </div>
                         <div className="col-2 pe-2 d-flex gap-1">
                           <input type="number" className="no-spinner" value={item.qty} onChange={e => updateItem(i, "qty", e.target.value)} placeholder="1" style={{ ...inp, fontSize: "0.82rem", padding: "8px 6px", minWidth: 0 }} />

@@ -13,6 +13,33 @@ const DOC_SETTINGS_API = `${import.meta.env.VITE_API_URL}/settings/invoice`;
 const QUOTATIONS_API = `${import.meta.env.VITE_API_URL}/quotations`;
 const CUSTOMERS_API = `${import.meta.env.VITE_API_URL}/customers`;
 const COMPANIES_API = `${import.meta.env.VITE_API_URL}/settings/companies`;
+const PRODUCTS_API = `${import.meta.env.VITE_API_URL}/products`;
+
+// Reduces stock for every item that came from the Products list (has a productId).
+// Services are skipped. Call only for NEW Final invoices.
+const deductStock = async (invoice) => {
+  const needed = {};
+  (invoice.items || []).forEach((it) => {
+    if (it.productId) needed[it.productId] = (needed[it.productId] || 0) + (Number(it.qty) || 1);
+  });
+  const ids = Object.keys(needed);
+  if (!ids.length) return;
+  try {
+    const all = await (await fetch(PRODUCTS_API)).json();
+    await Promise.all(ids.map(async (pid) => {
+      const p = all.find((x) => x.id === pid);
+      if (!p || p.type === "Service") return;
+      const next = Math.max(0, (Number(p.stock_qty) || 0) - needed[pid]);
+      await fetch(PRODUCTS_API, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...p, stock_qty: next }),
+      });
+    }));
+  } catch (err) {
+    console.error("Failed to update stock:", err);
+  }
+};
 // ── Numbering helpers ────────────────────────────────────────────────────
 // A record is Proforma if it's explicitly tagged that way, OR — for older
 // records saved before invoiceType existed — if its number carries the
@@ -375,6 +402,7 @@ useEffect(() => {
       ? costItems.map((it, i) => ({
         sl: i + 1,
         description: it.name || "",
+        productId: it.productId,
         qty: 1,
         rate: Number(it.amount) || 0,
         amount: Number(it.amount) || 0,
@@ -421,7 +449,8 @@ useEffect(() => {
   // updated" when editing an existing one.
   const handleSave = async (updated) => {
     try {
-      const isNew = !invoices.find(i => i.id === updated.id);
+      const old = invoices.find(i => i.id === updated.id);
+const isNew = !old;
       const withLog = logActivity(updated, isNew ? "Invoice created" : "Invoice details updated");
 
       const res = await fetch(API, {
@@ -434,6 +463,11 @@ useEffect(() => {
         throw new Error(errBody.message || `Save failed with status ${res.status}`);
       }
       const saved = await res.json();
+      if (!isProformaRecord(updated)) {
+  const oldItems = isNew || isProformaRecord(old) ? [] : old.items || [];
+  await adjustStock(oldItems, updated.items);
+}
+
       setInvoices(prev => {
         const exists = prev.find(i => i.id === saved.id);
         return exists
@@ -451,14 +485,17 @@ useEffect(() => {
   };
 
   // Delete from DB
-  const handleDelete = async (id) => {
-    try {
-      await fetch(`${API}/${id}`, { method: 'DELETE' });
-      setInvoices(prev => prev.filter(i => i.id !== id));
-    } catch (err) {
-      console.error('Delete failed:', err);
-    }
-  };
+ const handleDelete = async (id) => {
+  try {
+    const inv = invoices.find(i => i.id === id);
+const res = await fetch(`${API}/${id}`, { method: 'DELETE' });
+if (!res.ok) throw new Error(`Delete failed with status ${res.status}`);
+if (inv && !isProformaRecord(inv)) await adjustStock(inv.items || [], []);
+setInvoices(prev => prev.filter(i => i.id !== id));
+  } catch (err) {
+    console.error('Delete failed:', err);
+  }
+};
 
   // Totals used only for deciding whether a payment fully settles the
   // invoice, or a status change should reset amountPaid — kept local/simple
@@ -601,6 +638,7 @@ useEffect(() => {
         body: JSON.stringify(newFinalInvoice),
       });
       const saved = res.ok ? await res.json() : newFinalInvoice;
+      await deductStock(newFinalInvoice);
 
       const updatedProforma = logActivity(
         { ...proforma, status: "Converted", convertedInvoiceId: saved.id },
@@ -622,6 +660,37 @@ useEffect(() => {
       alert('Failed to convert invoice: ' + err.message);
     }
   };
+
+  // Compares the OLD items with the NEW items and fixes stock by the difference.
+// adjustStock([], items)  -> deduct (new invoice)
+// adjustStock(items, [])  -> give back (invoice deleted)
+// adjustStock(old, new)   -> only the difference (invoice edited)
+const adjustStock = async (oldItems = [], newItems = []) => {
+  const delta = {}; // positive = stock goes down, negative = stock goes up
+  newItems.forEach((it) => {
+    if (it.productId) delta[it.productId] = (delta[it.productId] || 0) + (Number(it.qty) || 1);
+  });
+  oldItems.forEach((it) => {
+    if (it.productId) delta[it.productId] = (delta[it.productId] || 0) - (Number(it.qty) || 1);
+  });
+  const ids = Object.keys(delta).filter((pid) => delta[pid] !== 0);
+  if (!ids.length) return;
+  try {
+    const all = await (await fetch(PRODUCTS_API)).json();
+    await Promise.all(ids.map(async (pid) => {
+      const p = all.find((x) => x.id === pid);
+      if (!p || p.type === "Service") return;
+      const next = Math.max(0, (Number(p.stock_qty) || 0) - delta[pid]);
+      await fetch(PRODUCTS_API, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...p, stock_qty: next }),
+      });
+    }));
+  } catch (err) {
+    console.error("Failed to update stock:", err);
+  }
+};
 
   // Holds the proforma pending conversion confirmation, or null when the
   // modal is closed

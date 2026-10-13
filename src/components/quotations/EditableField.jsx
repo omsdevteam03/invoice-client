@@ -176,7 +176,16 @@ export function CostCalculatorBar({ includeGst, gstPercent, defaultGstPercent, o
 export function CostItemsTable({ items = [], onChange, gstMode = "with", gstPercent, defaultGstPercent = 18, onGstChange, accent = "#1F6F5C" }) {
   const addItem = () => onChange([...items, { id: `item-${Date.now()}`, name: "", amount: 0 }]);
   const updateItem = (id, field, value) =>
-    onChange(items.map(it => it.id === id ? { ...it, [field]: field === "amount" ? Number(value) || 0 : value } : it));
+    onChange(items.map(it => it.id === id ? {
+      ...it,
+      [field]: field === "amount" ? Number(value) || 0 : value,
+      // typing a custom name detaches the row from any picked product
+      ...(field === "name" ? { productId: undefined } : {}),
+    } : it));
+  const pickProduct = (id, p) =>
+    onChange(items.map(it => it.id === id
+      ? { ...it, name: p.name, amount: Number(p.sale_rate) || 0, productId: p.id }
+      : it));
   const removeItem = (id) => onChange(items.filter(it => it.id !== id));
 
   return (
@@ -216,8 +225,13 @@ export function CostItemsTable({ items = [], onChange, gstMode = "with", gstPerc
         </div>
         {items.map((it, idx) => (
           <div key={it.id} style={{ display: "grid", gridTemplateColumns: "1fr 120px 32px", borderTop: "1px solid rgba(140,140,140,0.2)", background: idx % 2 ? "rgba(140,140,140,0.04)" : "transparent" }}>
-            <input value={it.name} onChange={(e) => updateItem(it.id, "name", e.target.value)} placeholder="e.g. SEO Service"
-              style={{ border: "none", background: "transparent", padding: "8px 10px", fontSize: 13, outline: "none" }} />
+            <ItemNameField
+              value={it.name}
+              rowId={it.id}
+              items={items}
+              onTextChange={(v) => updateItem(it.id, "name", v)}
+              onPick={(p) => pickProduct(it.id, p)}
+            />
             <input
               type="number"
               className="qd-no-spinner"
@@ -280,6 +294,205 @@ export function CostItemsTable({ items = [], onChange, gstMode = "with", gstPerc
         );
       })()}
     </div>
+  );
+}
+
+// ── Products + services from the Products page ──────────────────────────
+// Loaded here, so every quotation layout gets the dropdown without
+// needing a `products` prop.
+let inFlightProducts = null;
+function fetchProducts() {
+  if (!inFlightProducts) {
+    inFlightProducts = axiosInstance
+      .get("/products")
+      .then((res) => (Array.isArray(res.data) ? res.data : []))
+      .finally(() => { inFlightProducts = null; });
+  }
+  return inFlightProducts;
+}
+
+function useProducts() {
+  const [products, setProducts] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchProducts()
+      .then((list) => { if (!cancelled) setProducts(list); })
+      .catch((err) => console.error("Failed to load products:", err))
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, []);
+
+  return { products, loading };
+}
+
+const LOW_STOCK_AT = 5; // same threshold as the Products page
+
+function ItemNameField({ value, rowId, items = [], onTextChange, onPick }) {
+  const { products, loading } = useProducts();
+  // how many OTHER rows in this quotation already use this product (1 unit each)
+  const usedElsewhere = (pid) => items.filter((x) => x.id !== rowId && x.productId === pid).length;
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const [filter, setFilter] = useState("All"); // All | Product | Service
+  const [pos, setPos] = useState({});
+  const btnRef = useRef(null);
+  const menuRef = useRef(null);
+
+  const closeMenu = () => { setOpen(false); setQuery(""); };
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e) => {
+      if (btnRef.current?.contains(e.target) || menuRef.current?.contains(e.target)) return;
+      closeMenu();
+    };
+    const onScroll = (e) => { if (!menuRef.current?.contains(e.target)) closeMenu(); };
+    document.addEventListener("mousedown", onDown);
+    window.addEventListener("scroll", onScroll, true);
+    window.addEventListener("resize", closeMenu);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      window.removeEventListener("scroll", onScroll, true);
+      window.removeEventListener("resize", closeMenu);
+    };
+  }, [open]);
+
+  const toggle = () => {
+    if (open) { closeMenu(); return; }
+    const r = btnRef.current.getBoundingClientRect();
+    const width = Math.min(Math.max(r.width, 340), 440);
+    const left = Math.max(8, Math.min(r.left, window.innerWidth - width - 8));
+    const openUp = window.innerHeight - r.bottom < 360 && r.top > 360;
+    setPos(openUp
+      ? { left, width, bottom: window.innerHeight - r.top + 4 }
+      : { left, width, top: r.bottom + 4 });
+    setQuery("");
+    setFilter("All");
+    setOpen(true);
+  };
+
+  const q = query.trim().toLowerCase();
+  const list = products.filter((p) => {
+    if (filter !== "All" && (p.type || "Product") !== filter) return false;
+    return !q || (p.name || "").toLowerCase().includes(q);
+  });
+  const trimmed = query.trim();
+  const exact = products.some((p) => (p.name || "").toLowerCase() === trimmed.toLowerCase());
+
+  const pick = (p) => { onPick(p); closeMenu(); };
+  const useCustom = () => { if (trimmed) { onTextChange(trimmed); closeMenu(); } };
+
+  const pill = (active) => ({
+    border: "none", borderRadius: 999, padding: "4px 12px", fontSize: 11.5, fontWeight: 600, cursor: "pointer",
+    background: active ? "#1F6F5C" : "rgba(140,140,140,0.15)", color: active ? "#fff" : "#475569",
+  });
+
+  return (
+    <>
+      <div
+        ref={btnRef}
+        onClick={toggle}
+        style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, padding: "8px 10px", fontSize: 13, cursor: "pointer", minHeight: 36 }}
+      >
+        <span style={{ color: value ? "inherit" : "#8a8378", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {value || "Select product / service"}
+        </span>
+        <span style={{ fontSize: 10, opacity: 0.6, flexShrink: 0 }}>▾</span>
+      </div>
+
+      {open && (
+        <div
+          ref={menuRef}
+          style={{
+            position: "fixed", zIndex: 10000, ...pos, background: "#fff", color: "#1f2937",
+            border: "1px solid rgba(140,140,140,0.45)", borderRadius: 10,
+            boxShadow: "0 12px 32px rgba(0,0,0,0.2)", display: "flex", flexDirection: "column", maxHeight: 360,
+          }}
+        >
+          <div style={{ padding: 8, borderBottom: "1px solid rgba(140,140,140,0.2)" }}>
+            <input
+              autoFocus
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Escape") closeMenu();
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  if (list.length === 1) pick(list[0]);
+                  else if (list.length === 0) useCustom();
+                }
+              }}
+              placeholder="Search product or service..."
+              style={{ width: "100%", boxSizing: "border-box", border: "1px solid rgba(140,140,140,0.35)", borderRadius: 8, padding: "7px 10px", fontSize: 13, outline: "none" }}
+            />
+            <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
+              {["All", "Product", "Service"].map((t) => (
+                <button key={t} type="button" onClick={() => setFilter(t)} style={pill(filter === t)}>
+                  {t === "All" ? "All" : t + "s"}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div style={{ overflowY: "auto", flex: 1 }}>
+            {loading && <div style={{ padding: 12, fontSize: 12.5, color: "#8a8378" }}>Loading…</div>}
+            {!loading && products.length === 0 && (
+              <div style={{ padding: 12, fontSize: 12.5, color: "#8a8378" }}>No products yet — add them on the Products page.</div>
+            )}
+            {!loading && products.length > 0 && list.length === 0 && (
+              <div style={{ padding: 12, fontSize: 12.5, color: "#8a8378" }}>No match found.</div>
+            )}
+
+            {list.map((p) => {
+              const isService = p.type === "Service";
+              const used = usedElsewhere(p.id);
+              const stock = (Number(p.stock_qty) || 0) - used; // remaining after this quotation's other rows
+              const out = !isService && stock <= 0;
+              const low = !isService && !out && stock <= LOW_STOCK_AT;
+              const selected = value === p.name;
+              return (
+                <div
+                  key={p.id}
+                  onClick={() => { if (!out) pick(p); }}
+                  style={{ padding: "9px 12px", cursor: out ? "not-allowed" : "pointer", opacity: out ? 0.55 : 1, borderBottom: "1px solid rgba(140,140,140,0.12)", background: selected ? "#E6F1EC" : "transparent" }}
+                  onMouseEnter={(e) => { if (!selected && !out) e.currentTarget.style.background = "rgba(140,140,140,0.08)"; }}
+                  onMouseLeave={(e) => { if (!selected) e.currentTarget.style.background = "transparent"; }}
+                >
+                  <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
+                    <span style={{ fontWeight: 600, fontSize: 13 }}>{p.name}</span>
+                    <span style={{ fontWeight: 600, fontSize: 13 }}>₹{Number(p.sale_rate || 0).toLocaleString("en-IN")}</span>
+                  </div>
+                  <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 3, fontSize: 11 }}>
+                    <span style={{
+                      fontWeight: 700, borderRadius: 999, padding: "1px 8px",
+                      background: isService ? "#f5f3ff" : "#E6F1EC", color: isService ? "#7c3aed" : "#1F6F5C",
+                    }}>{p.type || "Product"}</span>
+                    {p.unit && <span style={{ color: "#8a8378" }}>per {p.unit}</span>}
+                    {!isService && (
+                      <span style={{ marginLeft: "auto", fontWeight: 700, color: out ? "#ef4444" : low ? "#ea580c" : "#059669" }}>
+                        {out ? "Out of stock" : low ? `Low stock: ${stock}` : `In stock: ${stock}`}
+                        {used > 0 && !out ? ` (${used} already added)` : ""}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {trimmed && !exact && (
+            <div
+              onClick={useCustom}
+              style={{ padding: "9px 12px", cursor: "pointer", fontSize: 13, fontWeight: 600, color: "#16A34A", borderTop: "1px solid rgba(140,140,140,0.2)" }}
+            >
+              Use "{trimmed}" as a custom item
+            </div>
+          )}
+        </div>
+      )}
+    </>
   );
 }
 
