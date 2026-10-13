@@ -1,6 +1,9 @@
-import { createContext, useState, useEffect } from "react";
+import { createContext, useState, useEffect, useContext } from "react";
 
 export const AuthContext = createContext();
+
+// Shortcut so pages can write: const { user } = useAuth();
+export const useAuth = () => useContext(AuthContext);
 
 // Reads id, name, email and role out of the JWT. Returns null if the
 // token is invalid or expired.

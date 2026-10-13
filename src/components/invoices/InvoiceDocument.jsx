@@ -257,7 +257,7 @@ export default function InvoiceDocument({ invoice, onBack, onEdit, onConvertToFi
                   </div>
                 )}
                 {invoice.buyerAddress && (
-                  <div style={{ fontSize: isMobile ? "0.68rem" : "0.82rem", color: "#334155", whiteSpace: "pre-line" }}>{invoice.buyerAddress}</div>
+                  <div style={{ fontSize: isMobile ? "0.68rem" : "0.82rem", color: "#334155", whiteSpace: "pre-line" }}>Address: {invoice.buyerAddress}</div>
                 )}
 
                 {invoice.buyerMobile && (

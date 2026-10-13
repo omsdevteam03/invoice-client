@@ -171,22 +171,156 @@ export function CostCalculatorBar({ includeGst, gstPercent, defaultGstPercent, o
   );
 }
 
+// Styled popup for the "+ Discount %" button (replaces window.prompt)
+export function DiscountPercentModal({ show, subtotal = 0, onCancel, onConfirm, accent = "#1F6F5C" }) {
+  const [value, setValue] = useState("");
+
+  useEffect(() => { if (show) setValue(""); }, [show]);
+
+  if (!show) return null;
+
+  const pct = Number(value);
+  const valid = pct > 0 && pct <= 100;
+  const off = valid ? Math.round((subtotal * pct) / 100) : 0;
+
+  const submit = () => { if (valid) onConfirm(pct); };
+
+  return (
+    <div
+      onClick={onCancel}
+      style={{
+        position: "fixed", top: 0, left: 0, width: "100%", height: "100%",
+        backgroundColor: "rgba(15,23,42,0.5)", zIndex: 9999,
+        display: "flex", alignItems: "center", justifyContent: "center", padding: 16,
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          backgroundColor: "#fff", borderRadius: 16, boxShadow: "0 20px 60px rgba(0,0,0,0.3)",
+          maxWidth: 400, width: "90%", padding: 32, textAlign: "center",
+        }}
+      >
+        <div style={{
+          width: 60, height: 60, borderRadius: "50%", background: `${accent}18`,
+          display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 16px",
+          fontSize: 26, color: accent, fontWeight: 700,
+        }}>
+          %
+        </div>
+        <h5 style={{ color: "#0f172a", fontWeight: 700, marginBottom: 8 }}>Add discount?</h5>
+        <p style={{ color: "#64748b", fontSize: "0.9rem", marginBottom: 16 }}>
+          Enter the discount percent to take off the current subtotal.
+        </p>
+
+        <style>{`
+          .qd-no-spinner::-webkit-outer-spin-button,
+          .qd-no-spinner::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+          .qd-no-spinner { -moz-appearance: textfield; }
+        `}</style>
+        <input
+          autoFocus
+          type="number"
+          className="qd-no-spinner"
+          min="1"
+          max="100"
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") submit();
+            if (e.key === "Escape") onCancel();
+          }}
+          placeholder="e.g. 10"
+          style={{
+            width: "100%", padding: "10px 12px", borderRadius: 8, marginBottom: 10,
+            border: "1px solid #e2e8f0", fontSize: 14, outline: "none", boxSizing: "border-box",
+            textAlign: "center",
+          }}
+        />
+
+        <div style={{ minHeight: 20, marginBottom: 18, fontSize: 13, color: valid ? accent : "#94a3b8", fontWeight: 600 }}>
+          {valid ? `Discount: ₹${off.toLocaleString("en-IN")}` : "Enter a number between 1 and 100"}
+        </div>
+
+        <div style={{ display: "flex", gap: 12, justifyContent: "center" }}>
+          <button onClick={onCancel} style={{
+            border: "none", fontWeight: 600, padding: "10px 24px",
+            backgroundColor: "#f1f5f9", color: "#475569", borderRadius: 10, cursor: "pointer", fontSize: 14,
+          }}>
+            Cancel
+          </button>
+          <button onClick={submit} disabled={!valid} style={{
+            border: "none", fontWeight: 600, padding: "10px 24px",
+            backgroundColor: accent, color: "#fff", borderRadius: 10, fontSize: 14,
+            cursor: valid ? "pointer" : "not-allowed", opacity: valid ? 1 : 0.5,
+          }}>
+            Add Discount
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // Table for entering cost items — name + amount per row, with
 // "+ Add Item" adding a blank row directly (replaces the old popup modal).
 export function CostItemsTable({ items = [], onChange, gstMode = "with", gstPercent, defaultGstPercent = 18, onGstChange, accent = "#1F6F5C" }) {
   const addItem = () => onChange([...items, { id: `item-${Date.now()}`, name: "", amount: 0 }]);
+
+  // stock still free for a row (custom items and services have no limit)
+  const { products: stockProducts } = useProducts();
+  const availableFor = (it) => {
+    if (!it.productId) return Infinity;
+    const p = stockProducts.find(x => x.id === it.productId);
+    if (!p || p.type === "Service") return Infinity;
+    const usedElsewhere = items
+      .filter(x => x.id !== it.id && x.productId === it.productId)
+      .reduce((s, x) => s + (Number(x.qty) || 1), 0);
+    return (Number(p.stock_qty) || 0) - usedElsewhere;
+  };
   const updateItem = (id, field, value) =>
     onChange(items.map(it => it.id === id ? {
       ...it,
-      [field]: field === "amount" ? Number(value) || 0 : value,
+      [field]: field === "amount"
+        ? (it.isDiscount ? -Math.abs(Number(value) || 0) : Number(value) || 0)
+        : value,
+      // typing an amount by hand means a flat price, so reset qty to 1
+      ...(field === "amount" ? { qty: 1 } : {}),
       // typing a custom name detaches the row from any picked product
       ...(field === "name" ? { productId: undefined } : {}),
     } : it));
   const pickProduct = (id, p) =>
     onChange(items.map(it => it.id === id
-      ? { ...it, name: p.name, amount: Number(p.sale_rate) || 0, productId: p.id }
+      ? { ...it, name: p.name, amount: Number(p.sale_rate) || 0, productId: p.id, qty: 1 }
       : it));
+  // changing qty keeps the unit price and rescales the row amount
+  const updateQty = (id, value) =>
+    onChange(items.map(it => {
+      if (it.id !== id) return it;
+      const oldQty = Number(it.qty) || 1;
+      const newQty = Math.max(1, Number(value) || 1);
+      return { ...it, qty: newQty, amount: Math.round(((Number(it.amount) || 0) / oldQty) * newQty) };
+    }));
   const removeItem = (id) => onChange(items.filter(it => it.id !== id));
+
+  // Flat discount: adds a row, you type the amount as a negative number (e.g. -2000)
+  const addDiscount = () =>
+    onChange([...items, { id: `item-${Date.now()}`, name: "Discount", amount: 0, qty: 1, isDiscount: true }]);
+
+  // Percent discount: calculated once from the current subtotal
+  const [showPctModal, setShowPctModal] = useState(false);
+  const currentSubtotal = items.reduce((s, it) => s + (Number(it.amount) || 0), 0);
+
+  const applyPercentDiscount = (pct) => {
+    onChange([...items, {
+      id: `item-${Date.now()}`,
+      name: `Discount (${pct}%)`,
+      amount: -Math.round(currentSubtotal * pct / 100),
+      qty: 1,
+      isDiscount: true,
+    }]);
+    setShowPctModal(false);
+  };
 
   return (
     <div style={{ marginBottom: 10 }}>
@@ -195,6 +329,14 @@ export function CostItemsTable({ items = [], onChange, gstMode = "with", gstPerc
         .qd-no-spinner::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
         .qd-no-spinner { -moz-appearance: textfield; }
       `}</style>
+
+      <DiscountPercentModal
+        show={showPctModal}
+        subtotal={currentSubtotal}
+        accent={accent}
+        onCancel={() => setShowPctModal(false)}
+        onConfirm={applyPercentDiscount}
+      />
       <div style={{
         display: "flex", flexWrap: "wrap", gap: 10, alignItems: "flex-end", marginBottom: 10,
         padding: "8px 10px", borderRadius: 8, background: "rgba(140,140,140,0.08)", border: "1px dashed rgba(140,140,140,0.4)",
@@ -218,13 +360,14 @@ export function CostItemsTable({ items = [], onChange, gstMode = "with", gstPerc
       </div>
 
       <div style={{ border: "1px solid rgba(140,140,140,0.3)", borderRadius: 8, overflow: "hidden" }}>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 120px 32px", background: accent, color: "#fff", fontSize: 11, fontWeight: 700 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 70px 120px 32px", background: accent, color: "#fff", fontSize: 11, fontWeight: 700 }}>
           <div style={{ padding: "8px 10px" }}>Service / Item</div>
+          <div style={{ padding: "8px 10px", textAlign: "center" }}>Qty</div>
           <div style={{ padding: "8px 10px", textAlign: "right" }}>Amount (₹)</div>
           <div />
         </div>
         {items.map((it, idx) => (
-          <div key={it.id} style={{ display: "grid", gridTemplateColumns: "1fr 120px 32px", borderTop: "1px solid rgba(140,140,140,0.2)", background: idx % 2 ? "rgba(140,140,140,0.04)" : "transparent" }}>
+          <div key={it.id} style={{ display: "grid", gridTemplateColumns: "1fr 70px 120px 32px", borderTop: "1px solid rgba(140,140,140,0.2)", background: idx % 2 ? "rgba(140,140,140,0.04)" : "transparent" }}>
             <ItemNameField
               value={it.name}
               rowId={it.id}
@@ -234,14 +377,30 @@ export function CostItemsTable({ items = [], onChange, gstMode = "with", gstPerc
             />
             <input
               type="number"
+              min="1"
               className="qd-no-spinner"
-              value={it.amount === 0 ? "" : it.amount}
+              value={it.qty ?? 1}
+              onChange={(e) => updateQty(it.id, e.target.value)}
+              style={{ border: "none", background: "transparent", padding: "8px 4px", fontSize: 13, textAlign: "center", outline: "none" }}
+            />
+            <input
+              type="number"
+              className="qd-no-spinner"
+              value={it.amount === 0 ? "" : (it.isDiscount ? Math.abs(it.amount) : it.amount)}
               onChange={(e) => updateItem(it.id, "amount", e.target.value)}
               placeholder="0"
               style={{ border: "none", background: "transparent", padding: "8px 10px", fontSize: 13, textAlign: "right", outline: "none" }}
             />
             <button type="button" onClick={() => removeItem(it.id)} title="Remove item"
               style={{ border: "none", background: "transparent", color: "#ef4444", cursor: "pointer" }}>✕</button>
+            {(() => {
+              const avail = availableFor(it);
+              return Number(it.qty || 1) > avail ? (
+                <div style={{ gridColumn: "1 / -1", padding: "0 10px 8px", fontSize: 11.5, fontWeight: 700, color: "#ef4444" }}>
+                  ⚠ Only {Math.max(avail, 0)} in stock
+                </div>
+              ) : null;
+            })()}
           </div>
         ))}
         {items.length === 0 && (
@@ -249,12 +408,20 @@ export function CostItemsTable({ items = [], onChange, gstMode = "with", gstPerc
         )}
       </div>
 
-      <button type="button" onClick={addItem} style={{
-        marginTop: 8, border: `1.5px dashed ${accent}`, borderRadius: 8, padding: "6px 14px",
-        fontSize: 12.5, fontWeight: 600, color: accent, backgroundColor: "transparent", cursor: "pointer",
-      }}>
-        + Add Item
-      </button>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 8 }}>
+        {[
+          { label: "+ Add Item", onClick: addItem },
+          { label: "+ Discount ₹", onClick: addDiscount },
+          { label: "+ Discount %", onClick: () => setShowPctModal(true) },
+        ].map(b => (
+          <button key={b.label} type="button" onClick={b.onClick} style={{
+            border: `1.5px dashed ${accent}`, borderRadius: 8, padding: "6px 14px",
+            fontSize: 12.5, fontWeight: 600, color: accent, backgroundColor: "transparent", cursor: "pointer",
+          }}>
+            {b.label}
+          </button>
+        ))}
+      </div>
 
       {/* Live total — updates automatically as items/GST change, no button needed */}
       {items.length > 0 && (() => {
@@ -332,7 +499,10 @@ const LOW_STOCK_AT = 5; // same threshold as the Products page
 function ItemNameField({ value, rowId, items = [], onTextChange, onPick }) {
   const { products, loading } = useProducts();
   // how many OTHER rows in this quotation already use this product (1 unit each)
-  const usedElsewhere = (pid) => items.filter((x) => x.id !== rowId && x.productId === pid).length;
+  const usedElsewhere = (pid) =>
+    items
+      .filter((x) => x.id !== rowId && x.productId === pid)
+      .reduce((sum, x) => sum + (Number(x.qty) || 1), 0);
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState("All"); // All | Product | Service
@@ -382,7 +552,12 @@ function ItemNameField({ value, rowId, items = [], onTextChange, onPick }) {
   const exact = products.some((p) => (p.name || "").toLowerCase() === trimmed.toLowerCase());
 
   const pick = (p) => { onPick(p); closeMenu(); };
-  const useCustom = () => { if (trimmed) { onTextChange(trimmed); closeMenu(); } };
+  const useCustom = () => {
+    if (trimmed) {
+      onTextChange(trimmed.charAt(0).toUpperCase() + trimmed.slice(1));
+      closeMenu();
+    }
+  };
 
   const pill = (active) => ({
     border: "none", borderRadius: 999, padding: "4px 12px", fontSize: 11.5, fontWeight: 600, cursor: "pointer",
@@ -415,7 +590,10 @@ function ItemNameField({ value, rowId, items = [], onTextChange, onPick }) {
             <input
               autoFocus
               value={query}
-              onChange={(e) => setQuery(e.target.value)}
+              onChange={(e) => {
+                const v = e.target.value;
+                setQuery(v.charAt(0).toUpperCase() + v.slice(1));
+              }}
               onKeyDown={(e) => {
                 if (e.key === "Escape") closeMenu();
                 if (e.key === "Enter") {

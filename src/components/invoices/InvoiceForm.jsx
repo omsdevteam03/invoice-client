@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { FaArrowLeft, FaSave, FaPlus, FaTrash, FaEye, FaEyeSlash, FaTimes, FaChevronDown, FaSearch } from "react-icons/fa";
 import { INVOICE_LABELS, INVOICE_FONT, InvoiceLangToggle, useTamilDescriptions, translateToTamil, unitLabel } from "./invoiceLang";
 
@@ -439,12 +439,14 @@ function InvoicePreview({ form, isMobile, onClose }) {
                 <td colSpan={5} style={{ border: "1px solid #000", padding: "6px 10px" }}>
                   <div style={{ fontSize: "0.6rem", color: "#64748b" }}>{L.buyer}</div>
                   <div style={{ fontWeight: 700, fontSize: "0.72rem", color: "#0f172a" }}>
-                    {form.buyerName || <span style={{ color: "#cbd5e1" }}>Buyer Name</span>}
+                    Name: {form.buyerName || <span style={{ color: "#cbd5e1" }}>Buyer Name</span>}
                   </div>
                   {form.buyerCompanyName && (
-                    <div style={{ fontSize: "0.65rem", fontWeight: 600, color: "#334155" }}>{form.buyerCompanyName}</div>
+                    <div style={{ fontSize: "0.65rem", fontWeight: 600, color: "#334155" }}>Company: {form.buyerCompanyName}</div>
                   )}
-                  <div style={{ fontSize: "0.65rem", color: "#334155", whiteSpace: "pre-line" }}>{form.buyerAddress}</div>
+                  {form.buyerAddress && (
+                    <div style={{ fontSize: "0.65rem", color: "#334155", whiteSpace: "pre-line" }}>Address: {form.buyerAddress}</div>
+                  )}
 
                   <div style={{ fontSize: "0.65rem", color: "#334155" }}>{L.mobile}: {form.buyerMobile}</div>
                   {form.buyerGSTIN && (
@@ -538,6 +540,218 @@ function InvoicePreview({ form, isMobile, onClose }) {
     </div>
   );
 }
+// ── Phone input with country-code picker ─────────────────────────────────
+const PHONE_GREEN = "#1F6F5C";
+const PHONE_COUNTRIES = [
+  { iso: "IN", name: "India", dial: "+91" },
+  { iso: "US", name: "United States", dial: "+1" },
+  { iso: "CA", name: "Canada", dial: "+1" },
+  { iso: "GB", name: "United Kingdom", dial: "+44" },
+  { iso: "AE", name: "United Arab Emirates", dial: "+971" },
+  { iso: "SA", name: "Saudi Arabia", dial: "+966" },
+  { iso: "QA", name: "Qatar", dial: "+974" },
+  { iso: "KW", name: "Kuwait", dial: "+965" },
+  { iso: "OM", name: "Oman", dial: "+968" },
+  { iso: "BH", name: "Bahrain", dial: "+973" },
+  { iso: "SG", name: "Singapore", dial: "+65" },
+  { iso: "MY", name: "Malaysia", dial: "+60" },
+  { iso: "LK", name: "Sri Lanka", dial: "+94" },
+  { iso: "NP", name: "Nepal", dial: "+977" },
+  { iso: "BD", name: "Bangladesh", dial: "+880" },
+  { iso: "PK", name: "Pakistan", dial: "+92" },
+  { iso: "AU", name: "Australia", dial: "+61" },
+  { iso: "NZ", name: "New Zealand", dial: "+64" },
+  { iso: "DE", name: "Germany", dial: "+49" },
+  { iso: "FR", name: "France", dial: "+33" },
+  { iso: "IT", name: "Italy", dial: "+39" },
+  { iso: "ES", name: "Spain", dial: "+34" },
+  { iso: "NL", name: "Netherlands", dial: "+31" },
+  { iso: "CH", name: "Switzerland", dial: "+41" },
+  { iso: "SE", name: "Sweden", dial: "+46" },
+  { iso: "IE", name: "Ireland", dial: "+353" },
+  { iso: "RU", name: "Russia", dial: "+7" },
+  { iso: "CN", name: "China", dial: "+86" },
+  { iso: "JP", name: "Japan", dial: "+81" },
+  { iso: "KR", name: "South Korea", dial: "+82" },
+  { iso: "HK", name: "Hong Kong", dial: "+852" },
+  { iso: "TH", name: "Thailand", dial: "+66" },
+  { iso: "ID", name: "Indonesia", dial: "+62" },
+  { iso: "PH", name: "Philippines", dial: "+63" },
+  { iso: "VN", name: "Vietnam", dial: "+84" },
+  { iso: "ZA", name: "South Africa", dial: "+27" },
+  { iso: "NG", name: "Nigeria", dial: "+234" },
+  { iso: "KE", name: "Kenya", dial: "+254" },
+  { iso: "EG", name: "Egypt", dial: "+20" },
+  { iso: "TR", name: "Turkey", dial: "+90" },
+  { iso: "BR", name: "Brazil", dial: "+55" },
+  { iso: "MX", name: "Mexico", dial: "+52" },
+];
+const PHONE_CUSTOM_KEY = "phone_custom_codes";
+
+function readCustomCodes() {
+  try {
+    const p = JSON.parse(localStorage.getItem(PHONE_CUSTOM_KEY) || "[]");
+    return Array.isArray(p) ? p : [];
+  } catch { return []; }
+}
+
+// "+91 9940895128" -> { country, number }. No "+" prefix => India.
+function parsePhone(value, all) {
+  const v = String(value || "").trim();
+  if (v.startsWith("+")) {
+    const m = [...all].sort((a, b) => b.dial.length - a.dial.length).find(c => v.startsWith(c.dial));
+    if (m) return { country: m, number: v.slice(m.dial.length).replace(/\D/g, "") };
+  }
+  return { country: all[0], number: v.replace(/\D/g, "") };
+}
+
+function PhoneInput({ value, onChange, placeholder = "9876543210", inputClassName = "", inputStyle = {}, name }) {
+  const [customCodes, setCustomCodes] = useState(readCustomCodes);
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState("");
+  const [adding, setAdding] = useState(false);
+  const [draft, setDraft] = useState("");
+  const [pickedIso, setPickedIso] = useState(null);
+  const wrapRef = useRef(null);
+
+  const all = useMemo(() => [...PHONE_COUNTRIES, ...customCodes], [customCodes]);
+  const parsed = parsePhone(value, all);
+  const picked = all.find(c => c.iso === pickedIso);
+  // keeps US vs Canada (both +1) as the user chose
+  const country = picked && picked.dial === parsed.country.dial ? picked : parsed.country;
+
+  const closeMenu = () => { setOpen(false); setQ(""); setAdding(false); setDraft(""); };
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e) => { if (!wrapRef.current?.contains(e.target)) closeMenu(); };
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [open]);
+
+  const emit = (dial, number) => onChange(number ? `${dial} ${number}` : dial);
+
+  const pickCountry = (c) => { setPickedIso(c.iso); emit(c.dial, parsed.number); closeMenu(); };
+
+  const saveCustom = () => {
+    let dial = draft.trim().replace(/[^\d+]/g, "");
+    if (!dial) { closeMenu(); return; }
+    if (!dial.startsWith("+")) dial = "+" + dial;
+    if (dial.length < 2 || dial.length > 6) return;
+    const existing = all.find(c => c.dial === dial);
+    if (existing) { pickCountry(existing); return; }
+    const entry = { iso: `custom-${dial}`, name: "Custom code", dial, custom: true };
+    const next = [...customCodes, entry];
+    try { localStorage.setItem(PHONE_CUSTOM_KEY, JSON.stringify(next)); } catch { }
+    setCustomCodes(next);
+    pickCountry(entry);
+  };
+
+  const s = q.trim().toLowerCase();
+  const list = all.filter(c => !s || c.name.toLowerCase().includes(s) || c.iso.toLowerCase().includes(s) || c.dial.includes(s));
+
+  return (
+    <div ref={wrapRef} style={{ position: "relative", display: "flex", gap: 8, width: "100%" }}>
+      <button
+        type="button"
+        onClick={() => (open ? closeMenu() : setOpen(true))}
+        style={{
+          display: "flex", alignItems: "center", gap: 6, flexShrink: 0,
+          border: `1px solid ${open ? PHONE_GREEN : "#e2e8f0"}`, borderRadius: 8,
+          background: "#fff", padding: "0 10px", cursor: "pointer",
+          fontSize: "0.875rem", color: "#0f172a",
+        }}
+      >
+        <span style={{ fontSize: "0.68rem", fontWeight: 700, color: "#94a3b8" }}>{country.custom ? "+" : country.iso}</span>
+        <span>{country.dial}</span>
+        <FaChevronDown size={9} color="#64748b" style={{ transform: open ? "rotate(180deg)" : "none", transition: "transform 0.15s" }} />
+      </button>
+
+      <input
+        type="tel"
+        name={name}
+        autoComplete="tel-national"
+        value={parsed.number}
+        onChange={e => emit(country.dial, e.target.value.replace(/\D/g, ""))}
+        placeholder={placeholder}
+        className={inputClassName}
+        style={{ flex: 1, minWidth: 0, ...inputStyle }}
+      />
+
+      {open && (
+        <div style={{
+          position: "absolute", top: "100%", left: 0, marginTop: 6, zIndex: 1000,
+          width: 300, maxWidth: "calc(100vw - 32px)", boxSizing: "border-box",
+          background: "#fff", border: "1px solid #BFDED2", borderRadius: 14,
+          boxShadow: "0 12px 32px rgba(15,23,42,0.18)", padding: 8,
+        }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: 10, padding: "8px 12px" }}>
+            <FaSearch size={12} color="#94a3b8" />
+            <input
+              autoFocus value={q} onChange={e => setQ(e.target.value)}
+              placeholder="Search country or code"
+              style={{ border: "none", outline: "none", width: "100%", fontSize: "0.82rem", background: "transparent" }}
+            />
+          </div>
+
+          {adding ? (
+            <div style={{ display: "flex", gap: 6, marginTop: 8 }}>
+              <input
+                autoFocus value={draft} maxLength={6} placeholder="e.g. +212"
+                onChange={e => setDraft(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === "Enter") { e.preventDefault(); saveCustom(); }
+                  if (e.key === "Escape") { e.preventDefault(); closeMenu(); }
+                }}
+                style={{ flex: 1, minWidth: 0, border: `1.5px solid ${PHONE_GREEN}`, borderRadius: 8, padding: "7px 10px", fontSize: "0.85rem", outline: "none" }}
+              />
+              <button type="button" onClick={saveCustom}
+                style={{ border: "none", borderRadius: 8, padding: "0 14px", background: PHONE_GREEN, color: "#fff", fontWeight: 700, fontSize: "0.8rem", cursor: "pointer" }}>
+                Add
+              </button>
+            </div>
+          ) : (
+            <button type="button" onClick={() => setAdding(true)}
+              style={{
+                display: "flex", alignItems: "center", gap: 8, width: "100%", marginTop: 8,
+                padding: "9px 12px", border: `1.5px dashed ${PHONE_GREEN}`, borderRadius: 10,
+                background: "#E6F1EC", color: "#175646", fontWeight: 700, fontSize: "0.85rem", cursor: "pointer",
+              }}>
+              <FaPlus size={10} /> Add custom code
+            </button>
+          )}
+
+          <div style={{ maxHeight: 220, overflowY: "auto", marginTop: 8 }}>
+            {list.length === 0 && (
+              <div style={{ padding: 14, textAlign: "center", color: "#94a3b8", fontSize: "0.8rem" }}>No match</div>
+            )}
+            {list.map(c => {
+              const active = c.iso === country.iso;
+              return (
+                <div
+                  key={c.iso}
+                  onClick={() => pickCountry(c)}
+                  style={{
+                    display: "flex", justifyContent: "space-between", alignItems: "center",
+                    padding: "9px 12px", borderRadius: 10, cursor: "pointer",
+                    background: active ? "#E6F1EC" : "transparent",
+                    color: active ? "#175646" : "#0f172a", fontSize: "0.85rem", fontWeight: 600,
+                  }}
+                  onMouseEnter={e => { if (!active) e.currentTarget.style.background = "#f1f5f9"; }}
+                  onMouseLeave={e => { if (!active) e.currentTarget.style.background = "transparent"; }}
+                >
+                  <span>{c.name}</span>
+                  <span style={{ color: active ? PHONE_GREEN : "#64748b" }}>{c.dial}{active ? " ✓" : ""}</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ProductSelect({ products = [], value, onPick, style }) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
@@ -1559,7 +1773,13 @@ const handleSave = async () => {
                   <input name="buyerCompanyName" autoComplete="organization" value={form.buyerCompanyName || ""} onChange={e => updateField("buyerCompanyName", e.target.value)} style={inp} placeholder="Client Company Name" />              </div>
                 <div className="col-12 col-md-6">
                   <label style={{ fontSize: "0.75rem", fontWeight: 600, color: "#64748b", display: "block", marginBottom: 4 }}>Mobile Number</label>
-                  <input name="buyerMobile" autoComplete="tel" value={form.buyerMobile} onChange={e => updateField("buyerMobile", e.target.value)} style={inp} placeholder="9876543210" />              </div>
+                  <PhoneInput
+  name="buyerMobile"
+  value={form.buyerMobile}
+  onChange={val => updateField("buyerMobile", val)}
+  inputStyle={inp}
+  placeholder="9876543210"
+/>              </div>
                 <div className="col-12 col-md-8">
                   <label style={{ fontSize: "0.75rem", fontWeight: 600, color: "#64748b", display: "block", marginBottom: 4 }}>Address</label>
                   <textarea name="buyerAddress" autoComplete="street-address" rows={2} value={form.buyerAddress} onChange={e => updateField("buyerAddress", e.target.value)} style={{ ...inp, resize: "vertical" }} placeholder="Full address..." />              </div>

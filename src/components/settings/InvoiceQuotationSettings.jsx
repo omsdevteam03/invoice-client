@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { FaSave } from 'react-icons/fa';
+import { FaSave, FaUndo } from 'react-icons/fa';
 import axiosInstance from '../../api/axiosInstance';
 
 const emptyForm = {
@@ -33,6 +33,19 @@ export default function InvoiceQuotationSettings() {
   const [status, setStatus] = useState('idle');
   const [addingCustomGst, setAddingCustomGst] = useState(false);
   const [customGstDraft, setCustomGstDraft] = useState('');
+  const [quotationCount, setQuotationCount] = useState(null); // null = still loading
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const [resetting, setResetting] = useState(false);
+
+  // How many real quotations exist (reset is only allowed when this is 0)
+  useEffect(() => {
+    axiosInstance.get('/quotations')
+      .then((res) => {
+        const list = Array.isArray(res.data) ? res.data : [];
+        setQuotationCount(list.filter((q) => !q.isTemplate).length);
+      })
+      .catch(() => setQuotationCount(null));
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -77,6 +90,21 @@ export default function InvoiceQuotationSettings() {
     } catch (err) {
       setError(err.response?.data?.message || err.message);
       setStatus('idle');
+    }
+  };
+
+  const handleResetNumbering = async () => {
+    setResetting(true);
+    try {
+      await axiosInstance.post('/settings/invoice/reset-quotation-numbering');
+      const res = await axiosInstance.get('/settings/invoice');
+      setForm({ ...emptyForm, ...res.data });
+      setShowResetConfirm(false);
+    } catch (err) {
+      setError(err.response?.data?.message || err.message);
+      setShowResetConfirm(false);
+    } finally {
+      setResetting(false);
     }
   };
 
@@ -217,6 +245,24 @@ export default function InvoiceQuotationSettings() {
         )}
       </div>
 
+      <div className="d-flex align-items-center flex-wrap gap-3 mb-2">
+        <button
+          type="button"
+          className="btn btn-outline-danger btn-sm d-flex align-items-center gap-2"
+          disabled={quotationCount !== 0}
+          onClick={() => setShowResetConfirm(true)}
+        >
+          <FaUndo size={11} /> Reset Numbering
+        </button>
+        <span className="text-muted small">
+          {quotationCount === null
+            ? 'Checking quotations…'
+            : quotationCount === 0
+              ? 'Resets the next quotation number back to 1.'
+              : `Only available when there are zero quotations (you have ${quotationCount}).`}
+        </span>
+      </div>
+
       <hr />
       <div className="mb-1 fw-bold">Defaults</div>
       <p className="text-muted small mb-3">Pre-filled values when creating new documents</p>
@@ -238,6 +284,37 @@ export default function InvoiceQuotationSettings() {
           <FaSave size={12} /> {status === 'saving' ? 'Saving...' : status === 'saved' ? 'Saved!' : 'Save changes'}
         </button>
       </div>
+
+      {showResetConfirm && (
+        <div
+          style={{
+            position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(0,0,0,0.5)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16,
+          }}
+          onClick={() => !resetting && setShowResetConfirm(false)}
+        >
+          <div
+            style={{ background: '#fff', borderRadius: 16, padding: 28, maxWidth: 400, width: '100%', textAlign: 'center', boxShadow: '0 20px 60px rgba(0,0,0,0.3)' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ width: 60, height: 60, borderRadius: '50%', background: '#fef2f2', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
+              <FaUndo size={22} color="#dc2626" />
+            </div>
+            <h5 style={{ fontWeight: 700, marginBottom: 8 }}>Reset quotation numbering?</h5>
+            <p className="text-muted" style={{ fontSize: '0.9rem', marginBottom: 24 }}>
+              This will reset the next quotation number back to 0001. This cannot be undone.
+            </p>
+            <div className="d-flex gap-3 justify-content-center">
+              <button className="btn btn-light fw-semibold px-4" disabled={resetting} onClick={() => setShowResetConfirm(false)}>
+                Cancel
+              </button>
+              <button className="btn btn-danger fw-semibold px-4" disabled={resetting} onClick={handleResetNumbering}>
+                {resetting ? 'Resetting…' : 'Reset'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -3,12 +3,14 @@ import { useLocation, useNavigate, useParams } from "react-router-dom";
 import CustomerList from "../components/customers/CustomerList.jsx";
 import CustomerForm from "../components/customers/CustomerForm.jsx";
 import CustomerDetail from "../components/customers/CustomerDetail.jsx";
+import { useAuth } from "../context/AuthContext"; // adjust path
 
 const API = `${import.meta.env.VITE_API_URL}/customers`;
 const QUOTATIONS_API = `${import.meta.env.VITE_API_URL}/quotations`;
 const INVOICES_API = `${import.meta.env.VITE_API_URL}/invoices`;
 
 export default function CustomersPage() {
+  const { user } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
   const { id } = useParams();
@@ -114,10 +116,15 @@ export default function CustomersPage() {
       const saveRes = await fetch(API, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...updated, isNew }),
+        body: JSON.stringify({
+          ...updated,
+          isNew,
+          ...(isNew && { createdBy: user?.id, createdByName: user?.name }),
+        }),
       });
 
       // 🔽 NEW: check the response before assuming it worked
+
       if (!saveRes.ok) {
         const errBody = await saveRes.json().catch(() => ({}));
         throw new Error(errBody.error || `Save failed (${saveRes.status})`);

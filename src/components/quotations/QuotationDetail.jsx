@@ -101,6 +101,7 @@ function normalizeFormQuotation(quotation) {
   // existed, or a save that only persisted the old `includeGst` boolean)
   // doesn't cause the GST% selector to reappear after a reload.
   initial.gstMode = getGstMode(initial);
+  initial.projectTitle = capitalizeWords(initial.projectTitle || "");
 
   const paraFields = ["terms", "description", "notes"];
 
@@ -404,20 +405,7 @@ export default function QuotationDetail({
         issuerPhone: prev.issuerPhone || companyInfo?.companyPhone || "",
         issuerEmail: prev.issuerEmail || companyInfo?.companyEmail || "",
 
-        description: prev.description || plainTextToHtml(
-          `This proposal outlines the scope of work agreed upon between ${issuer} and ${prev.company || "the client"}.`
-        ),
-        scopeOfWork: prev.scopeOfWork || linesToHtmlList(SCOPE_TEMPLATES[0].text),
-        deliverables: prev.deliverables || linesToHtmlList(
-          "Fully responsive website\nSource code delivery\nAdmin panel access\nDocumentation\n30 days support"
-        ),
-        technologyUsed: prev.technologyUsed || linesToHtmlList(
-          "React.js / Next.js (Frontend)\nNode.js & Express.js (Backend)\nMongoDB (Database)\nCloud Hosting (Deployment)"
-        ),
-        timelineDesc: prev.timelineDesc || linesToHtmlList(
-          "Completed within 7–14 working days from project confirmation\nDevelopment carried out in phases\nRegular progress updates shared with client"
-        ),
-        terms: prev.terms || plainTextToHtml(TERMS_TEMPLATES[0].text),
+
       };
     });
   }, [companyInfo, isNew]);
@@ -501,7 +489,8 @@ export default function QuotationDetail({
 
 const updateField = (field, value) => {
   dirtyRef.current = true;
-  if ((field === "name" || field === "company") && typeof value === "string") {
+  const CAP_FIELDS = ["name", "company", "projectTitle", "clientAddress", "issuerAddress"];
+  if (CAP_FIELDS.includes(field) && typeof value === "string") {
     value = capitalizeWords(value);
   }
   setForm((prev) => {
@@ -582,6 +571,7 @@ const updateField = (field, value) => {
   const addCustomSection = () => { dirtyRef.current = true; setForm((prev) => ({ ...prev, customSections: [...prev.customSections, { heading: "", content: "" }] })); };
   const updateCustomSection = (i, field, value) => {
     dirtyRef.current = true;
+    if (field === "heading" && typeof value === "string") value = capitalizeWords(value);
     const sections = [...form.customSections];
     sections[i] = { ...sections[i], [field]: value };
     setForm((prev) => ({ ...prev, customSections: sections }));
@@ -607,7 +597,27 @@ const updateField = (field, value) => {
     }
   };
 
+    const stockProblem = () => {
+    const rows = getCostItems(form);
+    for (const it of rows) {
+      if (!it.productId) continue;
+      const p = products.find(x => x.id === it.productId);
+      if (!p || p.type === "Service") continue;
+      const total = rows
+        .filter(x => x.productId === it.productId)
+        .reduce((s, x) => s + (Number(x.qty) || 1), 0);
+      if (total > (Number(p.stock_qty) || 0)) {
+        return `Not enough stock for ${it.name}. Only ${p.stock_qty} available.`;
+      }
+    }
+    return null;
+  };
+
+
+
   const handleSaveClick = () => {
+    const stockMsg = stockProblem();
+    if (stockMsg) { window.alert(stockMsg); return; }
     const { _draftId, _isNewQuotation, ...cleanForm } = form;
 
     const wasApproved = !isNew && quotation.status === "Approved";
@@ -638,6 +648,8 @@ const updateField = (field, value) => {
     }
   };
   const handleSendClick = async () => {
+    const stockMsg = stockProblem();
+    if (stockMsg) { window.alert(stockMsg); return; }
     setIsSending(true);
     try {
       const { _draftId, _isNewQuotation, ...cleanForm } = form;
@@ -865,13 +877,13 @@ const updateField = (field, value) => {
           ? <TinyMCEEditor
             key={`qt-editor-description-${form.templateStyle}`}
             id="qt-editor-description"
-            value={form.description || plainTextToHtml(`This proposal outlines the scope of work agreed upon between ${issuerName} and ${form.company || "the client"}.`)}
+            value={form.description || ""}
             onChange={(html) => updateField("description", html)}
             accent={accent}
             height={200}
             placeholder="Describe the project..."
           />
-          : <RichView html={form.description || `<p>This proposal outlines the scope of work agreed upon between ${issuerName} and ${form.company || "the client"}.</p>`} />}
+          : <RichView html={form.description || ""} />}
       </div>
 
       {/* Scope of Work */}

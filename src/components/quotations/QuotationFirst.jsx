@@ -1,11 +1,12 @@
 import { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { useAuth } from "../../context/AuthContext"; // adjust path
 import InvoiceDocument from "../invoices/InvoiceDocument";
 import InvoiceForm from "../invoices/InvoiceForm";
 import {
   FaFileAlt, FaPlus, FaRupeeSign, FaSearch, FaEye, FaCalendarAlt, FaUser,
   FaCheckCircle, FaFileSignature, FaTrash, FaEdit, FaHistory, FaCopy,
-  FaFileInvoiceDollar, FaExchangeAlt, FaTimes, FaAddressBook, FaUndo,
+  FaFileInvoiceDollar, FaExchangeAlt, FaTimes, FaAddressBook,
 } from "react-icons/fa";
 // ── Auto-saved quotation drafts (crash/navigate-away recovery) ─────────────
 // NOT the quotation's business "status" (Draft/Approved) — this is a
@@ -366,16 +367,16 @@ const tableStyles = `
     color: #0f172a;
   }
 
-  /* Status select: dropped in favor of a small dot next to the actions */
+  /* Status select: shown as its own row under the customer */
   .qt-table td:nth-child(6) {
-    display: none;
+    order: 3;
+    width: 100%;
+    padding-left: 22px;
+    margin-top: 8px;
   }
+  /* the dot isn't needed now that the status pill is visible */
   .qt-status-dot {
-    display: inline-block;
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    margin-right: auto;
+    display: none;
   }
 
   /* Actions: status dot on the left, icon-only buttons flush right */
@@ -642,50 +643,6 @@ function ConfirmDialog({ show, count = 1, onConfirm, onCancel }) {
   );
 }
 
-// ResetNumberingDialog Component — styled confirm for the "Reset Numbering" action
-function ResetNumberingDialog({ show, onConfirm, onCancel }) {
-  if (!show) return null;
-  return (
-    <div style={{
-      position: "fixed", top: 0, left: 0, width: "100%", height: "100%",
-      backgroundColor: "rgba(0,0,0,0.5)", zIndex: 9999,
-      display: "flex", alignItems: "center", justifyContent: "center",
-      padding: "16px",
-    }}>
-      <div className="qt-modal-card" style={{
-        backgroundColor: "#fff", borderRadius: "16px",
-        boxShadow: "0 20px 60px rgba(0,0,0,0.3)", textAlign: "center"
-      }}>
-        <div style={{
-          width: 60, height: 60, borderRadius: "50%",
-          background: "#fef2f2", display: "flex",
-          alignItems: "center", justifyContent: "center",
-          margin: "0 auto 16px"
-        }}>
-          <FaUndo size={22} color="#dc2626" />
-        </div>
-        <h5 style={{ color: "#0f172a", fontWeight: 700, marginBottom: 8 }}>
-          Reset quotation numbering?
-        </h5>
-        <p style={{ color: "#64748b", fontSize: "0.9rem", marginBottom: 24 }}>
-          This will reset the next quotation number back to 0001. This cannot be undone.
-        </p>
-        <div className="d-flex gap-3 justify-content-center flex-wrap">
-          <button onClick={onCancel}
-            className="border-0 fw-semibold px-4 py-2"
-            style={{ backgroundColor: "#f1f5f9", color: "#475569", borderRadius: "10px", cursor: "pointer", fontSize: "0.9rem" }}>
-            Cancel
-          </button>
-          <button onClick={onConfirm}
-            className="border-0 fw-semibold px-4 py-2"
-            style={{ backgroundColor: "#dc2626", color: "#fff", borderRadius: "10px", cursor: "pointer", fontSize: "0.9rem" }}>
-            Reset
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 // EditApprovedDialog Component — styled confirm shown when editing an
 // already-approved quotation, replacing window.confirm for the same
@@ -764,6 +721,19 @@ function EditableStatus({ value, onChange, hasNumber }) {
     </select>
   );
 }
+const CreatedBy = ({ rec, userId }) => {
+  const mine = rec.createdBy && String(rec.createdBy) === String(userId);
+  return (
+    <div style={{
+      display: "inline-block", marginTop: 3, fontSize: "0.66rem", fontWeight: 600,
+      padding: "1px 8px", borderRadius: 999, whiteSpace: "nowrap",
+      background: mine ? "#f1f5f9" : "#fef3c7", color: mine ? "#64748b" : "#b45309",
+    }}>
+Created by {mine ? "you" : (rec.createdByName || "Unknown")}{rec.createdVia === "ai" ? " · via AI" : ""}
+    </div>
+  );
+};
+
 function formatInvoiceDate(d) {
   if (!d) return "—";
   try {
@@ -873,18 +843,17 @@ export default function QuotationFirst({
   quotations, setQuotations, search, setSearch, setSelected, setEditMode,
   setShowTemplates, onInvoiceCreated, onChooseCustomer, companyInfo, docSettings,
   invoices = [], onCreateInvoiceFromQuotation,
-  onResetNumbering,
   onSend,
   onSaveInvoice,
 }) {
   const navigate = useNavigate();
+  const { user } = useAuth();
 
   // Confirm Dialog State — deleteIds holds either one id (row delete) or many (bulk delete)
   const [showConfirm, setShowConfirm] = useState(false);
   const [deleteIds, setDeleteIds] = useState([]);
 
-  // Reset Numbering confirm dialog state
-  const [showResetConfirm, setShowResetConfirm] = useState(false);
+
 
   // Which saved draft is currently being sent (disables its dropdown)
   const [sendingId, setSendingId] = useState(null);
@@ -1087,6 +1056,7 @@ export default function QuotationFirst({
   const handleDuplicateDraft = async (q) => {
     const {
       id, quotationNumber, sentAt, status, versionHistory, updatedAt,
+      createdBy, createdByName,
       ...copyable
     } = q;
 
@@ -1095,6 +1065,8 @@ export default function QuotationFirst({
       id: generateInternalId(),
       status: "Draft",
       date: new Date().toISOString().split("T")[0],
+      createdBy: user?.id,
+      createdByName: user?.name,
     };
 
     try {
@@ -1236,8 +1208,6 @@ export default function QuotationFirst({
   };
 
   const totalValue = quotations.filter(q => !q.isTemplate).reduce((a, b) => a + b.amount, 0);
-  const realQuotationCount = quotations.filter(q => !q.isTemplate).length;
-  const canResetNumbering = realQuotationCount === 0;
 
   return (
     <div style={{ width: "100%" }}>
@@ -1252,15 +1222,7 @@ export default function QuotationFirst({
           onCancel={handleCancel}
         />
 
-        {/* Reset Numbering Confirm Dialog */}
-        <ResetNumberingDialog
-          show={showResetConfirm}
-          onConfirm={() => {
-            setShowResetConfirm(false);
-            onResetNumbering?.();
-          }}
-          onCancel={() => setShowResetConfirm(false)}
-        />
+    
 
         {/* Edit Approved Quotation Confirm Dialog */}
         <EditApprovedDialog
@@ -1455,20 +1417,7 @@ export default function QuotationFirst({
               </span>
             </button>
           )}
-          {canResetNumbering && onResetNumbering && (
-            <button
-              onClick={() => setShowResetConfirm(true)}
-              className="qt-drafts-btn"
-              title="Only available while there are zero quotations"
-              style={{
-                backgroundColor: "#fff",
-                color: "#dc2626",
-                border: "1.5px solid #fecaca",
-              }}
-            >
-              <FaUndo size={11} /> Reset Numbering
-            </button>
-          )}
+       
           {selectedIds.length > 0 && (
             <button onClick={handleBulkDeleteClick} className="qt-bulk-delete-btn">
               <FaTrash size={12} /> Delete Selected ({selectedIds.length})
@@ -1602,6 +1551,7 @@ export default function QuotationFirst({
                   <div className="qt-draft-info">
                     <div className="qt-draft-title">{q.company || q.name || "Untitled"}</div>
                     <div className="qt-draft-project">{q.projectTitle || "Untitled quotation"}</div>
+                    <CreatedBy rec={q} userId={user?.id} />
                   </div>
 
                   <span className="qt-draft-time">Edited {timeAgoIso(q.updatedAt)}</span>
@@ -1717,6 +1667,7 @@ export default function QuotationFirst({
                               <div style={{ color: "#64748b", fontSize: "0.72rem" }}>{q.projectTitle}</div>
                             )}
                             <div className="qt-mobile-id">{q.quotationNumber}</div>
+                            <CreatedBy rec={q} userId={user?.id} />
                           </td>
                           <td>
                             <span className="qt-cell-label">Date</span>

@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { useAuth } from "../../context/AuthContext"; // adjust path
 import {
   FaFileInvoiceDollar,
   FaCheckCircle,
@@ -201,6 +202,18 @@ const invoiceStyles = `
 }
 `;
 
+const CreatedBy = ({ rec, userId }) => {
+  const mine = rec.createdBy && String(rec.createdBy) === String(userId);
+  return (
+    <div style={{
+      display: "inline-block", marginTop: 3, fontSize: "0.66rem", fontWeight: 600,
+      padding: "1px 8px", borderRadius: 999, whiteSpace: "nowrap",
+      background: mine ? "#f1f5f9" : "#fef3c7", color: mine ? "#64748b" : "#b45309",
+    }}>
+Created by {mine ? "you" : (rec.createdByName || "Unknown")}{rec.createdVia === "ai" ? " · via AI" : ""}    </div>
+  );
+};
+
 function calcTotals(invoice) {
   const subtotal = invoice.items.reduce((a, b) => a + b.amount, 0);
   const gstPercent = Number(invoice.gstPercent || 18);
@@ -268,6 +281,7 @@ export default function InvoiceList({
   onReceivePayment,
 }) {
   const navigate = useNavigate();
+  const { user } = useAuth();
   // Internal id (qt_xxx) stays as the link between records; the UI shows the official number.
   const quoteLabel = (id) =>
     allQuotations.find(qt => qt.id === id)?.quotationNumber || id;
@@ -740,6 +754,7 @@ export default function InvoiceList({
                           From {quoteLabel(inv.fromQuotationId)}
                         </span>
                       )}
+                      <div><CreatedBy rec={inv} userId={user?.id} /></div>
                     </td>
                     <td style={{ padding: "14px 16px" }}>
                       <span className="inv-cell-label">Buyer</span>

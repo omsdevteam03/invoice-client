@@ -248,6 +248,20 @@ export default function CustomerDetail({ customer: c, onBack, onEdit, quotations
   const [selectedPhoneIdx, setSelectedPhoneIdx] = useState(0);
   const activePhone = phoneNumbers[selectedPhoneIdx] ?? phoneNumbers[0] ?? "";
   const [selectedWhatsappIdx, setSelectedWhatsappIdx] = useState(0);
+
+  // Live stock for the customer's attached products
+  const [stockMap, setStockMap] = useState({});
+  useEffect(() => {
+    if (!Array.isArray(c.products) || c.products.length === 0) return;
+    fetch(`${import.meta.env.VITE_API_URL}/products`)
+      .then(r => r.json())
+      .then(d => {
+        const m = {};
+        (Array.isArray(d) ? d : []).forEach(p => { m[p.id] = p; });
+        setStockMap(m);
+      })
+      .catch(() => { });
+  }, [c.products]);
   const activeWhatsapp = whatsappNumbers[selectedWhatsappIdx] ?? whatsappNumbers[0] ?? activePhone;
 
   const valueStyle = { fontSize: "0.86rem", color: "#0f172a", fontWeight: 600 };
@@ -484,14 +498,34 @@ export default function CustomerDetail({ customer: c, onBack, onEdit, quotations
             )}
           </div>
 
-          {c.tags?.length > 0 && (
-            <div className="d-flex gap-2 flex-wrap px-4 pb-4">
-              {c.tags.map(tag => (
-                <span key={tag} className="rounded-pill px-3 py-1"
-                  style={{ fontSize: "0.72rem", fontWeight: 600, backgroundColor: BRAND_SOFT, color: BRAND_DARK, border: `1px solid ${BRAND_SOFT_BORDER}` }}>
-                  {tag}
-                </span>
-              ))}
+          {Array.isArray(c.products) && c.products.length > 0 && (
+            <div className="px-4 pb-4">
+              <div style={{ fontSize: "0.68rem", color: "#94a3b8", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 8 }}>
+                Products & Services
+              </div>
+              <div className="d-flex flex-column gap-2">
+                {c.products.map(p => {
+                  const live = stockMap[p.productId] || {};
+                  const isService = (live.type || p.type) === "Service";
+                  return (
+                    <div key={p.productId} className="d-flex align-items-center justify-content-between flex-wrap gap-2"
+                      style={{ border: `1px solid ${BRAND_SOFT_BORDER}`, background: BRAND_SOFT, borderRadius: 10, padding: "8px 12px" }}>
+                      <div>
+                        <div style={{ fontWeight: 700, fontSize: "0.84rem", color: "#0f172a" }}>{p.name} × {p.qty || 1}</div>
+                        <div style={{ fontSize: "0.7rem", color: "#64748b" }}>
+                          ₹{Number(live.sale_rate ?? p.rate).toLocaleString("en-IN")} ·{" "}
+                          {(live.gst_type || p.gstType) === "Without GST" ? "No GST" : `${live.gst_percent ?? p.gstPercent}% ${live.gst_type || p.gstType || ""}`}
+                        </div>
+                      </div>
+                      {isService && (
+                        <div style={{ fontSize: "0.75rem", fontWeight: 700, color: "#94a3b8" }}>
+                          Service
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           )}
 

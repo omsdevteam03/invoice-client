@@ -4,6 +4,8 @@ import QuotationDetail from "../components/quotations/QuotationDetail";
 import QuotationFirst from "../components/quotations/QuotationFirst";
 import QuotationTemplate from "../components/quotations/QuotationTemplate";
 import { templates } from "../components/quotations/QuotationTable";
+import { useAuth } from "../context/AuthContext";
+import { computeCostTotals } from "../components/quotations/quotationLayoutUtils";
 
 const API = `${import.meta.env.VITE_API_URL}/quotations`;
 const SETTINGS_API = `${import.meta.env.VITE_API_URL}/settings/company`;
@@ -106,8 +108,25 @@ function SaveErrorBanner({ message, onDismiss }) {
     </div>
   );
 }
+// Turns the customer's saved products into the quotation's Project Cost rows
+const customerCostFields = (customer, gstPercent = 18) => {
+  const costItems = (Array.isArray(customer?.products) ? customer.products : []).map((p, i) => {
+    const qty = Number(p.qty) || 1;
+    return {
+      id: `item-${Date.now()}-${i}`,
+      name: p.name,
+      productId: p.productId,
+      qty,
+      amount: qty * (Number(p.rate) || 0),
+    };
+  });
+  if (!costItems.length) return {};
+  const state = { costItems, gstMode: "with", includeGst: true, gstPercent };
+  return { ...state, amount: computeCostTotals(state, gstPercent).total };
+};
 
 export default function QuotationsPage() {
+  const { user } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
   const { id } = useParams();
@@ -308,22 +327,7 @@ useEffect(() => {
     }
   };
 
-  // NEW: reset quotation numbering back to 0001. Only safe (and only shown
-  // in the UI) when there are zero real quotations — the backend enforces
-  // this too.
-  // Confirmation now happens via a styled modal in QuotationFirst,
-  // so this just performs the actual reset when called.
-  const handleResetNumbering = async () => {
-    try {
-      const res = await fetch(`${DOC_SETTINGS_API}/reset-quotation-numbering`, { method: "POST" });
-      if (res.ok) {
-        const data = await res.json();
-        setDocSettings(prev => ({ ...prev, ...data }));
-      }
-    } catch (err) {
-      console.error("Failed to reset quotation numbering:", err);
-    }
-  };
+
 
    const handleSave = async (updated) => {
     setIsSaving(true);
@@ -341,6 +345,7 @@ useEffect(() => {
           id: payload.id,   // always the internal id — backend never invents one
           isNew: isNewSave,
           isTemplate: false,
+          ...(isNewSave && { createdBy: user?.id, createdByName: user?.name }),
         }),
       });
 
@@ -445,8 +450,8 @@ useEffect(() => {
       console.error("Failed to refresh company info before creating quotation:", err);
     }
 
-    const tax = Math.round(tpl.amount * 0.18);
     const customer = pendingCustomer;
+    const tax = Math.round(tpl.amount * 0.18);
 
     const newQ = {
       id: generateInternalId(),
@@ -472,17 +477,18 @@ useEffect(() => {
       signature: "/signature.png",
       timeline: tpl.timeline,
       description: "",
-      scopeOfWork: "Responsive Website Design\n5 Website Pages\nContact Form Integration\nMobile Optimization\nBasic SEO Setup",
-      deliverables: "Fully responsive website\nSource code delivery\nAdmin panel access\nDocumentation\n30 days support",
-      technologyUsed: "React.js / Next.js (Frontend)\nNode.js & Express.js (Backend)\nMongoDB (Database)\nCloud Hosting (Deployment)",
-      timelineDesc: "Completed within 7–14 working days from project confirmation\nDevelopment carried out in phases\nRegular progress updates shared with client",
+      scopeOfWork: "",
+      deliverables: "",
+      technologyUsed: "",
+      timelineDesc: "",
       projectCost: `Project Cost: ₹${tpl.amount.toLocaleString()}\nDeployment & Setup: Included\nGST (18%): ₹${tax.toLocaleString()}\nTotal Project Cost: ₹${(tpl.amount + tax).toLocaleString()}`,
-      paymentTerms: "50% advance payment required before project commencement\nRemaining 50% after preview approval and before final delivery",
-      terms: "This quotation is valid for 30 days from the date of issue\nAny additional work outside the agreed scope will be charged separately\n50% advance payment is required before project commencement\nFinal deliverables handed over after full payment is received",
+      paymentTerms: "",
+      terms: "",
       notes: "",
       items: [{ description: "Project Cost", qty: 1, rate: tpl.amount, total: tpl.amount }],
       customSections: [],
       isTemplate: !customer,
+      ...customerCostFields(customer, docSettings?.gstPercent ?? 18),
     };
     setSelected(newQ);
     setEditMode(true);
@@ -529,17 +535,18 @@ useEffect(() => {
       signature: "/signature.png",
       timeline: "7–14 working days",
       description: "",
-      scopeOfWork: "Responsive Website Design\n5 Website Pages\nContact Form Integration\nMobile Optimization\nBasic SEO Setup",
-      deliverables: "Fully responsive website\nSource code delivery\nAdmin panel access\nDocumentation\n30 days support",
-      technologyUsed: "React.js / Next.js (Frontend)\nNode.js & Express.js (Backend)\nMongoDB (Database)\nCloud Hosting (Deployment)",
-      timelineDesc: "Completed within 7–14 working days from project confirmation\nDevelopment carried out in phases\nRegular progress updates shared with client",
+      scopeOfWork: "",
+      deliverables: "",
+      technologyUsed: "",
+      timelineDesc: "",
       projectCost: "Project Cost: ₹0\nGST (18%): ₹0\nTotal Project Cost: ₹0",
-      paymentTerms: "50% advance payment required before project commencement\nRemaining 50% after preview approval and before final delivery",
-      terms: "This quotation is valid for 30 days from the date of issue\nAny additional work outside the agreed scope will be charged separately\n50% advance payment is required before project commencement\nFinal deliverables handed over after full payment is received",
+      paymentTerms: "",
+      terms: "",
       notes: "",
       items: [{ description: "", qty: 1, rate: 0, total: 0 }],
       customSections: [],
       isTemplate: false,
+      ...customerCostFields(customer, docSettings?.gstPercent ?? 18),
     };
     setSelected(newQ);
     setEditMode(true);
@@ -623,7 +630,6 @@ useEffect(() => {
         invoices={invoices}
         onCreateInvoiceFromQuotation={handleCreateInvoiceFromQuotation}
         onSaveInvoice={handleSaveInvoice}
-        onResetNumbering={handleResetNumbering}
         onSend={handleSend}
       />
 

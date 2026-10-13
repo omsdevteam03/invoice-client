@@ -6,6 +6,7 @@ import InvoiceDocument from "../components/invoices/InvoiceDocument";
 import ReceivePaymentModal from "../components/invoices/ReceivePaymentModal";
 import { FaFileInvoiceDollar } from "react-icons/fa";
 import axiosInstance from "../api/axiosInstance";
+import { useAuth } from "../context/AuthContext";
 
 const API = `${import.meta.env.VITE_API_URL}/invoices`;
 const SETTINGS_API = `${import.meta.env.VITE_API_URL}/settings/company`;
@@ -106,6 +107,7 @@ const logActivity = (invoice, message) => ({
 });
 
 export default function InvoicesPage() {
+  const { user } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
   const { id } = useParams();
@@ -451,7 +453,10 @@ useEffect(() => {
     try {
       const old = invoices.find(i => i.id === updated.id);
 const isNew = !old;
-      const withLog = logActivity(updated, isNew ? "Invoice created" : "Invoice details updated");
+      const withLog = logActivity(
+        isNew ? { ...updated, createdBy: user?.id, createdByName: user?.name } : updated,
+        isNew ? "Invoice created" : "Invoice details updated"
+      );
 
       const res = await fetch(API, {
         method: 'POST',

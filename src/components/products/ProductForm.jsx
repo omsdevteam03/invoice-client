@@ -19,7 +19,10 @@ const spinnerCSS = `
 `;
 
 const EMPTY = { name: "", type: "Product", unit: "", sale_rate: "", gst_type: "With GST", gst_percent: 18, stock_qty: "" };
-
+const capFirst = (s) => {
+  const t = (s || "").trimStart();
+  return t.charAt(0).toUpperCase() + t.slice(1);
+};
 // fills in any missing/null fields from older products
 const normalize = (p) =>
   p ? { ...EMPTY, ...p, unit: p.unit || "", gst_type: p.gst_type || "With GST", gst_percent: p.gst_percent ?? 18 } : EMPTY;
@@ -48,8 +51,7 @@ export default function ProductForm({ product, onSave, onClose }) {
     if (!form.name.trim()) { alert("Please enter the product name."); return; }
     onSave({
       ...form,
-      name: form.name.trim(),
-      sale_rate: Number(form.sale_rate) || 0,
+      name: capFirst(form.name.trim()),      sale_rate: Number(form.sale_rate) || 0,
       gst_type: form.gst_type,
       gst_percent: Number(form.gst_percent) || 0,
       // Services never track stock
@@ -87,8 +89,7 @@ export default function ProductForm({ product, onSave, onClose }) {
           <div className="row g-3">
             <div className="col-12">
               <label style={lbl}>Name *</label>
-              <input style={inp} value={form.name} onChange={e => set("name", e.target.value)} placeholder="e.g. Router" autoFocus />
-            </div>
+              <input style={inp} value={form.name} onChange={e => set("name", capFirst(e.target.value))} placeholder="e.g. Router" autoFocus />            </div>
 
             <div className="col-6">
               <label style={lbl}>Type</label>

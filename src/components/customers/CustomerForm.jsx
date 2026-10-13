@@ -8,9 +8,9 @@ import {
   FaHeadset, FaToggleOn, FaToggleOff, FaCircle,
   FaHistory, FaGlobe, FaMobileAlt, FaPaintBrush,
   FaSearch, FaShoppingCart, FaTools, FaWhatsapp,
-  FaIdCard,
+  FaIdCard, FaBoxes,
 } from "react-icons/fa";
-import { customerTags } from "../../data/customerData.jsx";
+// (line deleted — tags are removed from this form)
 
 const BRAND = "#1F6F5C";
 const BRAND_DARK = "#175646";
@@ -340,6 +340,7 @@ const EMPTY_FORM = {
   customerType: "Business",
   status: "Active",
   tags: [],
+  products: [],
   notes: [{ id: nextId(), text: "" }],
 };
 
@@ -374,6 +375,7 @@ function buildFormFromCustomer(c) {
     customerType: c.customerType ?? c.type ?? "Business",
     status: c.status === "Lead" ? "Active" : (c.status ?? "Active"),
     tags: c.tags ?? [],
+    products: Array.isArray(c.products) ? c.products : [],
     notes: c.notes
       ? (Array.isArray(c.notes) ? c.notes.map(t => ({ id: nextId(), text: t })) : [{ id: nextId(), text: c.notes }])
       : [{ id: nextId(), text: "" }],
@@ -515,13 +517,15 @@ function CustomerPreview({ form, customerId }) {
           ))}
         </div>
 
-        {/* Tags row */}
-        {form.tags.length > 0 && (
+        {/* Products */}
+        {form.products.length > 0 && (
           <div style={styles.docBlock}>
-            <div style={styles.docBlockLabel}>TAGS</div>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-              {form.tags.map(tag => (
-                <span key={tag} style={styles.tagChip}>{tag}</span>
+            <div style={styles.docBlockLabel}>PRODUCTS & SERVICES</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              {form.products.map(p => (
+                <div key={p.productId} style={{ fontSize: "0.78rem", color: "#0f172a" }}>
+                  • {p.name} × {p.qty || 1} — ₹{Number(p.rate).toLocaleString("en-IN")}
+                </div>
               ))}
             </div>
           </div>
@@ -564,6 +568,32 @@ export default function CustomerForm({ customer, allCustomers = [], onSave, onBa
   );
   const [tagInput, setTagInput] = useState("");
 
+  // Products from the Products page (for the Products & Services section)
+  const [productList, setProductList] = useState([]);
+  useEffect(() => {
+    fetch(`${import.meta.env.VITE_API_URL}/products`)
+      .then(r => r.json())
+      .then(d => setProductList(Array.isArray(d) ? d : []))
+      .catch(err => console.error("Failed to load products:", err));
+  }, []);
+
+  const addProduct = (pid) => {
+    const p = productList.find(x => x.id === pid);
+    if (!p || form.products.some(x => x.productId === pid)) return;
+    setForm(f => ({
+      ...f,
+      products: [...f.products, {
+        productId: p.id, name: p.name, type: p.type, unit: p.unit,
+        rate: Number(p.sale_rate) || 0, gstType: p.gst_type, gstPercent: p.gst_percent, qty: 1,
+      }],
+    }));
+  };
+  const removeProduct = (pid) =>
+    setForm(f => ({ ...f, products: f.products.filter(x => x.productId !== pid) }));
+  const updateProductQty = (pid, qty) =>
+    setForm(f => ({ ...f, products: f.products.map(x => x.productId === pid ? { ...x, qty } : x) }));
+  const originalQty = (pid) =>
+    Number(customer?.products?.find(x => x.productId === pid)?.qty) || 0;
   // Draft state: while `pendingDraft` is set, we're waiting on the user to
   // choose Restore/Discard, so autosave is paused (we don't want to silently
   // overwrite the very draft we're asking them about).
@@ -668,6 +698,12 @@ export default function CustomerForm({ customer, allCustomers = [], onSave, onBa
     }
     const badWa = form.whatsapps.find(w => w.value.trim() && !validNum(w.value));
     if (badWa) e.whatsapps = "Enter a valid WhatsApp number";
+    const tooMany = form.products.find(p => {
+      const live = productList.find(x => x.id === p.productId);
+      if (!live || live.type === "Service") return false;
+      return Number(p.qty) > Number(live.stock_qty) + originalQty(p.productId);
+    });
+    if (tooMany) e.products = `Not enough stock for ${tooMany.name}`;
     return e;
   };
 
@@ -713,6 +749,7 @@ export default function CustomerForm({ customer, allCustomers = [], onSave, onBa
       totalBilled: customer?.totalBilled ?? 0,
       notes: filledNotes.map(n => n.text),
       tags: form.tags,
+      products: form.products.map(p => ({ ...p, qty: Number(p.qty) || 1 })),
     };
     setTimeout(() => {
       setSaving(false);
@@ -1016,58 +1053,89 @@ export default function CustomerForm({ customer, allCustomers = [], onSave, onBa
               </select>
             </SectionRow>
 
-            <SectionRow icon={<FaTags size={12} />} title="Tags">
-              {form.tags.length > 0 && (
-                <div className="d-flex flex-wrap gap-2 mb-2">
-                  {form.tags.map(tag => (
-                    <span key={tag} className="d-flex align-items-center gap-2 rounded-pill fw-semibold"
-                      style={{
-                        padding: "5px 10px 5px 14px", fontSize: "0.76rem",
-                        backgroundColor: BRAND_SOFT, color: BRAND_DARK, border: `1.5px solid ${BRAND_SOFT_BORDER}`,
-                      }}>
-                      {tag}
-                      <FaTimes size={10} style={{ cursor: "pointer" }} onClick={() => removeTag(tag)} />
-                    </span>
-                  ))}
+                       <SectionRow icon={<FaBoxes size={12} />} title="Products & Services">
+              <select
+                value=""
+                onChange={e => addProduct(e.target.value)}
+                style={styles.select}
+              >
+                <option value="">+ Add a product or service…</option>
+                {productList
+                  .filter(p => !form.products.some(x => x.productId === p.id))
+                  .map(p => {
+                    const out = p.type !== "Service" && Number(p.stock_qty) <= 0;
+                    return (
+                      <option key={p.id} value={p.id} disabled={out}>
+                        {p.name} — ₹{Number(p.sale_rate).toLocaleString("en-IN")}
+                        {p.type === "Service" ? " (Service)" : out ? " — Out of stock" : ` — Stock: ${p.stock_qty}`}
+                      </option>
+                    );
+                  })}
+              </select>
+              {productList.length === 0 && (
+                <div style={{ fontSize: "0.75rem", color: "#94a3b8", marginTop: 6 }}>
+                  No products yet. Add them on the Products page first.
                 </div>
               )}
-              <div className="d-flex gap-2">
-                <input type="text" value={tagInput} onChange={e => setTagInput(e.target.value)}
-                  onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); addTag(tagInput); } }}
-                  placeholder="Type a tag and press Enter…" style={styles.input} autoComplete="off" />
-                <button onClick={() => addTag(tagInput)}
-                  className="d-flex align-items-center gap-1 border-0 rounded-3 fw-semibold px-3"
-                  style={{ background: BRAND, color: "#fff", cursor: "pointer", fontSize: "0.78rem", flexShrink: 0 }}>
-                  <FaPlus size={10} /> Add
-                </button>
-              </div>
-              {customerTags.filter(t => !form.tags.includes(t)).length > 0 && (
-                <div className="d-flex flex-wrap gap-2 mt-2">
-                  {customerTags.filter(t => !form.tags.includes(t)).map(tag => {
-                    const { icon: Icon, bg, color, border } = tagStyleFor(tag);
+
+              {form.products.length > 0 && (
+                <div className="d-flex flex-column gap-2 mt-3">
+                  {form.products.map(p => {
+                    const live = productList.find(x => x.id === p.productId) || {};
+                    const isService = (live.type || p.type) === "Service";
+                    const stock = Number(live.stock_qty);
+                    const available = isService ? 0 : stock + originalQty(p.productId);
+                    const low = !isService && available <= 5;
+                    const over = !isService && Number(p.qty) > available;
+                    const gstText = (live.gst_type || p.gstType) === "Without GST"
+                      ? "No GST"
+                      : `${live.gst_percent ?? p.gstPercent}% ${live.gst_type || p.gstType || ""}`;
                     return (
-                      <button key={tag} onClick={() => addTag(tag)}
-                        className="d-flex align-items-center gap-2 rounded-pill fw-semibold"
-                        style={{
-                          padding: "6px 14px", fontSize: "0.75rem", cursor: "pointer",
-                          border: `1.5px solid ${border}`, backgroundColor: bg, color: color,
-                          transition: "transform 0.15s ease, box-shadow 0.15s ease",
-                        }}
-                        onMouseEnter={e => {
-                          e.currentTarget.style.transform = "translateY(-2px)";
-                          e.currentTarget.style.boxShadow = `0 4px 10px ${color}33`;
-                        }}
-                        onMouseLeave={e => {
-                          e.currentTarget.style.transform = "translateY(0)";
-                          e.currentTarget.style.boxShadow = "none";
-                        }}
-                      >
-                        <Icon size={11} /> {tag}
-                      </button>
+                      <div key={p.productId} style={{
+                        border: "1.5px solid #e2e8f0", borderRadius: 10, padding: "10px 12px",
+                        display: "flex", flexWrap: "wrap", alignItems: "center", gap: 12,
+                      }}>
+                        <div style={{ flex: "1 1 150px", minWidth: 0 }}>
+                          <div style={{ fontWeight: 700, fontSize: "0.85rem", color: "#0f172a" }}>{p.name}</div>
+                          <div style={{ fontSize: "0.7rem", color: "#94a3b8" }}>
+                            {live.type || p.type}{(live.unit || p.unit) ? ` · ${live.unit || p.unit}` : ""}
+                          </div>
+                        </div>
+                        <div style={{ fontSize: "0.78rem", color: "#334155" }}>
+                          <div style={{ fontWeight: 600 }}>₹{Number(live.sale_rate ?? p.rate).toLocaleString("en-IN")}</div>
+                          <div style={{ fontSize: "0.68rem", color: "#94a3b8" }}>{gstText}</div>
+                        </div>
+                        <div style={{ fontSize: "0.78rem", fontWeight: 700, minWidth: 64,
+                          color: isService ? "#94a3b8" : low ? "#ef4444" : "#059669" }}>
+                          {isService
+                            ? "Service"
+                            : Number.isNaN(available)
+                              ? "Stock: —"
+                              : `Stock: ${available}${Number(p.qty) > 0 ? ` → ${available - Number(p.qty)} left` : ""}`}
+                          {low && !Number.isNaN(available) && <span style={{ fontSize: "0.62rem", marginLeft: 4 }}>LOW</span>}
+                        </div>
+                        <input
+                          type="number" min="1" value={p.qty}
+                          onChange={e => updateProductQty(p.productId, e.target.value)}
+                          title="Quantity"
+                          style={{ ...styles.input, width: 70, flexShrink: 0 }}
+                        />
+                        <button onClick={() => removeProduct(p.productId)}
+                          className="border-0 bg-transparent d-flex align-items-center justify-content-center"
+                          style={{ color: "#ef4444", cursor: "pointer", width: 26, height: 26 }}>
+                          <FaTimes size={12} />
+                        </button>
+                        {over && (
+                          <div style={{ flexBasis: "100%", fontSize: "0.72rem", color: "#ef4444", fontWeight: 600 }}>
+                            Only {available} in stock.
+                          </div>
+                        )}
+                      </div>
                     );
                   })}
                 </div>
               )}
+              {errors.products && <div style={styles.errorMsg}>{errors.products}</div>}
             </SectionRow>
 
             <SectionRow icon={<FaStickyNote size={12} />} title="Notes">

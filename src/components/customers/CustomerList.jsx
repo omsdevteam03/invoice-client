@@ -5,6 +5,21 @@ import {
   FaPauseCircle, FaRupeeSign, FaUserPlus, FaChevronDown, FaHistory, FaTimes,
 } from "react-icons/fa";
 import { DRAFT_PREFIX, timeAgo } from "./CustomerForm";
+import { useAuth } from "../../context/AuthContext"; // adjust path
+
+// Small "Created by" pill — mine = grey, someone else = amber
+const CreatedBy = ({ rec, userId }) => {
+  const mine = rec.createdBy && String(rec.createdBy) === String(userId);
+  return (
+    <span style={{
+      display: "inline-block", marginTop: 3, fontSize: "0.66rem", fontWeight: 600,
+      padding: "1px 8px", borderRadius: 999, whiteSpace: "nowrap",
+      background: mine ? "#f1f5f9" : "#fef3c7", color: mine ? "#64748b" : "#b45309",
+    }}>
+      Created by {mine ? "you" : (rec.createdByName || "Unknown")}
+    </span>
+  );
+};
 
 // ── Read every leftover, unsaved customer-form draft out of localStorage ───
 function readDrafts() {
@@ -546,6 +561,7 @@ function EditableBadge({ value, options, config, onChange, variant }) {
 
 // NEW
 export default function CustomerList({ customers, search, setSearch, filterStatus, setFilterStatus, onNew, onView, onEdit, onDelete, onQuickUpdate, onQuickAdd, onUseProfile }) {    const navigate = useNavigate();
+  const { user } = useAuth();
 
 
   // ✅ Confirm Dialog State — deleteIds holds either one id (row delete) or many (bulk delete)
@@ -868,6 +884,7 @@ Unsaved customer draft{draft.key.startsWith(`${DRAFT_PREFIX}new_`) ? "" : " (edi
                         <div className="fw-semibold" style={{ color: "#0f172a", fontSize: "0.85rem" }}>{c.name}</div>
                         <div className="cl-desktop-id" style={{ color: "#94a3b8", fontSize: "0.72rem" }}>{c.id}</div>
                         <div className="cl-mobile-company">{c.company || ""}</div>
+                        <CreatedBy rec={c} userId={user?.id} />
                       </div>
                     </div>
                   </td>

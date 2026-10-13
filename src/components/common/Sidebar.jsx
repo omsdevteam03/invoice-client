@@ -1,8 +1,8 @@
 import { useState } from "react";
-import { NavLink, useNavigate } from "react-router-dom";
+import { NavLink, useNavigate, useLocation } from "react-router-dom";
 import {
   FiHome, FiUsers, FiFileText, FiFile, FiBox,
-  FiSettings, FiLogOut, FiZap, FiUserCheck
+  FiSettings, FiLogOut, FiZap, FiUserCheck, FiMoreHorizontal
 } from "react-icons/fi";
 import useAuth from "../../hooks/useAuth";
 
@@ -17,8 +17,8 @@ const SIDEBAR_EXPANDED_WIDTH = 216; // expanded width shown on hover (desktop on
 
 const mainLinks = [
   { to: "/", icon: FiHome, label: "Dashboard" },
+    { to: "/products", icon: FiBox, label: "Products" },
   { to: "/customers", icon: FiUsers, label: "Customers" },
-  { to: "/products", icon: FiBox, label: "Products" },
   { to: "/quotations", icon: FiFileText, label: "Quotations" },
   { to: "/invoices", icon: FiFile, label: "Invoices" },
   { to: "/users", icon: FiUserCheck, label: "Users" },
@@ -28,6 +28,8 @@ const mainLinks = [
 const generalLinks = [
   { to: "/settings", icon: FiSettings, label: "Settings" },
 ];
+
+const BAR_COUNT = 4; // icons shown in the mobile bottom bar; the rest go under the 3 dots
 
 // All layout that must flip between "vertical icon rail" and "bottom tab bar"
 // lives here, driven purely by a media query so no JS resize-listener is needed.
@@ -161,6 +163,52 @@ const SidebarStyles = () => (
       }
       .nav-item-wrap.is-active::before { display: none; }
       .nav-label { display: none; }
+
+      /* items that don't fit move into the 3-dots menu */
+      .nav-extra { display: none; }
+      .more-btn {
+        margin: 0 2px; display: flex; flex-direction: column; align-items: center;
+        padding: 8px 6px; border: none; background: transparent;
+        border-radius: 16px; cursor: pointer; flex-shrink: 1;
+      }
+      .more-btn.is-active {
+        background: linear-gradient(135deg, ${ACCENT_LIGHT}, ${ACCENT_SOFT});
+        box-shadow: inset 0 0 0 1px rgba(31,111,92,0.12), 0 1px 3px rgba(31,111,92,0.08);
+      }
+    }
+
+    /* 3-dots button and menu: phones only */
+    @media (min-width: 761px) {
+      .more-btn, .more-sheet, .more-backdrop { display: none !important; }
+    }
+    .more-backdrop {
+      position: fixed; inset: 0; z-index: 9997;
+      background: rgba(15,23,42,0.35);
+      backdrop-filter: blur(2px); -webkit-backdrop-filter: blur(2px);
+    }
+    .more-sheet {
+      position: fixed; left: 50%; transform: translateX(-50%);
+      bottom: calc(14px + 62px + 12px + env(safe-area-inset-bottom, 0px));
+      width: calc(100% - 28px); max-width: 360px; z-index: 9999;
+      background: rgba(255,255,255,0.98); border-radius: 22px; padding: 8px;
+      box-shadow: 0 18px 40px rgba(15,23,42,0.22), 0 2px 8px rgba(15,23,42,0.06);
+      max-height: 60vh; overflow-y: auto;
+      animation: more-pop 0.16s ease-out;
+    }
+    @keyframes more-pop {
+      from { opacity: 0; transform: translateX(-50%) translateY(8px); }
+      to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+    }
+    .more-item {
+      display: flex; align-items: center; gap: 10px; width: 100%;
+      padding: 4px 10px; border: none; background: transparent; box-sizing: border-box;
+      border-radius: 14px; text-decoration: none; cursor: pointer;
+      color: #475569; font-size: 0.9rem; font-weight: 600; text-align: left;
+    }
+    .more-item:hover { background: rgba(15,23,42,0.04); }
+    .more-item.active {
+      background: linear-gradient(135deg, ${ACCENT_LIGHT}, ${ACCENT_SOFT});
+      color: ${ACCENT_DARK};
     }
   `}</style>
 );
@@ -180,11 +228,11 @@ function IconButton({ icon: Icon, active, danger }) {
   );
 }
 
-function NavItem({ to, icon, label, end }) {
+function NavItem({ to, icon, label, end, extra }) {
   const [hovered, setHovered] = useState(false);
 
   return (
-    <NavLink to={to} end={end} style={{ textDecoration: "none" }}>
+    <NavLink to={to} end={end} className={extra ? "nav-extra" : undefined} style={{ textDecoration: "none" }}>
       {({ isActive }) => (
         <div
           className={`nav-item-wrap ${isActive ? "is-active" : ""} ${hovered ? "is-hover" : ""}`}
@@ -209,6 +257,14 @@ export default function Sidebar() {
   const visibleLinks = mainLinks.filter(
     (link) => link.to !== "/users" || user?.role === "Admin"
   );
+  const settingsLinks = generalLinks.filter(
+    (link) => link.to !== "/settings" || user?.role === "Admin"
+  );
+  const allLinks = [...visibleLinks, ...settingsLinks];
+  const extraLinks = allLinks.slice(BAR_COUNT); // hidden from the mobile bar
+  const { pathname } = useLocation();
+  const [showMore, setShowMore] = useState(false);
+  const moreActive = extraLinks.some((l) => pathname.startsWith(l.to));
   const navigate = useNavigate();
   const [showConfirm, setShowConfirm] = useState(false);
   const [logoutHovered, setLogoutHovered] = useState(false);
@@ -233,17 +289,26 @@ export default function Sidebar() {
 
         {/* Nav */}
         <div className="sidebar-nav">
-         {visibleLinks.map(link => (
-  <NavItem key={link.to} {...link} end={link.to === "/"} />
-))}
+          {visibleLinks.map((link, i) => (
+            <NavItem key={link.to} {...link} end={link.to === "/"} extra={i >= BAR_COUNT} />
+          ))}
 
           <div className="sidebar-divider" />
 
-         {generalLinks
-  .filter((link) => link.to !== "/settings" || user?.role === "Admin")
-  .map(link => (
-    <NavItem key={link.to} {...link} />
-  ))}
+          {settingsLinks.map(link => (
+            <NavItem key={link.to} {...link} extra />
+          ))}
+
+          {/* 3-dots button (mobile only) */}
+          <button
+            type="button"
+            className={`more-btn${moreActive || showMore ? " is-active" : ""}`}
+            onClick={() => setShowMore((s) => !s)}
+            aria-label="More"
+            aria-expanded={showMore}
+          >
+            <IconButton icon={FiMoreHorizontal} active={moreActive || showMore} />
+          </button>
 
           {/* Logout — kept on desktop, hidden on mobile where it's already
               reachable from the navbar's profile dropdown */}
@@ -275,6 +340,39 @@ export default function Sidebar() {
           <span className="live-dot" title="Live" />
         </div>
       </div>
+
+      {showMore && (
+        <>
+          <div className="more-backdrop" onClick={() => setShowMore(false)} />
+          <div className="more-sheet" role="menu">
+            {allLinks.map(({ to, icon: Icon, label }) => (
+              <NavLink
+                key={to}
+                to={to}
+                end={to === "/"}
+                onClick={() => setShowMore(false)}
+                className={({ isActive }) => `more-item${isActive ? " active" : ""}`}
+              >
+                {({ isActive }) => (
+                  <>
+                    <IconButton icon={Icon} active={isActive} />
+                    <span>{label}</span>
+                  </>
+                )}
+              </NavLink>
+            ))}
+            <button
+              type="button"
+              className="more-item"
+              style={{ color: "#ef4444" }}
+              onClick={() => { setShowMore(false); setShowConfirm(true); }}
+            >
+              <IconButton icon={FiLogOut} danger />
+              <span>Logout</span>
+            </button>
+          </div>
+        </>
+      )}
 
       {/* ── Logout Confirmation Modal ── */}
       {showConfirm && (

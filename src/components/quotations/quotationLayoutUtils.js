@@ -74,7 +74,11 @@ export function computeCostTotals(quotation, defaultGstPercent = 18) {
 export function getCostLines(quotation, defaultGstPercent = 18) {
   const { items, gstPercent, gstMode, gstAmount, total } = computeCostTotals(quotation, defaultGstPercent);
   if (items.length === 0) return { lines: [], grandLine: null };
-  const lines = items.map(it => `${it.name}: ${formatINR(it.amount)}`);
+  const lines = items.map(it => {
+    const qty = Number(it.qty) || 1;
+    const label = qty > 1 ? `${it.name} × ${qty}` : it.name;
+    return `${label}: ${formatINR(it.amount)}`;
+  });
   if (gstMode === "with") lines.push(`GST (${gstPercent}%): ${formatINR(gstAmount)}`);
   return { lines, grandLine: `Total Project Cost: ${formatINR(total)}` };
 }
