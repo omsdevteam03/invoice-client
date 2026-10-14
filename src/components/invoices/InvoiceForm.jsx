@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { FaArrowLeft, FaSave, FaPlus, FaTrash, FaEye, FaEyeSlash, FaTimes, FaChevronDown, FaSearch } from "react-icons/fa";
-import { INVOICE_LABELS, INVOICE_FONT, InvoiceLangToggle, useTamilDescriptions, translateToTamil, unitLabel } from "./invoiceLang";
+import { INVOICE_LABELS, INVOICE_FONT, InvoiceLangToggle, useTamilDescriptions, translateToTamil, unitLabel, numberToWordsTamil } from "./invoiceLang";
+import axiosInstance from "../../api/axiosInstance"; // same helper CompanySettings uses
 
 function logoStyle(shape, size) {
   if (shape === "circle") return { width: size, height: size, borderRadius: "50%", objectFit: "cover" };
@@ -347,7 +348,11 @@ function InvoicePreview({ form, isMobile, onClose }) {
   const amountPaid = Number(form.amountPaid || 0);
   const due = total - amountPaid;
 
-  const words = total > 0 ? `INR – Indian Rupees ${numberToWords(total)} Only` : "—";
+  const words = total > 0
+    ? (previewLang === "ta"
+        ? `${L.wordsPrefix} ${numberToWordsTamil(total)} ${L.wordsSuffix}`
+        : `${L.wordsPrefix} ${numberToWords(total)} ${L.wordsSuffix}`)
+    : "—";
 
   // On mobile the preview is now rendered inline at the end of the form
   // (not a fixed full-screen overlay), so it should flow naturally with
@@ -439,13 +444,13 @@ function InvoicePreview({ form, isMobile, onClose }) {
                 <td colSpan={5} style={{ border: "1px solid #000", padding: "6px 10px" }}>
                   <div style={{ fontSize: "0.6rem", color: "#64748b" }}>{L.buyer}</div>
                   <div style={{ fontWeight: 700, fontSize: "0.72rem", color: "#0f172a" }}>
-                    Name: {form.buyerName || <span style={{ color: "#cbd5e1" }}>Buyer Name</span>}
+                    {L.name}: {form.buyerName || <span style={{ color: "#cbd5e1" }}>Buyer Name</span>}
                   </div>
                   {form.buyerCompanyName && (
-                    <div style={{ fontSize: "0.65rem", fontWeight: 600, color: "#334155" }}>Company: {form.buyerCompanyName}</div>
+                    <div style={{ fontSize: "0.65rem", fontWeight: 600, color: "#334155" }}>{L.company}: {form.buyerCompanyName}</div>
                   )}
                   {form.buyerAddress && (
-                    <div style={{ fontSize: "0.65rem", color: "#334155", whiteSpace: "pre-line" }}>Address: {form.buyerAddress}</div>
+                    <div style={{ fontSize: "0.65rem", color: "#334155", whiteSpace: "pre-line" }}>{L.address}: {form.buyerAddress}</div>
                   )}
 
                   <div style={{ fontSize: "0.65rem", color: "#334155" }}>{L.mobile}: {form.buyerMobile}</div>
@@ -466,7 +471,16 @@ function InvoicePreview({ form, isMobile, onClose }) {
               {form.items.map((item, i) => (
                 <tr key={i}>
                   {cell(item.sl, { textAlign: "center" })}
-                  {cell(tDesc(item) || <span style={{ color: "#cbd5e1" }}>—</span>)}
+                  {cell(
+                    <>
+                      {tDesc(item) || <span style={{ color: "#cbd5e1" }}>—</span>}
+                      {Number(item.discount) > 0 && (
+                        <div style={{ fontSize: "0.58rem", color: "#64748b" }}>
+                          {previewLang === "ta" ? "தள்ளுபடி" : "Discount"}: {item.discountType === "amount" ? `₹${Number(item.discount).toLocaleString("en-IN")}` : `${item.discount}%`}
+                        </div>
+                      )}
+                    </>
+                  )}
                   {cell(`${item.qty}${item.unit ? " " + unitLabel(item.unit, previewLang) : ""}`, { textAlign: "center", whiteSpace: "nowrap" })}
                   {cell(formatAmount(item.rate), { textAlign: "right" })}
                   {cell(formatAmount(item.amount), { textAlign: "right" })}
@@ -474,12 +488,12 @@ function InvoicePreview({ form, isMobile, onClose }) {
               ))}
 
               <tr>
-                {cell("")}{cell(<strong>{L.subTotal}</strong>)}{cell("")}{cell("")}
-                {cell(<strong>{formatAmount(subtotal)}</strong>, { textAlign: "right" })}
+{cell("")}{cell(<strong>{L.subTotal}</strong>)}{cell("")}{cell("")}
+{cell(<strong>{formatAmount(form.gstType === "GST Included" ? total : subtotal)}</strong>, { textAlign: "right" })}
               </tr>
-              {form.gstType !== "No GST" && (
-                <tr>
-                                {cell("")}{cell(<strong>{`${L.gst} @ ${gstPercent}%${form.gstType === "GST Included" ? ` (${L.included})` : ""}`}</strong>)}{cell("")}{cell("")}
+              {form.gstType === "With GST" && (
+  <tr>
+    {cell("")}{cell(<strong>{`${L.gst} @ ${gstPercent}%`}</strong>)}{cell("")}{cell("")}   
                   {cell(<strong>{formatAmount(tax)}</strong>, { textAlign: "right" })}
                 </tr>
               )}
@@ -1089,12 +1103,30 @@ function ItemDescriptionField({ products = [], item, onType, onPick, style, stoc
   );
 }
 
+// Row amount = qty × rate − discount (discountType: "percent" or "amount")
+const calcAmount = (it) => {
+  const gross = (Number(it.qty) || 0) * (Number(it.rate) || 0);
+  const d = Number(it.discount) || 0;
+  const off = it.discountType === "amount" ? d : (gross * Math.min(d, 100)) / 100;
+  return Math.max(0, Math.round((gross - off) * 100) / 100);
+};
+
+// Desktop items grid: Sl | Description | Qty+Unit | Rate | Discount | Amount | delete
+const ITEM_GRID = "22px minmax(130px,1fr) 110px 84px 108px 84px 20px";
+
 export default function InvoiceForm({ invoice, invoices = [], customers = [], onSave, onBack, companyInfo, onCompanyChange, docSettings, invoiceType = "Final" }) {
   const isEdit = !!invoice;
   const isMobile = useIsMobile(900);
   const GST_PRESETS = [1, 3, 5, 12, 18, 28];
   const [customGst, setCustomGst] = useState(false);
   const [showCustomerList, setShowCustomerList] = useState(false);
+
+  const [companies, setCompanies] = useState([]);
+  useEffect(() => {
+    axiosInstance.get("/settings/companies")
+      .then(res => setCompanies(Array.isArray(res.data) ? res.data : []))
+      .catch(err => console.error("Failed to load companies:", err));
+  }, []);
 
   const [products, setProducts] = useState([]);
 useEffect(() => {
@@ -1241,12 +1273,22 @@ useEffect(() => {
     setShowCustomerList(false);
   };
 
+    const pickCompany = (c) => {
+    setForm(prev => ({
+      ...prev,
+      companyName: c.companyName || "",
+      companyAddress: c.companyAddress || "",
+      companyGSTIN: c.gstin || "",
+      logo: c.logo || null,
+    }));
+  };
+
   const updateItem = (i, field, value) => {
     const items = [...form.items];
     items[i] = { ...items[i], [field]: value };
     if (field === "description") items[i].descriptionTa = undefined;
-    if (field === "qty" || field === "rate") {
-      items[i].amount = Number(items[i].qty) * Number(items[i].rate);
+    if (["qty", "rate", "discount", "discountType"].includes(field)) {
+      items[i].amount = calcAmount(items[i]);
     }
     setForm(prev => ({ ...prev, items }));
   };
@@ -1265,7 +1307,7 @@ useEffect(() => {
       descriptionTa: undefined,
       unit: p.unit || items[i].unit || "Nos",
       rate,
-      amount: Number(items[i].qty || 1) * rate,
+      amount: calcAmount({ ...items[i], qty: items[i].qty || 1, rate }),
     };
   }
   setForm(prev => ({ ...prev, items }));
@@ -1563,8 +1605,9 @@ const handleSave = async () => {
                   <label style={{ fontSize: "0.75rem", fontWeight: 600, color: "#64748b", display: "block", marginBottom: 4 }}>Company Name</label>
                   <CompanySelectField
                     value={form.companyName}
-                    onChange={(val) => updateField("companyName", val)}
-                    placeholder="Enter Company Name"
+                    companies={companies}
+                    onSelect={pickCompany}
+                    placeholder="Select Company"
                     style={inp}
                   />
                 </div>
@@ -1834,6 +1877,26 @@ stockFor={p => availableStock(p.id, i)}
                             <input type="number" className="no-spinner" value={item.rate} onChange={e => updateItem(i, "rate", e.target.value)} placeholder="0" style={{ ...inp, fontSize: "0.82rem" }} />
                           </div>
                           <div className="col-6">
+                            <label style={{ fontSize: "0.72rem", fontWeight: 600, color: "#64748b", display: "block", marginBottom: 4 }}>Discount</label>
+                            <div className="d-flex gap-1">
+                              <input
+                                type="number" className="no-spinner" min="0"
+                                value={item.discount ?? ""}
+                                onChange={e => updateItem(i, "discount", e.target.value)}
+                                placeholder="0"
+                                style={{ ...inp, fontSize: "0.82rem", minWidth: 0 }}
+                              />
+                              <select
+                                value={item.discountType || "percent"}
+                                onChange={e => updateItem(i, "discountType", e.target.value)}
+                                style={{ ...inp, fontSize: "0.82rem", padding: "8px 2px", width: 52, flexShrink: 0, cursor: "pointer" }}
+                              >
+                                <option value="percent">%</option>
+                                <option value="amount">₹</option>
+                              </select>
+                            </div>
+                          </div>
+                          <div className="col-6">
                             <label style={{ fontSize: "0.72rem", fontWeight: 600, color: "#64748b", display: "block", marginBottom: 4 }}>Amount</label>
                             <div className="fw-semibold" style={{ fontSize: "0.85rem", color: "#0f172a", padding: "8px 0" }}>
                               ₹{Number(item.amount).toLocaleString()}
@@ -1846,29 +1909,28 @@ stockFor={p => availableStock(p.id, i)}
                 ) : (
                   // ── Table layout for items on desktop ────────────────────
                   <div className="rounded-3 overflow-hidden" style={{ border: "1px solid #e2e8f0" }}>
-                    <div className="row g-0 px-3 py-2" style={{ backgroundColor: "#0f172a" }}>
-                      {["Sl.", "Description of Services", "Qty", "Rate (₹)", "Amount (₹)", ""].map((h, i) => (
-                        <div key={i}
-                          className={i === 1 ? "col-4" : i === 2 ? "col-2" : i === 5 ? "col-1" : "col"}
-                          style={{ color: "#94a3b8", fontSize: "0.72rem", fontWeight: 700, letterSpacing: "0.05em" }}>
+                    <div className="px-3 py-2" style={{ display: "grid", gridTemplateColumns: ITEM_GRID, gap: 6, backgroundColor: "#0f172a" }}>
+                      {["Sl.", "Description of Services", "Qty", "Rate (₹)", "Discount", "Amount (₹)", ""].map((h, i) => (
+                        <div key={i} style={{ color: "#94a3b8", fontSize: "0.72rem", fontWeight: 700, letterSpacing: "0.05em" }}>
                           {h}
                         </div>
                       ))}
                     </div>
 
                     {form.items.map((item, i) => (
-                      <div key={i} className="row g-0 px-3 py-2 align-items-center" style={{ borderTop: "1px solid #f1f5f9" }}>
-                        <div className="col" style={{ fontSize: "0.82rem", color: "#94a3b8" }}>{item.sl}</div>
-                        <div className="col-4 pe-2">
-                          <ItemDescriptionField
-                            products={products}
-                            item={item}
-                            onType={v => typeDescription(i, v)}
-                            onPick={v => pickProduct(i, v)}
-                            style={{ ...inp, fontSize: "0.82rem" }}
-                          />
-                        </div>
-                        <div className="col-2 pe-2 d-flex gap-1">
+                      <div key={i} className="px-3 py-2" style={{ display: "grid", gridTemplateColumns: ITEM_GRID, gap: 6, alignItems: "center", borderTop: "1px solid #f1f5f9" }}>
+                        <div style={{ fontSize: "0.82rem", color: "#94a3b8" }}>{item.sl}</div>
+
+                        <ItemDescriptionField
+                          products={products}
+                          item={item}
+                          onType={v => typeDescription(i, v)}
+                          stockFor={p => availableStock(p.id, i)}
+                          onPick={v => pickProduct(i, v)}
+                          style={{ ...inp, fontSize: "0.82rem" }}
+                        />
+
+                        <div className="d-flex gap-1">
                           <input type="number" className="no-spinner" value={item.qty} onChange={e => updateItem(i, "qty", e.target.value)} placeholder="1" style={{ ...inp, fontSize: "0.82rem", padding: "8px 6px", minWidth: 0 }} />
                           <UnitSelectField
                             value={item.unit ?? ""}
@@ -1876,12 +1938,32 @@ stockFor={p => availableStock(p.id, i)}
                             style={{ ...inp, fontSize: "0.78rem", padding: "8px 6px", width: 62, flexShrink: 0 }}
                           />
                         </div>
-                        <div className="col pe-2">
-                          <input type="number" className="no-spinner" value={item.rate} onChange={e => updateItem(i, "rate", e.target.value)} placeholder="0" style={{ ...inp, fontSize: "0.82rem" }} />                        </div>
-                        <div className="col fw-semibold" style={{ fontSize: "0.82rem", color: "#0f172a" }}>
+
+                        <input type="number" className="no-spinner" value={item.rate} onChange={e => updateItem(i, "rate", e.target.value)} placeholder="0" style={{ ...inp, fontSize: "0.82rem", padding: "8px 6px", minWidth: 0 }} />
+
+                        <div className="d-flex gap-1">
+                          <input
+                            type="number" className="no-spinner" min="0"
+                            value={item.discount ?? ""}
+                            onChange={e => updateItem(i, "discount", e.target.value)}
+                            placeholder="0"
+                            style={{ ...inp, fontSize: "0.82rem", padding: "8px 6px", minWidth: 0 }}
+                          />
+                          <select
+                            value={item.discountType || "percent"}
+                            onChange={e => updateItem(i, "discountType", e.target.value)}
+                            style={{ ...inp, fontSize: "0.78rem", padding: "8px 2px", width: 48, flexShrink: 0, cursor: "pointer" }}
+                          >
+                            <option value="percent">%</option>
+                            <option value="amount">₹</option>
+                          </select>
+                        </div>
+
+                        <div className="fw-semibold" style={{ fontSize: "0.82rem", color: "#0f172a" }}>
                           ₹{Number(item.amount).toLocaleString()}
                         </div>
-                        <div className="col-1 text-end">
+
+                        <div className="text-end">
                           {form.items.length > 1 && (
                             <button onClick={() => removeItem(i)} className="border-0 bg-transparent p-0" style={{ color: "#ef4444", cursor: "pointer" }}>
                               <FaTrash size={12} />
@@ -1904,11 +1986,11 @@ stockFor={p => availableStock(p.id, i)}
               <div className="d-flex justify-content-end mb-4">
                 <div style={{ minWidth: isMobile ? "100%" : "280px", width: isMobile ? "100%" : "auto" }}>
                   {[
-                    { label: "Sub Total", value: `₹${subtotal.toLocaleString()}` },
-                    ...(form.gstType !== "No GST" ? [{
-                      label: `GST @ ${gstPercent}%${form.gstType === "GST Included" ? " (Included)" : ""}`,
-                      value: `₹${tax.toLocaleString()}`
-                    }] : []),
+                 { label: "Sub Total", value: `₹${(form.gstType === "GST Included" ? total : subtotal).toLocaleString()}` },
+...(form.gstType === "With GST" ? [{
+  label: `GST @ ${gstPercent}%`,
+  value: `₹${tax.toLocaleString()}`
+}] : []),
                     { label: "Total Invoice Value", value: `₹${total.toLocaleString()}`, bold: true },
                     { label: "Amount Paid", value: `₹${Number(form.amountPaid || 0).toLocaleString()}` },
                   ].map(({ label, value, bold }) => (

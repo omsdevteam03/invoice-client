@@ -12,6 +12,7 @@ export default function ChatSidebar({
   onNewChat,
   onDeleteChat,
   onRenameChat,
+  onHide,
 }) {
   const [openMenuId, setOpenMenuId] = useState(null);
   const [editingId, setEditingId] = useState(null);
@@ -103,9 +104,25 @@ export default function ChatSidebar({
 
   return (
     <div style={styles.sidebar}>
-      <button style={styles.newChatBtn} onClick={onNewChat}>
-        + New Chat
-      </button>
+      <div style={styles.topRow}>
+        <button style={styles.newChatBtn} onClick={onNewChat}>
+          + New Chat
+        </button>
+        {onHide && (
+          <button
+            style={styles.hideBtn}
+            onClick={onHide}
+            title="Hide chats"
+            aria-label="Hide chats"
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+              strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="4" width="18" height="16" rx="3" />
+              <line x1="9" y1="4" x2="9" y2="20" />
+            </svg>
+          </button>
+        )}
+      </div>
 
       <div style={styles.list}>
         {today.length > 0 && (
@@ -174,8 +191,14 @@ const styles = {
     background: "#fafafc",
     height: "100%",
   },
-  newChatBtn: {
+  topRow: {
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
     margin: 12,
+  },
+  newChatBtn: {
+    flex: 1,
     padding: "10px 14px",
     borderRadius: 10,
     border: "1px solid #ddd",
@@ -184,6 +207,19 @@ const styles = {
     fontSize: 14,
     cursor: "pointer",
     textAlign: "left",
+  },
+  hideBtn: {
+    width: 42,
+    height: 42,
+    flexShrink: 0,
+    borderRadius: 10,
+    border: "1px solid #ddd",
+    background: "#fff",
+    color: "#475569",
+    cursor: "pointer",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
   },
   list: {
     flex: 1,

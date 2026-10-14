@@ -262,10 +262,24 @@ export function DiscountPercentModal({ show, subtotal = 0, onCancel, onConfirm, 
   );
 }
 
+// Unit price of a row (older saved rows only have `amount`, so fall back to it)
+const getRate = (it) =>
+  it.rate !== undefined ? Number(it.rate) || 0 : (Number(it.amount) || 0) / (Number(it.qty) || 1);
+
+// Final row amount = qty × rate − discount (discount is "percent" or "amount")
+const lineAmount = (it) => {
+  const gross = (Number(it.qty) || 1) * getRate(it);
+  const d = Number(it.discount) || 0;
+  const off = it.discountType === "amount" ? d : (gross * Math.min(d, 100)) / 100;
+  return Math.max(0, Math.round(gross - off));
+};
+
+const ROW_COLS = "1fr 70px 100px 150px 110px 32px";
+
 // Table for entering cost items — name + amount per row, with
 // "+ Add Item" adding a blank row directly (replaces the old popup modal).
 export function CostItemsTable({ items = [], onChange, gstMode = "with", gstPercent, defaultGstPercent = 18, onGstChange, accent = "#1F6F5C" }) {
-  const addItem = () => onChange([...items, { id: `item-${Date.now()}`, name: "", amount: 0 }]);
+  const addItem = () => onChange([...items, { id: `item-${Date.now()}`, name: "", qty: 1, rate: 0, discount: 0, discountType: "percent", amount: 0 }]);
 
   // stock still free for a row (custom items and services have no limit)
   const { products: stockProducts } = useProducts();
@@ -278,49 +292,26 @@ export function CostItemsTable({ items = [], onChange, gstMode = "with", gstPerc
       .reduce((s, x) => s + (Number(x.qty) || 1), 0);
     return (Number(p.stock_qty) || 0) - usedElsewhere;
   };
-  const updateItem = (id, field, value) =>
-    onChange(items.map(it => it.id === id ? {
-      ...it,
-      [field]: field === "amount"
-        ? (it.isDiscount ? -Math.abs(Number(value) || 0) : Number(value) || 0)
-        : value,
-      // typing an amount by hand means a flat price, so reset qty to 1
-      ...(field === "amount" ? { qty: 1 } : {}),
-      // typing a custom name detaches the row from any picked product
-      ...(field === "name" ? { productId: undefined } : {}),
-    } : it));
-  const pickProduct = (id, p) =>
-    onChange(items.map(it => it.id === id
-      ? { ...it, name: p.name, amount: Number(p.sale_rate) || 0, productId: p.id, qty: 1 }
-      : it));
-  // changing qty keeps the unit price and rescales the row amount
-  const updateQty = (id, value) =>
+  // Any change to a row (name, qty, rate, discount...) goes through here.
+  // Normal rows always get their amount recalculated; whole-bill discount
+  // rows (isDiscount) keep their own typed negative amount.
+  const updateRow = (id, patch) =>
     onChange(items.map(it => {
       if (it.id !== id) return it;
-      const oldQty = Number(it.qty) || 1;
-      const newQty = Math.max(1, Number(value) || 1);
-      return { ...it, qty: newQty, amount: Math.round(((Number(it.amount) || 0) / oldQty) * newQty) };
+      const next = { ...it, ...patch };
+      if (next.isDiscount) return next;
+      if (next.rate === undefined) next.rate = getRate(it);
+      return { ...next, amount: lineAmount(next) };
     }));
+
+  const pickProduct = (id, p) =>
+    updateRow(id, {
+      name: p.name, rate: Number(p.sale_rate) || 0, productId: p.id,
+      qty: 1, discount: 0, discountType: "percent",
+    });
   const removeItem = (id) => onChange(items.filter(it => it.id !== id));
 
-  // Flat discount: adds a row, you type the amount as a negative number (e.g. -2000)
-  const addDiscount = () =>
-    onChange([...items, { id: `item-${Date.now()}`, name: "Discount", amount: 0, qty: 1, isDiscount: true }]);
 
-  // Percent discount: calculated once from the current subtotal
-  const [showPctModal, setShowPctModal] = useState(false);
-  const currentSubtotal = items.reduce((s, it) => s + (Number(it.amount) || 0), 0);
-
-  const applyPercentDiscount = (pct) => {
-    onChange([...items, {
-      id: `item-${Date.now()}`,
-      name: `Discount (${pct}%)`,
-      amount: -Math.round(currentSubtotal * pct / 100),
-      qty: 1,
-      isDiscount: true,
-    }]);
-    setShowPctModal(false);
-  };
 
   return (
     <div style={{ marginBottom: 10 }}>
@@ -330,13 +321,7 @@ export function CostItemsTable({ items = [], onChange, gstMode = "with", gstPerc
         .qd-no-spinner { -moz-appearance: textfield; }
       `}</style>
 
-      <DiscountPercentModal
-        show={showPctModal}
-        subtotal={currentSubtotal}
-        accent={accent}
-        onCancel={() => setShowPctModal(false)}
-        onConfirm={applyPercentDiscount}
-      />
+    
       <div style={{
         display: "flex", flexWrap: "wrap", gap: 10, alignItems: "flex-end", marginBottom: 10,
         padding: "8px 10px", borderRadius: 8, background: "rgba(140,140,140,0.08)", border: "1px dashed rgba(140,140,140,0.4)",
@@ -360,37 +345,80 @@ export function CostItemsTable({ items = [], onChange, gstMode = "with", gstPerc
       </div>
 
       <div style={{ border: "1px solid rgba(140,140,140,0.3)", borderRadius: 8, overflow: "hidden" }}>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 70px 120px 32px", background: accent, color: "#fff", fontSize: 11, fontWeight: 700 }}>
+        <div style={{ display: "grid", gridTemplateColumns: ROW_COLS, background: accent, color: "#fff", fontSize: 11, fontWeight: 700 }}>
           <div style={{ padding: "8px 10px" }}>Service / Item</div>
           <div style={{ padding: "8px 10px", textAlign: "center" }}>Qty</div>
+          <div style={{ padding: "8px 10px", textAlign: "right" }}>Rate (₹)</div>
+          <div style={{ padding: "8px 10px", textAlign: "right" }}>Discount</div>
           <div style={{ padding: "8px 10px", textAlign: "right" }}>Amount (₹)</div>
           <div />
         </div>
         {items.map((it, idx) => (
-          <div key={it.id} style={{ display: "grid", gridTemplateColumns: "1fr 70px 120px 32px", borderTop: "1px solid rgba(140,140,140,0.2)", background: idx % 2 ? "rgba(140,140,140,0.04)" : "transparent" }}>
+          <div key={it.id} style={{ display: "grid", gridTemplateColumns: ROW_COLS, alignItems: "center", borderTop: "1px solid rgba(140,140,140,0.2)", background: idx % 2 ? "rgba(140,140,140,0.04)" : "transparent" }}>
             <ItemNameField
               value={it.name}
               rowId={it.id}
               items={items}
-              onTextChange={(v) => updateItem(it.id, "name", v)}
+              onTextChange={(v) => updateRow(it.id, { name: v, productId: undefined })}
               onPick={(p) => pickProduct(it.id, p)}
             />
-            <input
-              type="number"
-              min="1"
-              className="qd-no-spinner"
-              value={it.qty ?? 1}
-              onChange={(e) => updateQty(it.id, e.target.value)}
-              style={{ border: "none", background: "transparent", padding: "8px 4px", fontSize: 13, textAlign: "center", outline: "none" }}
-            />
-            <input
-              type="number"
-              className="qd-no-spinner"
-              value={it.amount === 0 ? "" : (it.isDiscount ? Math.abs(it.amount) : it.amount)}
-              onChange={(e) => updateItem(it.id, "amount", e.target.value)}
-              placeholder="0"
-              style={{ border: "none", background: "transparent", padding: "8px 10px", fontSize: 13, textAlign: "right", outline: "none" }}
-            />
+
+            {it.isDiscount ? (
+              <>
+                {/* whole-bill discount row: just a typed amount */}
+                <div /><div /><div />
+                <input
+                  type="number"
+                  className="qd-no-spinner"
+                  value={it.amount === 0 ? "" : Math.abs(it.amount)}
+                  onChange={(e) => updateRow(it.id, { amount: -Math.abs(Number(e.target.value) || 0) })}
+                  placeholder="0"
+                  style={{ border: "none", background: "transparent", padding: "8px 10px", fontSize: 13, textAlign: "right", outline: "none", color: "#ef4444" }}
+                />
+              </>
+            ) : (
+              <>
+                <input
+                  type="number"
+                  min="1"
+                  className="qd-no-spinner"
+                  value={it.qty ?? 1}
+                  onChange={(e) => updateRow(it.id, { qty: Math.max(1, Number(e.target.value) || 1) })}
+                  style={{ border: "none", background: "transparent", padding: "8px 4px", fontSize: 13, textAlign: "center", outline: "none", width: "100%", boxSizing: "border-box" }}
+                />
+                <input
+                  type="number"
+                  className="qd-no-spinner"
+                  value={getRate(it) || ""}
+                  onChange={(e) => updateRow(it.id, { rate: Number(e.target.value) || 0 })}
+                  placeholder="0"
+                  style={{ border: "none", background: "transparent", padding: "8px 10px", fontSize: 13, textAlign: "right", outline: "none", width: "100%", boxSizing: "border-box" }}
+                />
+                <div style={{ display: "flex", alignItems: "center", gap: 4, padding: "0 6px" }}>
+                  <input
+                    type="number"
+                    min="0"
+                    className="qd-no-spinner"
+                    value={it.discount || ""}
+                    onChange={(e) => updateRow(it.id, { discount: Math.max(0, Number(e.target.value) || 0) })}
+                    placeholder="0"
+                    style={{ border: "none", background: "transparent", padding: "8px 4px", fontSize: 13, textAlign: "right", outline: "none", width: "100%", minWidth: 0 }}
+                  />
+                  <select
+                    value={it.discountType || "percent"}
+                    onChange={(e) => updateRow(it.id, { discountType: e.target.value })}
+                    style={{ border: "1px solid rgba(140,140,140,0.3)", borderRadius: 6, background: "rgba(140,140,140,0.08)", fontSize: 12, padding: "4px 4px", cursor: "pointer", flexShrink: 0 }}
+                  >
+                    <option value="percent">%</option>
+                    <option value="amount">₹</option>
+                  </select>
+                </div>
+                <div style={{ padding: "8px 10px", fontSize: 13, fontWeight: 700, textAlign: "right" }}>
+                  {Number(it.amount || 0).toLocaleString("en-IN")}
+                </div>
+              </>
+            )}
+
             <button type="button" onClick={() => removeItem(it.id)} title="Remove item"
               style={{ border: "none", background: "transparent", color: "#ef4444", cursor: "pointer" }}>✕</button>
             {(() => {
@@ -411,8 +439,6 @@ export function CostItemsTable({ items = [], onChange, gstMode = "with", gstPerc
       <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 8 }}>
         {[
           { label: "+ Add Item", onClick: addItem },
-          { label: "+ Discount ₹", onClick: addDiscount },
-          { label: "+ Discount %", onClick: () => setShowPctModal(true) },
         ].map(b => (
           <button key={b.label} type="button" onClick={b.onClick} style={{
             border: `1.5px dashed ${accent}`, borderRadius: 8, padding: "6px 14px",

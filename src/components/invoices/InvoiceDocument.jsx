@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { FaArrowLeft, FaPrint, FaEdit, FaFileInvoiceDollar } from "react-icons/fa";
-import { INVOICE_LABELS, INVOICE_FONT, InvoiceLangToggle, useTamilDescriptions, unitLabel } from "./invoiceLang";
+import { INVOICE_LABELS, INVOICE_FONT, InvoiceLangToggle, useTamilDescriptions, unitLabel, numberToWordsTamil } from "./invoiceLang";
 
 function logoStyle(shape, size) {
   if (shape === "circle") return { width: size, height: size, borderRadius: "50%", objectFit: "cover" };
@@ -77,7 +77,9 @@ export default function InvoiceDocument({ invoice, onBack, onEdit, onConvertToFi
   }
   const amountPaid = Number(invoice.amountPaid || 0);
   const due = total - amountPaid;
-  const words = `INR – Indian Rupees ${numberToWords(total)} Only`;
+  const words = lang === "ta"
+    ? `${L.wordsPrefix} ${numberToWordsTamil(total)} ${L.wordsSuffix}`
+    : `${L.wordsPrefix} ${numberToWords(total)} ${L.wordsSuffix}`;
   const isProforma = invoice.invoiceType === "Proforma" || (invoice.invoiceNo || "").startsWith("PI-");
   const formatDate = (d) => {
     if (!d) return "—";
@@ -257,7 +259,7 @@ export default function InvoiceDocument({ invoice, onBack, onEdit, onConvertToFi
                   </div>
                 )}
                 {invoice.buyerAddress && (
-                  <div style={{ fontSize: isMobile ? "0.68rem" : "0.82rem", color: "#334155", whiteSpace: "pre-line" }}>Address: {invoice.buyerAddress}</div>
+                  <div style={{ fontSize: isMobile ? "0.68rem" : "0.82rem", color: "#334155", whiteSpace: "pre-line" }}>{L.address}: {invoice.buyerAddress}</div>
                 )}
 
                 {invoice.buyerMobile && (
@@ -283,7 +285,16 @@ export default function InvoiceDocument({ invoice, onBack, onEdit, onConvertToFi
             {invoice.items.map((item, i) => (
               <tr key={i}>
                 {mobileCell(item.sl, { textAlign: "center" })}
-                {mobileCell(tDesc(item))}
+                {mobileCell(
+                  <>
+                    {tDesc(item)}
+                    {Number(item.discount) > 0 && (
+                      <div style={{ fontSize: isMobile ? "0.58rem" : "0.7rem", color: "#64748b" }}>
+                        {lang === "ta" ? "தள்ளுபடி" : "Discount"}: {item.discountType === "amount" ? `₹${Number(item.discount).toLocaleString("en-IN")}` : `${item.discount}%`}
+                      </div>
+                    )}
+                  </>
+                )}
                 {mobileCell(`${item.qty}${item.unit ? " " + unitLabel(item.unit, lang) : ""}`, { textAlign: "center", whiteSpace: "nowrap" })}
                 {mobileCell(formatAmount(item.rate), { textAlign: "right" })}
                 {mobileCell(formatAmount(item.amount), { textAlign: "right" })}
@@ -296,7 +307,7 @@ export default function InvoiceDocument({ invoice, onBack, onEdit, onConvertToFi
               {mobileCell(<strong>{L.subTotal}</strong>, { border: "1px solid #000" })}
               {mobileCell("", { border: "1px solid #000" })}
               {mobileCell("", { border: "1px solid #000" })}
-              {mobileCell(<strong>{formatAmount(subtotal)}</strong>, { border: "1px solid #000", textAlign: "right" })}
+              {mobileCell(<strong>{formatAmount(invoice.gstType === "GST Included" ? total : subtotal)}</strong>, { border: "1px solid #000", textAlign: "right" })}
             </tr>
 
             {/* GST */}

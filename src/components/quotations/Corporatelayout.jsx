@@ -1,4 +1,4 @@
-import { getQuotationView, getCostLines, getCostItems,splitCostLine, htmlToPlainText, mobileCss } from "./quotationLayoutUtils";import { useState } from "react";
+import { getQuotationView, getCostLines, getCostItems, splitCostLine, htmlToPlainText, mobileCss } from "./quotationLayoutUtils"; import { useState } from "react";
 import { EditText, EditArea, LogoEdit, SignatureEdit, CostItemsTable, CustomSectionsEdit, CompanySelect, CustomerSelect, RichOrPlainView } from "./EditableField";
 
 const styles = `.qd-corporate{
@@ -147,341 +147,341 @@ export default function CorporateLayout({ quotation, companyInfo, customers = []
     onChange("company", typedName);
   };
 
-return (
-  <div className="qd-corporate">
-    <style>{styles}{mobileCss(".qd-corporate", CORPORATE_MOBILE)}</style>
-    <div className="sheet">
-      <div className="header">
-        <svg className="header-bars" viewBox="0 0 800 60" preserveAspectRatio="none" aria-hidden="true">
-          <polygon className="bar-blue" points="0,20 118,20 102,42 0,42" />
-          <polygon className="bar-navy" points="100,48 132,0 160,0 128,48" />
-          <polygon className="bar-blue" points="138,48 170,0 184,0 152,48" />
-          <polygon className="bar-navy" points="182,8 800,8 800,22 174,22" />
-        </svg>
-        <div className="header-row">
-          <div className="doc"><h1>QUOTATION</h1></div>
-          <div className="brand">
-            <LogoEdit
-              editMode={editMode} logo={quotation.logo} onUpload={onLogoUpload} onRemove={onRemoveLogo}
-              inputId="corp-logo" boxStyle={{ height: 56, width: 70 }}
-shape={quotation.logoShape} onShapeChange={(s) => onChange("logoShape", s)} fallback={null}
-            />
-            <div>
-              <CompanySelect editMode={editMode} value={quotation.issuerName} onChange={(val) => onChange("issuerName", val)} placeholder="Your Company Name" style={{ fontWeight: 700 }} />
-              {(editMode || v.issuerAddress) && (
-                <small><EditText editMode={editMode} value={quotation.issuerAddress} onChange={(val) => onChange("issuerAddress", val)} placeholder="Company address" /></small>
-              )}
+  return (
+    <div className="qd-corporate">
+      <style>{styles}{mobileCss(".qd-corporate", CORPORATE_MOBILE)}</style>
+      <div className="sheet">
+        <div className="header">
+          <svg className="header-bars" viewBox="0 0 800 60" preserveAspectRatio="none" aria-hidden="true">
+            <polygon className="bar-blue" points="0,20 118,20 102,42 0,42" />
+            <polygon className="bar-navy" points="100,48 132,0 160,0 128,48" />
+            <polygon className="bar-blue" points="138,48 170,0 184,0 152,48" />
+            <polygon className="bar-navy" points="182,8 800,8 800,22 174,22" />
+          </svg>
+          <div className="header-row">
+            <div className="doc"><h1>QUOTATION</h1></div>
+            <div className="brand">
+              <LogoEdit
+                editMode={editMode} logo={quotation.logo} onUpload={onLogoUpload} onRemove={onRemoveLogo}
+                inputId="corp-logo" boxStyle={{ height: 56, width: 70 }}
+                shape={quotation.logoShape} onShapeChange={(s) => onChange("logoShape", s)} fallback={null}
+              />
+              <div>
+                <CompanySelect editMode={editMode} value={quotation.issuerName} onChange={(val) => onChange("issuerName", val)} placeholder="Your Company Name" style={{ fontWeight: 700 }} />
+                {(editMode || v.issuerAddress) && (
+                  <small><EditText editMode={editMode} value={quotation.issuerAddress} onChange={(val) => onChange("issuerAddress", val)} placeholder="Company address" /></small>
+                )}
+              </div>
             </div>
           </div>
         </div>
+
+        <table className="page-frame">
+          <thead><tr><td /></tr></thead>
+          <tbody><tr><td>
+            <div className="body">
+              <div className="subline">
+                <EditText editMode={editMode} value={quotation.projectTitle} onChange={(val) => onChange("projectTitle", val)} placeholder="Project / Quotation Title" />
+              </div>
+
+              <div className="info-table">
+                <div className="info-row">
+                  <div className="info-cell">
+                    <strong>Quotation</strong>
+                    {quotation.quotationNumber
+                      ? quotation.quotationNumber
+                      : <span style={{ opacity: 0.6, fontStyle: "italic" }}>Draft — number assigned on send</span>}
+                  </div>
+                  <div className="info-cell">
+                    <strong>Date</strong>
+                    <EditText editMode={editMode} type="date" value={quotation.date} onChange={(val) => onChange("date", val)} />
+                  </div>
+                </div>
+                <div className="info-row">
+                  <div className="info-cell">
+                    <strong>To</strong>
+                    <div className="info-lines">
+                      {editMode ? (
+                        <>
+                          <CustomerSelect editMode as="div" style={{ fontWeight: 700, marginBottom: 4 }} customers={customers} value={quotation.company} onSelect={handleCustomerSelect} onManualChange={handleCustomerManualChange} placeholder="Select or search customer" />
+                          <EditText editMode as="div" style={{ marginBottom: 4 }} value={quotation.name} onChange={(val) => onChange("name", val)} placeholder="Contact name" />
+                          <EditText editMode as="div" style={{ marginBottom: 4 }} value={quotation.clientAddress} onChange={(val) => onChange("clientAddress", val)} placeholder="Client address" />
+                          <EditText editMode as="div" style={{ marginBottom: 4 }} value={quotation.phone} onChange={(val) => onChange("phone", val)} placeholder="Phone" />
+                          <EditText editMode as="div" value={quotation.email} onChange={(val) => onChange("email", val)} placeholder="Email" />
+                        </>
+                      ) : (
+                        <>
+                          {v.clientCompany && <div className="who-name">Company: {v.clientCompany}</div>}
+                          <div>Name: {v.clientName}</div>
+                          {v.clientAddress && <div>Address: {v.clientAddress}</div>}
+                          {v.clientPhone && <div>Mob: {v.clientPhone}</div>}
+                          {v.clientEmail && <div>Email: {v.clientEmail}</div>}
+                        </>
+                      )}
+                    </div>
+                  </div>
+                  <div className="info-cell">
+                    <strong>From</strong>
+                    <div className="info-lines">
+                      {editMode ? (
+                        <>
+                          <CompanySelect editMode as="div" style={{ fontWeight: 700, marginBottom: 4 }} value={quotation.issuerName} onChange={(val) => onChange("issuerName", val)} placeholder="Your Company Name" />
+                          <EditText editMode as="div" style={{ marginBottom: 4 }} value={quotation.issuerAddress} onChange={(val) => onChange("issuerAddress", val)} placeholder="Company address" />
+                          <EditText editMode as="div" style={{ marginBottom: 4 }} value={quotation.issuerPhone} onChange={(val) => onChange("issuerPhone", val)} placeholder="Phone" />
+                          <EditText editMode as="div" value={quotation.issuerEmail} onChange={(val) => onChange("issuerEmail", val)} placeholder="Email" />
+                        </>
+                      ) : (
+                        <>
+                          <div className="who-name">Company: {v.issuerName}</div>
+                          {v.issuerAddress && <div>Address: {v.issuerAddress}</div>}
+                          {v.issuerPhone && <div>Mob: {v.issuerPhone}</div>}
+                          {v.issuerEmail && <div>Email: {v.issuerEmail}</div>}
+                        </>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="block">
+                <h4>Project Description</h4>
+                <EditArea editMode={editMode} rows={4} value={htmlToPlainText(quotation.description) || `This proposal outlines the scope of work agreed upon between ${v.issuerName || "your company"} and ${v.clientCompany || "the client"}.`} onChange={(val) => onChange("description", val)}
+                  placeholder="Describe the project..." viewRender={(val) => <RichOrPlainView value={val} as="paragraph" />} />
+              </div>
+
+              {(editMode || (quotation.scopeOfWork && quotation.scopeOfWork.trim()) || (quotation.deliverables && quotation.deliverables.trim())) && (
+                <div className="cols2">
+                  {(editMode || (quotation.scopeOfWork && quotation.scopeOfWork.trim())) && (
+                    <div className="block">
+                      <h4>Scope of Work</h4>
+                      {editMode ? (
+                        <>
+                          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 10 }}>
+                            {SCOPE_TEMPLATES.map((tpl) => (
+                              <button
+                                key={tpl.label} type="button" onClick={() => onChange("scopeOfWork", tpl.text)}
+                                title={`Use "${tpl.label}" scope template`}
+                                style={{
+                                  border: quotation.scopeOfWork === tpl.text ? `1.5px solid ${accent}` : "1px solid var(--line)",
+                                  borderRadius: 20, padding: "4px 12px", fontSize: 12, fontWeight: 600, cursor: "pointer",
+                                  backgroundColor: quotation.scopeOfWork === tpl.text ? `${accent}22` : "#fff",
+                                  color: quotation.scopeOfWork === tpl.text ? accent : "var(--muted)",
+                                }}
+                              >
+                                {tpl.label}
+                              </button>
+                            ))}
+                            <button
+                              type="button" onClick={() => onChange("scopeOfWork", "")}
+                              title="Write your own custom scope"
+                              style={{
+                                border: `1.5px dashed ${accent}`, borderRadius: 20, padding: "4px 12px", fontSize: 12, fontWeight: 600, cursor: "pointer",
+                                backgroundColor: "transparent", color: accent,
+                              }}
+                            >
+                              + Custom
+                            </button>
+                          </div>
+                          <EditArea editMode rows={4} value={htmlToPlainText(quotation.scopeOfWork)} onChange={(val) => onChange("scopeOfWork", val)} placeholder="One item per line, or pick a template above..." />
+                        </>
+                      ) : (
+                        <RichOrPlainView value={quotation.scopeOfWork} />
+                      )}
+                    </div>
+                  )}
+                  {(editMode || (quotation.deliverables && quotation.deliverables.trim())) && (
+                    <div className="block">
+                      <h4>Deliverables</h4>
+                      {editMode ? (
+                        <EditArea editMode rows={4} value={htmlToPlainText(quotation.deliverables)} onChange={(val) => onChange("deliverables", val)} placeholder="One item per line..." />
+                      ) : (
+                        <RichOrPlainView value={quotation.deliverables} />
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
+          
+              {!editMode && v.customSections.map((s, i) => (
+                <div className="block" key={i}>
+                  <h4>{s.title}</h4>
+                  {s.type === "table" ? (
+                    <table className="cost-summary">
+                      <thead><tr>{(s.columns || []).map((col, ci) => <th key={ci}>{col}</th>)}</tr></thead>
+                      <tbody>
+                        {(s.rows || []).map((row, ri) => (
+                          <tr key={ri}>{row.map((cell, ci) => <td key={ci}>{cell}</td>)}</tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  ) : Array.isArray(s.lines) ? (
+                    <ul>{s.lines.map((l, j) => <li key={j}>{l}</li>)}</ul>
+                  ) : (
+                    <RichOrPlainView value={s.content} as="paragraph" />
+                  )}
+                </div>
+              ))}
+              {editMode && (
+                <div className="block">
+                  <h4>Custom Sections</h4>
+                  <CustomSectionsEdit sections={quotation.customSections || []} accent={accent} onChange={onCustomSectionChange} onAdd={onAddCustomSection} onRemove={onRemoveCustomSection} />
+                </div>
+              )}
+
+              {(editMode || costLines.lines.length > 0) && (
+                <div className="block">
+                  <h4>Project Cost</h4>
+                  {editMode ? (
+                    <CostItemsTable
+                      items={getCostItems(quotation)}
+                      onChange={(items) => onChange("costItems", items)}
+                      gstMode={quotation.gstMode || (quotation.includeGst === true ? "with" : "without")} gstPercent={quotation.gstPercent}
+                      defaultGstPercent={defaultGstPercent}
+                      onGstChange={onChange}
+                      accent={accent}
+                    />
+                  ) : (
+                    <table className="cost-summary">
+                      <thead>
+                        <tr>
+                          <th>Description</th>
+                          <th style={{ textAlign: "center", width: 60 }}>Qty</th>
+                          <th className="num">Line Total</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {costLines.rows.map((row, i) => (
+                          <tr key={i}>
+                            <td>{row.label}</td>
+                            <td style={{ textAlign: "center" }}>{row.qty}</td>
+                            <td className="num">{row.value}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                      {costLines.grandLine && (() => {
+                        const [label, value] = splitCostLine(costLines.grandLine);
+                        return <tfoot><tr><td colSpan={2}>{label}</td><td className="num">{value}</td></tr></tfoot>;
+                      })()}
+                    </table>
+                  )}
+                </div>
+              )}
+
+              {(editMode || (quotation.timelineDesc && quotation.timelineDesc.trim())) && (
+                <div className="block">
+                  <h4>Project Timeline</h4>
+                  {editMode ? (
+                    <EditArea editMode rows={4} value={htmlToPlainText(quotation.timelineDesc)} onChange={(val) => onChange("timelineDesc", val)} placeholder="One item per line..." />
+                  ) : (
+                    <RichOrPlainView value={quotation.timelineDesc} />
+                  )}
+                </div>
+              )}
+
+              {(editMode || (quotation.paymentTerms && quotation.paymentTerms.trim())) && (
+                <div className="block">
+                  <h4>Payment Terms</h4>
+                  {editMode ? (
+                    <EditArea editMode rows={3} value={htmlToPlainText(quotation.paymentTerms)} onChange={(val) => onChange("paymentTerms", val)} placeholder="Payment terms..." />
+                  ) : (
+                    <RichOrPlainView value={quotation.paymentTerms} />
+                  )}
+                </div>
+              )}
+
+              {(editMode || (quotation.terms && quotation.terms.trim())) && (
+                <div className="terms">
+                  <h4>Terms &amp; Conditions</h4>
+                  {editMode ? (
+                    <>
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 10 }}>
+                        {TERMS_TEMPLATES.map((tpl) => (
+                          <button
+                            key={tpl.label} type="button" onClick={() => onChange("terms", tpl.text)}
+                            title={`Use "${tpl.label}" terms template`}
+                            style={{
+                              border: quotation.terms === tpl.text ? `1.5px solid ${accent}` : "1px solid var(--line)",
+                              borderRadius: 20, padding: "4px 12px", fontSize: 12, fontWeight: 600, cursor: "pointer",
+                              backgroundColor: quotation.terms === tpl.text ? `${accent}22` : "#fff",
+                              color: quotation.terms === tpl.text ? accent : "var(--muted)",
+                            }}
+                          >
+                            {tpl.label}
+                          </button>
+                        ))}
+                        <button
+                          type="button" onClick={() => onChange("terms", "")}
+                          title="Write your own custom terms"
+                          style={{
+                            border: `1.5px dashed ${accent}`, borderRadius: 20, padding: "4px 12px", fontSize: 12, fontWeight: 600, cursor: "pointer",
+                            backgroundColor: "transparent", color: accent,
+                          }}
+                        >
+                          + Custom
+                        </button>
+                      </div>
+                      <EditArea editMode rows={6} value={htmlToPlainText(quotation.terms)} onChange={(val) => onChange("terms", val)} placeholder="One term per line, or pick a template above..." />
+                    </>
+                  ) : (
+                    <ul className="terms-list">
+                      {htmlToPlainText(quotation.terms).split("\n").map((line) => line.trim()).filter(Boolean).map((line, i) => (
+                        <li key={i}>{line}</li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              )}
+
+              {(editMode || quotation.notes?.trim()) && (
+                <div className="block">
+                  <h4>Note</h4>
+                  <EditArea editMode={editMode} rows={2} value={htmlToPlainText(quotation.notes)} onChange={(val) => onChange("notes", val)}
+                    placeholder="Additional notes..." viewRender={(val) => <RichOrPlainView value={val} as="paragraph" />} />
+                </div>
+              )}
+
+              <div className="sign-footer-group">
+                <div className="sign">
+                  <div>
+                    <div className="sig-box"></div>
+                    <div className="sign-line"></div>
+                    <div className="who">{quotation.name}</div>
+                    <div className="label">Client Signature</div>
+                  </div>
+                  <div>
+                    <div className="sig-box">
+                      <SignatureEdit editMode={editMode} signature={quotation.signature} onUpload={onSignatureUpload} onRemove={onRemoveSignature}
+                        inputId="corp-sig" boxStyle={{ maxHeight: 44, width: editMode ? 150 : "auto", height: editMode ? 44 : "auto" }} />
+                    </div>
+                    <div className="sign-line"></div>
+                    <div className="who">{quotation.issuerName}</div>
+                    <div className="label">Authorized Signature</div>
+                  </div>
+                </div>
+
+                <div className="footer-bar">
+                  {editMode ? (
+                    <EditText editMode value={quotation.issuerEmail} onChange={(val) => onChange("issuerEmail", val)} placeholder="Email" />
+                  ) : (
+                    v.issuerEmail && <span>Email: {v.issuerEmail}</span>
+                  )}
+                  {editMode ? (
+                    <EditText editMode value={quotation.issuerPhone} onChange={(val) => onChange("issuerPhone", val)} placeholder="Phone" />
+                  ) : (
+                    v.issuerPhone && (
+                      <span>
+                        Phone: {v.issuerPhone.trim().startsWith("+") ? v.issuerPhone : `+91 ${v.issuerPhone}`}
+                      </span>
+                    )
+                  )}
+                </div>
+              </div>
+            </div>
+          </td></tr></tbody>
+          <tfoot><tr><td /></tr></tfoot>
+        </table>
       </div>
-
-      <table className="page-frame">
-        <thead><tr><td /></tr></thead>
-        <tbody><tr><td>
-      <div className="body">
-                  <div className="subline">
-                    <EditText editMode={editMode} value={quotation.projectTitle} onChange={(val) => onChange("projectTitle", val)} placeholder="Project / Quotation Title" />
-                  </div>
-
-                  <div className="info-table">
-                    <div className="info-row">
-                                        <div className="info-cell">
-                        <strong>Quotation</strong>
-                        {quotation.quotationNumber
-                          ? quotation.quotationNumber
-                          : <span style={{ opacity: 0.6, fontStyle: "italic" }}>Draft — number assigned on send</span>}
-                      </div>
-                      <div className="info-cell">
-                        <strong>Date</strong>
-                        <EditText editMode={editMode} type="date" value={quotation.date} onChange={(val) => onChange("date", val)} />
-                      </div>
-                    </div>
-                    <div className="info-row">
-                      <div className="info-cell">
-                        <strong>To</strong>
-                        <div className="info-lines">
-                          {editMode ? (
-                            <>
-                              <CustomerSelect editMode as="div" style={{ fontWeight: 700, marginBottom: 4 }} customers={customers} value={quotation.company} onSelect={handleCustomerSelect} onManualChange={handleCustomerManualChange} placeholder="Select or search customer" />
-                              <EditText editMode as="div" style={{ marginBottom: 4 }} value={quotation.name} onChange={(val) => onChange("name", val)} placeholder="Contact name" />
-                              <EditText editMode as="div" style={{ marginBottom: 4 }} value={quotation.clientAddress} onChange={(val) => onChange("clientAddress", val)} placeholder="Client address" />
-                              <EditText editMode as="div" style={{ marginBottom: 4 }} value={quotation.phone} onChange={(val) => onChange("phone", val)} placeholder="Phone" />
-                              <EditText editMode as="div" value={quotation.email} onChange={(val) => onChange("email", val)} placeholder="Email" />
-                            </>
-                                                 ) : (
-                            <>
-                              {v.clientCompany && <div className="who-name">Company: {v.clientCompany}</div>}
-                              <div>Name: {v.clientName}</div>
-                              {v.clientAddress && <div>Address: {v.clientAddress}</div>}
-                              {v.clientPhone && <div>Mob: {v.clientPhone}</div>}
-                              {v.clientEmail && <div>Email: {v.clientEmail}</div>}
-                            </>
-                          )}
-                        </div>
-                      </div>
-                      <div className="info-cell">
-                        <strong>From</strong>
-                        <div className="info-lines">
-                          {editMode ? (
-                            <>
-                              <CompanySelect editMode as="div" style={{ fontWeight: 700, marginBottom: 4 }} value={quotation.issuerName} onChange={(val) => onChange("issuerName", val)} placeholder="Your Company Name" />
-                              <EditText editMode as="div" style={{ marginBottom: 4 }} value={quotation.issuerAddress} onChange={(val) => onChange("issuerAddress", val)} placeholder="Company address" />
-                              <EditText editMode as="div" style={{ marginBottom: 4 }} value={quotation.issuerPhone} onChange={(val) => onChange("issuerPhone", val)} placeholder="Phone" />
-                              <EditText editMode as="div" value={quotation.issuerEmail} onChange={(val) => onChange("issuerEmail", val)} placeholder="Email" />
-                            </>
-                                                   ) : (
-                            <>
-                              <div className="who-name">Company: {v.issuerName}</div>
-                              {v.issuerAddress && <div>Address: {v.issuerAddress}</div>}
-                              {v.issuerPhone && <div>Mob: {v.issuerPhone}</div>}
-                              {v.issuerEmail && <div>Email: {v.issuerEmail}</div>}
-                            </>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="block">
-                    <h4>Project Description</h4>
-                  <EditArea editMode={editMode} rows={4} value={htmlToPlainText(quotation.description) || `This proposal outlines the scope of work agreed upon between ${v.issuerName || "your company"} and ${v.clientCompany || "the client"}.`} onChange={(val) => onChange("description", val)}
-placeholder="Describe the project..." viewRender={(val) => <RichOrPlainView value={val} as="paragraph" />} />
-                  </div>
-
-                  {(editMode || (quotation.scopeOfWork && quotation.scopeOfWork.trim()) || (quotation.deliverables && quotation.deliverables.trim())) && (
-                    <div className="cols2">
-                      {(editMode || (quotation.scopeOfWork && quotation.scopeOfWork.trim())) && (
-                        <div className="block">
-                          <h4>Scope of Work</h4>
-                          {editMode ? (
-                            <>
-                              <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 10 }}>
-                                {SCOPE_TEMPLATES.map((tpl) => (
-                                  <button
-                                    key={tpl.label} type="button" onClick={() => onChange("scopeOfWork", tpl.text)}
-                                    title={`Use "${tpl.label}" scope template`}
-                                    style={{
-                                      border: quotation.scopeOfWork === tpl.text ? `1.5px solid ${accent}` : "1px solid var(--line)",
-                                      borderRadius: 20, padding: "4px 12px", fontSize: 12, fontWeight: 600, cursor: "pointer",
-                                      backgroundColor: quotation.scopeOfWork === tpl.text ? `${accent}22` : "#fff",
-                                      color: quotation.scopeOfWork === tpl.text ? accent : "var(--muted)",
-                                    }}
-                                  >
-                                    {tpl.label}
-                                  </button>
-                                ))}
-                                <button
-                                  type="button" onClick={() => onChange("scopeOfWork", "")}
-                                  title="Write your own custom scope"
-                                  style={{
-                                    border: `1.5px dashed ${accent}`, borderRadius: 20, padding: "4px 12px", fontSize: 12, fontWeight: 600, cursor: "pointer",
-                                    backgroundColor: "transparent", color: accent,
-                                  }}
-                                >
-                                  + Custom
-                                </button>
-                              </div>
-                              <EditArea editMode rows={4} value={htmlToPlainText(quotation.scopeOfWork)} onChange={(val) => onChange("scopeOfWork", val)} placeholder="One item per line, or pick a template above..." />
-                            </>
-                          ) : (
-                            <RichOrPlainView value={quotation.scopeOfWork} />
-                          )}
-                        </div>
-                      )}
-                      {(editMode || (quotation.deliverables && quotation.deliverables.trim())) && (
-                        <div className="block">
-                          <h4>Deliverables</h4>
-                          {editMode ? (
-                            <EditArea editMode rows={4} value={htmlToPlainText(quotation.deliverables)} onChange={(val) => onChange("deliverables", val)} placeholder="One item per line..." />
-                          ) : (
-                            <RichOrPlainView value={quotation.deliverables} />
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {(editMode || (quotation.technologyUsed && quotation.technologyUsed.trim())) && (
-                    <div className="block">
-                      <h4>Technology Used</h4>
-                      {editMode ? (
-                        <EditArea editMode rows={3} value={htmlToPlainText(quotation.technologyUsed)} onChange={(val) => onChange("technologyUsed", val)} placeholder="One item per line..." />
-                      ) : (
-                        <RichOrPlainView value={quotation.technologyUsed} />
-                      )}
-                    </div>
-                  )}
-{!editMode && v.customSections.map((s, i) => (
-  <div className="block" key={i}>
-    <h4>{s.title}</h4>
-    {s.type === "table" ? (
-      <table className="cost-summary">
-        <thead><tr>{(s.columns || []).map((col, ci) => <th key={ci}>{col}</th>)}</tr></thead>
-        <tbody>
-          {(s.rows || []).map((row, ri) => (
-            <tr key={ri}>{row.map((cell, ci) => <td key={ci}>{cell}</td>)}</tr>
-          ))}
-        </tbody>
-      </table>
-    ) : Array.isArray(s.lines) ? (
-      <ul>{s.lines.map((l, j) => <li key={j}>{l}</li>)}</ul>
-    ) : (
-      <RichOrPlainView value={s.content} as="paragraph" />
-    )}
-  </div>
-))}
-                  {editMode && (
-                    <div className="block">
-                      <h4>Custom Sections</h4>
-                      <CustomSectionsEdit sections={quotation.customSections || []} accent={accent} onChange={onCustomSectionChange} onAdd={onAddCustomSection} onRemove={onRemoveCustomSection} />
-                    </div>
-                  )}
-
-                  {(editMode || costLines.lines.length > 0) && (
-                    <div className="block">
-                      <h4>Project Cost</h4>
-                      {editMode ? (
-                   <CostItemsTable
-  items={getCostItems(quotation)}
-  onChange={(items) => onChange("costItems", items)}
-gstMode={quotation.gstMode || (quotation.includeGst === true ? "with" : "without")}  gstPercent={quotation.gstPercent}
-  defaultGstPercent={defaultGstPercent}
-  onGstChange={onChange}
-  accent={accent}
-/>
-                      ) : (
-                        <table className="cost-summary">
-                          <thead><tr><th>Description</th><th className="num">Line Total</th></tr></thead>
-                          <tbody>
-                            {costLines.lines.map((line, i) => {
-                              const [label, value] = splitCostLine(line);
-                              return <tr key={i}><td>{label}</td><td className="num">{value}</td></tr>;
-                            })}
-                          </tbody>
-                          {costLines.grandLine && (() => {
-                            const [label, value] = splitCostLine(costLines.grandLine);
-                            return <tfoot><tr><td>{label}</td><td className="num">{value}</td></tr></tfoot>;
-                          })()}
-                        </table>
-                      )}
-                    </div>
-                  )}
-
-                  {(editMode || (quotation.timelineDesc && quotation.timelineDesc.trim())) && (
-                    <div className="block">
-                      <h4>Project Timeline</h4>
-                      {editMode ? (
-                        <EditArea editMode rows={4} value={htmlToPlainText(quotation.timelineDesc)} onChange={(val) => onChange("timelineDesc", val)} placeholder="One item per line..." />
-                      ) : (
-                        <RichOrPlainView value={quotation.timelineDesc} />
-                      )}
-                    </div>
-                  )}
-
-                 {(editMode || (quotation.paymentTerms && quotation.paymentTerms.trim())) && (
-  <div className="block">
-    <h4>Payment Terms</h4>
-    {editMode ? (
-      <EditArea editMode rows={3} value={htmlToPlainText(quotation.paymentTerms)} onChange={(val) => onChange("paymentTerms", val)} placeholder="Payment terms..." />
-    ) : (
-      <RichOrPlainView value={quotation.paymentTerms} />
-    )}
-  </div>
-)}
-
-{(editMode || (quotation.terms && quotation.terms.trim())) && (
-  <div className="terms">
-    <h4>Terms &amp; Conditions</h4>
-    {editMode ? (
-      <>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 10 }}>
-          {TERMS_TEMPLATES.map((tpl) => (
-            <button
-              key={tpl.label} type="button" onClick={() => onChange("terms", tpl.text)}
-              title={`Use "${tpl.label}" terms template`}
-              style={{
-                border: quotation.terms === tpl.text ? `1.5px solid ${accent}` : "1px solid var(--line)",
-                borderRadius: 20, padding: "4px 12px", fontSize: 12, fontWeight: 600, cursor: "pointer",
-                backgroundColor: quotation.terms === tpl.text ? `${accent}22` : "#fff",
-                color: quotation.terms === tpl.text ? accent : "var(--muted)",
-              }}
-            >
-              {tpl.label}
-            </button>
-          ))}
-          <button
-            type="button" onClick={() => onChange("terms", "")}
-            title="Write your own custom terms"
-            style={{
-              border: `1.5px dashed ${accent}`, borderRadius: 20, padding: "4px 12px", fontSize: 12, fontWeight: 600, cursor: "pointer",
-              backgroundColor: "transparent", color: accent,
-            }}
-          >
-            + Custom
-          </button>
-        </div>
-             <EditArea editMode rows={6} value={htmlToPlainText(quotation.terms)} onChange={(val) => onChange("terms", val)} placeholder="One term per line, or pick a template above..." />
-      </>
-    ) : (
-      <ul className="terms-list">
-        {htmlToPlainText(quotation.terms).split("\n").map((line) => line.trim()).filter(Boolean).map((line, i) => (
-          <li key={i}>{line}</li>
-        ))}
-      </ul>
-    )}
-  </div>
-)}
-
-                  {(editMode || quotation.notes?.trim()) && (
-                    <div className="block">
-                      <h4>Note</h4>
-                    <EditArea editMode={editMode} rows={2} value={htmlToPlainText(quotation.notes)} onChange={(val) => onChange("notes", val)}
-  placeholder="Additional notes..." viewRender={(val) => <RichOrPlainView value={val} as="paragraph" />} />
-                    </div>
-                  )}
-
-                  <div className="sign-footer-group">
-                  <div className="sign">
-                    <div>
-                      <div className="sig-box"></div>
-                      <div className="sign-line"></div>
-                      <div className="who">{quotation.name}</div>
-                      <div className="label">Client Signature</div>
-                    </div>
-                    <div>
-                      <div className="sig-box">
-                        <SignatureEdit editMode={editMode} signature={quotation.signature} onUpload={onSignatureUpload} onRemove={onRemoveSignature}
-                          inputId="corp-sig" boxStyle={{ maxHeight: 44, width: editMode ? 150 : "auto", height: editMode ? 44 : "auto" }} />
-                      </div>
-                      <div className="sign-line"></div>
-                      <div className="who">{quotation.issuerName}</div>
-                      <div className="label">Authorized Signature</div>
-                    </div>
-                  </div>
-
-                  <div className="footer-bar">
-                    {editMode ? (
-                      <EditText editMode value={quotation.issuerEmail} onChange={(val) => onChange("issuerEmail", val)} placeholder="Email" />
-                    ) : (
-                      v.issuerEmail && <span>Email: {v.issuerEmail}</span>
-                    )}
-                    {editMode ? (
-                      <EditText editMode value={quotation.issuerPhone} onChange={(val) => onChange("issuerPhone", val)} placeholder="Phone" />
-                    ) : (
-                      v.issuerPhone && (
-                        <span>
-                          Phone: {v.issuerPhone.trim().startsWith("+") ? v.issuerPhone : `+91 ${v.issuerPhone}`}
-                                         </span>
-                      )
-                    )}
-                  </div>
-                  </div>
-      </div>
-        </td></tr></tbody>
-        <tfoot><tr><td /></tr></tfoot>
-      </table>
     </div>
-  </div>
   );
 }

@@ -73,21 +73,40 @@ export function computeCostTotals(quotation, defaultGstPercent = 18) {
 
 export function getCostLines(quotation, defaultGstPercent = 18) {
   const { items, gstPercent, gstMode, gstAmount, total } = computeCostTotals(quotation, defaultGstPercent);
-  if (items.length === 0) return { lines: [], grandLine: null };
+  if (items.length === 0) return { lines: [], rows: [], grandLine: null };
+
+  const discountNote = (it) => {
+    const d = Number(it.discount) || 0;
+    if (it.isDiscount || d <= 0) return "";
+    return it.discountType === "amount" ? ` (₹${d.toLocaleString("en-IN")} off)` : ` (${d}% off)`;
+  };
+
+  // text lines (unchanged format, kept for anything else that uses them)
   const lines = items.map(it => {
     const qty = Number(it.qty) || 1;
     const label = qty > 1 ? `${it.name} × ${qty}` : it.name;
-    return `${label}: ${formatINR(it.amount)}`;
+    return `${label}${discountNote(it)}: ${formatINR(it.amount)}`;
   });
-  if (gstMode === "with") lines.push(`GST (${gstPercent}%): ${formatINR(gstAmount)}`);
-  return { lines, grandLine: `Total Project Cost: ${formatINR(total)}` };
+
+  // structured rows for the view tables (Description | Qty | Line Total)
+  const rows = items.map(it => ({
+    label: `${it.name}${discountNote(it)}`,
+    qty: it.isDiscount ? "" : (Number(it.qty) || 1),
+    value: formatINR(it.amount),
+  }));
+
+  if (gstMode === "with") {
+    lines.push(`GST (${gstPercent}%): ${formatINR(gstAmount)}`);
+    rows.push({ label: `GST (${gstPercent}%)`, qty: "", value: formatINR(gstAmount) });
+  }
+  return { lines, rows, grandLine: `Total Project Cost: ${formatINR(total)}` };
 }
 
 export function getQuotationView(quotation = {}, companyInfo = {}) {
   const fields = {
     scopeOfWork: toLinesOrHtml(quotation.scopeOfWork),
     deliverables: toLinesOrHtml(quotation.deliverables),
-    technologyUsed: toLinesOrHtml(quotation.technologyUsed),
+// removed
     timelineDesc: toLinesOrHtml(quotation.timelineDesc),
     paymentTerms: toLinesOrHtml(quotation.paymentTerms),
     terms: toLinesOrHtml(quotation.terms),
@@ -115,7 +134,7 @@ export function getQuotationView(quotation = {}, companyInfo = {}) {
     // Legacy array fields (still filled when the value was plain text)
     scopeOfWork: fields.scopeOfWork.lines,
     deliverables: fields.deliverables.lines,
-    technologyUsed: fields.technologyUsed.lines,
+// removed
     timelineDesc: fields.timelineDesc.lines,
     paymentTerms: fields.paymentTerms.lines,
     terms: fields.terms.lines,
@@ -123,7 +142,7 @@ export function getQuotationView(quotation = {}, companyInfo = {}) {
     // Raw HTML (empty string when the field was plain text)
     scopeOfWorkHtml: fields.scopeOfWork.html,
     deliverablesHtml: fields.deliverables.html,
-    technologyUsedHtml: fields.technologyUsed.html,
+// removed
     timelineDescHtml: fields.timelineDesc.html,
     paymentTermsHtml: fields.paymentTerms.html,
     termsHtml: fields.terms.html,
@@ -131,7 +150,7 @@ export function getQuotationView(quotation = {}, companyInfo = {}) {
     // Flags
     scopeOfWorkIsHtml: fields.scopeOfWork.isHtml,
     deliverablesIsHtml: fields.deliverables.isHtml,
-    technologyUsedIsHtml: fields.technologyUsed.isHtml,
+// removed
     timelineDescIsHtml: fields.timelineDesc.isHtml,
     paymentTermsIsHtml: fields.paymentTerms.isHtml,
     termsIsHtml: fields.terms.isHtml,

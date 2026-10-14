@@ -89,7 +89,47 @@ const TA_UNITS = {
   Box: "பெட்டி", Bag: "பை", Set: "செட்", Hour: "மணி", Day: "நாள்", Month: "மாதம்",
 };
 export const unitLabel = (unit, lang) => (lang === "ta" ? TA_UNITS[unit] || unit : unit);
+const TA_ONES = ["", "ஒன்று", "இரண்டு", "மூன்று", "நான்கு", "ஐந்து", "ஆறு", "ஏழு", "எட்டு", "ஒன்பது",
+  "பத்து", "பதினொன்று", "பன்னிரண்டு", "பதிமூன்று", "பதினான்கு", "பதினைந்து", "பதினாறு", "பதினேழு", "பதினெட்டு", "பத்தொன்பது"];
+const TA_TENS = ["", "", "இருபது", "முப்பது", "நாற்பது", "ஐம்பது", "அறுபது", "எழுபது", "எண்பது", "தொண்ணூறு"];
+const TA_TENS_JOIN = ["", "", "இருபத்து", "முப்பத்து", "நாற்பத்து", "ஐம்பத்து", "அறுபத்து", "எழுபத்து", "எண்பத்து", "தொண்ணூற்று"];
+const TA_HUNDREDS = ["", "நூறு", "இருநூறு", "முந்நூறு", "நானூறு", "ஐந்நூறு", "அறுநூறு", "எழுநூறு", "எண்ணூறு", "தொள்ளாயிரம்"];
+const TA_HUNDREDS_JOIN = ["", "நூற்று", "இருநூற்று", "முந்நூற்று", "நானூற்று", "ஐந்நூற்று", "அறுநூற்று", "எழுநூற்று", "எண்ணூற்று", "தொள்ளாயிரத்து"];
 
+function taBelowThousand(n) {
+  if (n < 20) return TA_ONES[n];
+  if (n < 100) {
+    const t = Math.floor(n / 10), o = n % 10;
+    return o ? `${TA_TENS_JOIN[t]} ${TA_ONES[o]}` : TA_TENS[t];
+  }
+  const h = Math.floor(n / 100), r = n % 100;
+  return r ? `${TA_HUNDREDS_JOIN[h]} ${taBelowThousand(r)}` : TA_HUNDREDS[h];
+}
+
+export function numberToWordsTamil(value) {
+  let num = Math.round(Number(value));
+  if (!Number.isFinite(num) || num <= 0) return "பூஜ்யம்";
+
+  const crore = Math.floor(num / 10000000); num %= 10000000;
+  const lakh = Math.floor(num / 100000); num %= 100000;
+  const thousand = Math.floor(num / 1000); num %= 1000;
+  const rest = num;
+
+  const segments = [
+    [crore, "கோடி", "கோடியே", "ஒரு"],
+    [lakh, "இலட்சம்", "இலட்சத்து", "ஒரு"],
+    [thousand, "ஆயிரம்", "ஆயிரத்து", ""],
+  ];
+  const out = [];
+  segments.forEach(([val, whole, joined, one], i) => {
+    if (!val) return;
+    const hasMore = segments.slice(i + 1).some(s => s[0]) || rest > 0;
+    const prefix = val === 1 ? one : taBelowThousand(val);
+    out.push(`${prefix} ${hasMore ? joined : whole}`.trim());
+  });
+  if (rest) out.push(taBelowThousand(rest));
+  return out.join(" ");
+}
 export const INVOICE_LABELS = {
   en: {
     proforma: "PROFORMA INVOICE",
@@ -99,6 +139,9 @@ export const INVOICE_LABELS = {
     buyer: "Buyer (Bill to)",
     name: "Name",
     company: "Company",
+    address: "Address",
+    wordsPrefix: "INR – Indian Rupees",
+    wordsSuffix: "Only",
     mobile: "Mobile",
     sl: "Sl. No.",
     description: "Description of Services",
@@ -128,6 +171,9 @@ export const INVOICE_LABELS = {
     buyer: "பில் பெறுபவர்",
     name: "பெயர்",
     company: "நிறுவனம்",
+    address: "முகவரி",
+    wordsPrefix: "இந்திய ரூபாய்",
+    wordsSuffix: "மட்டும்",
     mobile: "மொபைல்",
     sl: "வ.எண்",
     description: "பொருள் / சேவை விவரம்",

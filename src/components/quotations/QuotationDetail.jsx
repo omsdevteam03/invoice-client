@@ -109,7 +109,7 @@ function normalizeFormQuotation(quotation) {
     if (initial[f] && !isHtml(initial[f])) initial[f] = plainTextToHtml(initial[f]);
   });
 
-  const listFields = ["scopeOfWork", "deliverables", "technologyUsed", "timelineDesc"];
+  const listFields = ["scopeOfWork", "deliverables", "timelineDesc"];
   listFields.forEach((f) => {
     if (initial[f] && !isHtml(initial[f])) initial[f] = linesToHtmlList(initial[f]);
   });
@@ -671,6 +671,27 @@ const updateField = (field, value) => {
 
   const inp = { border: `1px solid ${T.border}`, borderRadius: 8, padding: "6px 10px", fontSize: 14, color: T.navy, width: "100%", outline: "none", backgroundColor: T.bgSoft, fontFamily: T.font, lineHeight: 1.75 };
   const headingInp = { ...inp, fontWeight: 700, fontSize: 15, color: T.navy, backgroundColor: accentSoftBg, border: `1px solid ${accentBorder}` };
+
+// Editable section headings, saved on the quotation as form.sectionHeadings
+const headingText = (key, fallback) => (form.sectionHeadings && form.sectionHeadings[key]) || fallback;
+const updateHeading = (key, value) => {
+  dirtyRef.current = true;
+  setForm((prev) => ({ ...prev, sectionHeadings: { ...(prev.sectionHeadings || {}), [key]: value } }));
+};
+// Called as a plain function (not a component) so the input keeps focus while typing
+const renderHeading = (key, fallback, isEditable, extraStyle = {}) =>
+  isEditable ? (
+    <input
+      className="no-print"
+      value={form.sectionHeadings?.[key] ?? fallback}
+      onChange={(e) => updateHeading(key, e.target.value)}
+      onBlur={(e) => { if (!e.target.value.trim()) updateHeading(key, fallback); }}
+      placeholder={fallback}
+      style={{ ...headingInp, maxWidth: 360, marginBottom: 8, ...extraStyle }}
+    />
+  ) : (
+    <div className="qt-heading-avoid" style={{ ...sectionTitle, ...extraStyle }}>{headingText(key, fallback)}</div>
+  );
   const sectionTitle = { fontWeight: 700, fontSize: 15, color: T.navy, marginBottom: 8, fontFamily: T.font };
   const sectionText = { fontSize: 13.5, color: T.slate, lineHeight: 1.85, fontFamily: T.font, margin: 0 };
   const cellStyle = { border: `1px solid ${T.border}`, padding: "10px 14px", verticalAlign: "top", fontSize: 13.5, color: T.slate };
@@ -871,7 +892,7 @@ const updateField = (field, value) => {
 
       {/* Project Description */}
      <div style={{ marginBottom: 18 }}>
-  <div className="qt-heading-avoid" style={sectionTitle}>Project Description</div>
+  {renderHeading("description", "Project Description", isEditable)}
 
         {isEditable
           ? <TinyMCEEditor
@@ -889,7 +910,7 @@ const updateField = (field, value) => {
       {/* Scope of Work */}
       {(isEditable || (form.scopeOfWork && form.scopeOfWork.trim())) && (
         <div style={{ marginBottom: 24 }}>
-<div className="qt-heading-avoid" style={sectionTitle}>Scope of Work</div>          {isEditable ? (
+{renderHeading("scopeOfWork", "Scope of Work", isEditable)}          {isEditable ? (
             <>
               <div className="no-print" style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 10 }}>
                 {SCOPE_TEMPLATES.map((tpl) => {
@@ -931,7 +952,7 @@ const updateField = (field, value) => {
       {/* Deliverables */}
       {(isEditable || (form.deliverables && form.deliverables.trim())) && (
         <div style={{ marginBottom: 24 }}>
-<div className="qt-heading-avoid" style={sectionTitle}>Deliverables</div>          {isEditable ? (
+{renderHeading("deliverables", "Deliverables", isEditable)}          {isEditable ? (
             <TinyMCEEditor
               id="qt-editor-deliverables"
               value={form.deliverables || ""}
@@ -946,24 +967,7 @@ const updateField = (field, value) => {
         </div>
       )}
 
-      {/* Technology Used */}
-      {(isEditable || (form.technologyUsed && form.technologyUsed.trim())) && (
-        <div style={{ marginBottom: 24 }}>
-<div className="qt-heading-avoid" style={sectionTitle}>Technology Used</div>
-          {isEditable ? (
-            <TinyMCEEditor
-              id="qt-editor-technology"
-              value={form.technologyUsed || ""}
-              onChange={(html) => updateField("technologyUsed", html)}
-              accent={accent}
-              height={200}
-              placeholder="List technologies used (use the bullet list button)..."
-            />
-          ) : (
-            <RichView html={form.technologyUsed} />
-          )}
-        </div>
-      )}
+      {/* (Technology Used section removed) */}
 
       {/* Custom Sections */}
   {form.customSections.map((sec, i) => (
@@ -1042,7 +1046,7 @@ const updateField = (field, value) => {
       {/* Project Cost */}
       {(isEditable || getCostItems(form).length > 0) && (
       <div style={{ marginBottom: 24 }}>
-  <div className="qt-heading-avoid" style={sectionTitle}>Project Cost</div>
+  {renderHeading("projectCost", "Project Cost", isEditable)}
 
           {isEditable ? (
         <CostItemsTable
@@ -1062,21 +1066,22 @@ const updateField = (field, value) => {
                   <th style={{ textAlign: "left", fontSize: 12, fontWeight: 700, color: "#fff", backgroundColor: accent, padding: "8px 12px", border: "none" }}>
                     Description
                   </th>
+                  <th style={{ textAlign: "center", width: 70, fontSize: 12, fontWeight: 700, color: "#fff", backgroundColor: accent, padding: "8px 12px", border: "none" }}>
+                    Qty
+                  </th>
                   <th style={{ textAlign: "right", fontSize: 12, fontWeight: 700, color: "#fff", backgroundColor: accent, padding: "8px 12px", border: "none" }}>
                     Line Total
                   </th>
                 </tr>
               </thead>
               <tbody>
-                {getCostLines(form, defaultGstPercent).lines.map((line, i) => {
-                  const [label, value] = line.includes(":") ? line.split(/:(.+)/).map((s) => s.trim()) : [line, ""];
-                  return (
-                    <tr key={i}>
-                      <td style={{ ...cellStyle, border: "none", borderBottom: `1px solid ${T.border}` }}>{label}</td>
-                      <td style={{ ...cellStyle, border: "none", borderBottom: `1px solid ${T.border}`, textAlign: "right" }}>{value}</td>
-                    </tr>
-                  );
-                })}
+                {getCostLines(form, defaultGstPercent).rows.map((row, i) => (
+                  <tr key={i}>
+                    <td style={{ ...cellStyle, border: "none", borderBottom: `1px solid ${T.border}` }}>{row.label}</td>
+                    <td style={{ ...cellStyle, border: "none", borderBottom: `1px solid ${T.border}`, textAlign: "center" }}>{row.qty}</td>
+                    <td style={{ ...cellStyle, border: "none", borderBottom: `1px solid ${T.border}`, textAlign: "right" }}>{row.value}</td>
+                  </tr>
+                ))}
               </tbody>
               {getCostLines(form, defaultGstPercent).grandLine && (() => {
                 const grandLine = getCostLines(form, defaultGstPercent).grandLine;
@@ -1084,7 +1089,7 @@ const updateField = (field, value) => {
                 return (
                   <tfoot>
                     <tr>
-                      <td style={{ padding: "10px 12px", fontSize: 13.5, fontWeight: 700, color: T.navy, borderTop: `2px solid ${T.navy}` }}>{label}</td>
+                      <td colSpan={2} style={{ padding: "10px 12px", fontSize: 13.5, fontWeight: 700, color: T.navy, borderTop: `2px solid ${T.navy}` }}>{label}</td>
                       <td style={{ padding: "10px 12px", fontSize: 13.5, fontWeight: 700, color: T.navy, borderTop: `2px solid ${T.navy}`, textAlign: "right" }}>{value}</td>
                     </tr>
                   </tfoot>
@@ -1098,7 +1103,7 @@ const updateField = (field, value) => {
       {/* Project Timeline */}
       {(isEditable || (form.timelineDesc && form.timelineDesc.trim())) && (
         <div style={{ marginBottom: 24 }}>
-<div className="qt-heading-avoid" style={sectionTitle}>Project Timeline</div>
+{renderHeading("timeline", "Project Timeline", isEditable)}
           {isEditable ? (
             <TinyMCEEditor
               id="qt-editor-timeline"
@@ -1117,7 +1122,7 @@ const updateField = (field, value) => {
       {/* Terms & Conditions */}
       {(isEditable || (form.terms && form.terms.trim())) && (
         <div style={{ marginBottom: 24 }}>
-<div className="qt-heading-avoid" style={{ ...sectionTitle, marginBottom: 6 }}>Terms &amp; Conditions</div>
+{renderHeading("terms", "Terms & Conditions", isEditable, { marginBottom: 6 })}
           {isEditable && (
             <div className="no-print" style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 10 }}>
               {TERMS_TEMPLATES.map((tpl) => {
@@ -1159,7 +1164,7 @@ const updateField = (field, value) => {
       {/* Note */}
       {(form.notes || isEditable) && (
         <div style={{ marginBottom: 24, paddingTop: 16, borderTop: `1px solid ${T.border}` }}>
-  <div className="qt-heading-avoid" style={sectionTitle}>Note:</div>
+  {renderHeading("notes", "Note:", isEditable)}
   
           {isEditable ? (
             <TinyMCEEditor

@@ -343,17 +343,7 @@ export default function BoldLayout({
                   </div>
                 )}
 
-                {/* Technology Used */}
-                {(editMode || (quotation.technologyUsed && quotation.technologyUsed.trim())) && (
-                  <div className="block">
-                    <h4>Technology Used</h4>
-                    {editMode ? (
-                      <EditArea editMode rows={3} value={htmlToPlainText(quotation.technologyUsed)} onChange={(val) => onChange("technologyUsed", val)} placeholder="One item per line..." />
-                    ) : (
-                      <RichOrPlainView value={quotation.technologyUsed} />
-                    )}
-                  </div>
-                )}
+             
 
                 {/* Custom Sections */}
                 {!editMode && v.customSections.map((s, i) => (
@@ -400,26 +390,25 @@ export default function BoldLayout({
                         <thead>
                           <tr>
                             <th>Description</th>
+                            <th style={{ textAlign: "center", width: 60 }}>Qty</th>
                             <th className="num">Line Total</th>
                           </tr>
                         </thead>
                         <tbody>
-                          {costLines.lines.map((line, i) => {
-                            const [label, value] = splitCostLine(line);
-                            return (
-                              <tr key={i}>
-                                <td>{label}</td>
-                                <td className="num">{value}</td>
-                              </tr>
-                            );
-                          })}
+                          {costLines.rows.map((row, i) => (
+                            <tr key={i}>
+                              <td>{row.label}</td>
+                              <td style={{ textAlign: "center" }}>{row.qty}</td>
+                              <td className="num">{row.value}</td>
+                            </tr>
+                          ))}
                         </tbody>
                         {costLines.grandLine && (() => {
                           const [label, value] = splitCostLine(costLines.grandLine);
                           return (
                             <tfoot>
                               <tr>
-                                <td>{label}</td>
+                                <td colSpan={2}>{label}</td>
                                 <td className="num">{value}</td>
                               </tr>
                             </tfoot>

@@ -10,6 +10,14 @@ const LAST_CHAT_KEY = "nexa:lastActiveChatId";
 const NAME_KEY = "ai:assistantName";
 const DEFAULT_AI_NAME = "Nexa";
 
+const SidebarIcon = () => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+    strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="3" y="4" width="18" height="16" rx="3" />
+    <line x1="9" y1="4" x2="9" y2="20" />
+  </svg>
+);
+
 function useIsMobile(breakpoint = 768) {
   const [isMobile, setIsMobile] = useState(
     () => typeof window !== "undefined" && window.innerWidth < breakpoint
@@ -27,6 +35,13 @@ function useIsMobile(breakpoint = 768) {
 export default function AIPage() {
   const isMobile = useIsMobile();
   const [sidebarOpen, setSidebarOpen] = useState(false); // mobile drawer
+const [showChats, setShowChats] = useState(
+  () => localStorage.getItem("nexa:showChats") !== "false"
+); // desktop hide/show
+
+useEffect(() => {
+  localStorage.setItem("nexa:showChats", String(showChats));
+}, [showChats]);
   const [chats, setChats] = useState([]);
 
   const [aiName, setAiName] = useState(
@@ -161,6 +176,16 @@ export default function AIPage() {
             <button style={styles.nameEditBtn} onClick={startEditName} title="Rename your assistant" aria-label="Rename assistant">
               ✏️
             </button>
+            {!isMobile && !showChats && (
+              <button
+                style={styles.chatsToggleBtn}
+                onClick={() => setShowChats((v) => !v)}
+                title={showChats ? "Hide chats" : "Show chats"}
+                aria-label={showChats ? "Hide chats" : "Show chats"}
+              >
+                <SidebarIcon />
+              </button>
+            )}
             {isMobile && (
               <button style={styles.chatsBtn} onClick={() => setSidebarOpen(true)}>
                 ☰ Chats
@@ -193,14 +218,17 @@ export default function AIPage() {
             </>
           )
         ) : (
-          <ChatSidebar
-            chats={chats}
-            activeChatId={activeChatId}
-            onSelectChat={handleSelectChat}
-            onNewChat={handleNewChat}
-            onDeleteChat={handleDeleteChat}
-            onRenameChat={handleRenameChat}
-          />
+          showChats && (
+            <ChatSidebar
+              chats={chats}
+              activeChatId={activeChatId}
+              onSelectChat={handleSelectChat}
+              onNewChat={handleNewChat}
+              onDeleteChat={handleDeleteChat}
+              onRenameChat={handleRenameChat}
+              onHide={() => setShowChats(false)}
+            />
+          )
         )}
         <div style={styles.chatArea}>
           <AIChatBox
@@ -248,6 +276,18 @@ const styles = {
     border: "1px solid #eee",
     borderRadius: 12,
     overflow: "hidden",
+  },
+  chatsToggleBtn: {
+    width: 34,
+    height: 34,
+    border: "none",
+    borderRadius: 8,
+    background: "#f1f5f9",
+    color: "#475569",
+    cursor: "pointer",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
   },
   chatArea: {
     flex: 1,

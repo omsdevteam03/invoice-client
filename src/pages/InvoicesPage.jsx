@@ -7,6 +7,7 @@ import ReceivePaymentModal from "../components/invoices/ReceivePaymentModal";
 import { FaFileInvoiceDollar } from "react-icons/fa";
 import axiosInstance from "../api/axiosInstance";
 import { useAuth } from "../context/AuthContext";
+import { getCostItems } from "../components/quotations/quotationLayoutUtils";
 
 const API = `${import.meta.env.VITE_API_URL}/invoices`;
 const SETTINGS_API = `${import.meta.env.VITE_API_URL}/settings/company`;
@@ -399,17 +400,36 @@ useEffect(() => {
       .map(i => parseInt((i.invoiceNo || "").match(/(\d+)$/)?.[1] || "0", 10));
     const nextNum = (finalInvoiceNumbers.length ? Math.max(...finalInvoiceNumbers) : 0) + 1;
     const nextInvoiceNo = `${prefix}${String(nextNum).padStart(3, "0")}`;
-    const costItems = Array.isArray(quotation.costItems) ? quotation.costItems : [];
+    // Same helper the Quotation page uses, so older / AI-created quotations also work
+    const normalizedItems = getCostItems(quotation);
+    const costItems = Array.isArray(normalizedItems) && normalizedItems.length
+      ? normalizedItems
+      : (Array.isArray(quotation.costItems) ? quotation.costItems : []);
     const items = costItems.length
-      ? costItems.map((it, i) => ({
-        sl: i + 1,
-        description: it.name || "",
-        productId: it.productId,
+      ? costItems.map((it, i) => {
+        const qty = Number(it.qty) || 1;
+        // new quotations store `rate`; older ones only have `amount` (qty × unit price)
+        const rate = it.rate !== undefined
+          ? Number(it.rate) || 0
+          : (Number(it.amount) || 0) / qty;
+        return {
+          sl: i + 1,
+          description: it.name || it.description || it.label || "",
+          productId: it.productId,
+          qty,
+          rate,
+          discount: Number(it.discount) || 0,
+          discountType: it.discountType || "percent",
+          amount: Number(it.amount) || 0, // already the final amount after discount
+        };
+      })
+      : [{
+        sl: 1,
+        description: quotation.projectTitle || "Service",
         qty: 1,
-        rate: Number(it.amount) || 0,
-        amount: Number(it.amount) || 0,
-      }))
-      : [{ sl: 1, description: quotation.projectTitle || "Service", qty: 1, rate: 0, amount: 0 }];
+        rate: Number(quotation.amount) || 0,
+        amount: Number(quotation.amount) || 0,
+      }];
     // Map the quotation's GST style onto the invoice's gstType — the
     // quotation stores this as gstMode ("with" / "without" / "inclusive"),
     // so all three states need to carry over, not just with/without.
