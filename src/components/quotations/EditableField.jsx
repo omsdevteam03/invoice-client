@@ -1,6 +1,7 @@
 // EditableField.jsx
 import { useState, useEffect, useRef } from "react";
 import DOMPurify from "dompurify";
+import { createPortal } from "react-dom";
 import axiosInstance from "../../api/axiosInstance";
 import { htmlToPlainText } from "./quotationLayoutUtils";
 
@@ -274,7 +275,7 @@ const lineAmount = (it) => {
   return Math.max(0, Math.round(gross - off));
 };
 
-const ROW_COLS = "1fr 70px 100px 150px 110px 32px";
+const ROW_COLS = "minmax(0,1fr) 64px 90px 140px 100px 32px";
 
 // Table for entering cost items — name + amount per row, with
 // "+ Add Item" adding a blank row directly (replaces the old popup modal).
@@ -319,6 +320,32 @@ export function CostItemsTable({ items = [], onChange, gstMode = "with", gstPerc
         .qd-no-spinner::-webkit-outer-spin-button,
         .qd-no-spinner::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
         .qd-no-spinner { -moz-appearance: textfield; }
+
+        @container (max-width: 640px) {
+          .qd-ci-box { border: none !important; overflow: visible !important; }
+          .qd-ci-head { display: none !important; }
+          .qd-ci-row {
+            grid-template-columns: minmax(0,1fr) minmax(0,1fr) minmax(0,1.4fr) 32px !important;
+            gap: 6px !important; padding: 10px !important; margin-bottom: 10px;
+            border: 1px solid rgba(140,140,140,0.35) !important; border-radius: 10px;
+            background: #fff !important;
+          }
+          .qd-ci-name { grid-column: 1 / 4; grid-row: 1; border: 1px solid rgba(140,140,140,0.35); border-radius: 6px; }
+          .qd-ci-rm   { grid-column: 4; grid-row: 1; }
+          .qd-ci-qty  { grid-column: 1; grid-row: 2; }
+          .qd-ci-rate { grid-column: 2; grid-row: 2; }
+          .qd-ci-disc { grid-column: 3 / 5; grid-row: 2; }
+          .qd-ci-amt  { grid-column: 1 / -1; grid-row: 3; text-align: left !important; }
+          .qd-ci-hide { display: none !important; }
+          .qd-ci-cell::before {
+            content: attr(data-label); display: block;
+            font-size: 10px; opacity: 0.7; padding: 0 2px 2px;
+          }
+          .qd-ci-cell input {
+            border: 1px solid rgba(140,140,140,0.35) !important; border-radius: 6px !important;
+            text-align: left !important; padding: 6px 8px !important;
+          }
+        }
       `}</style>
 
     
@@ -344,83 +371,92 @@ export function CostItemsTable({ items = [], onChange, gstMode = "with", gstPerc
         )}
       </div>
 
-      <div style={{ border: "1px solid rgba(140,140,140,0.3)", borderRadius: 8, overflow: "hidden" }}>
-        <div style={{ display: "grid", gridTemplateColumns: ROW_COLS, background: accent, color: "#fff", fontSize: 11, fontWeight: 700 }}>
-          <div style={{ padding: "8px 10px" }}>Service / Item</div>
-          <div style={{ padding: "8px 10px", textAlign: "center" }}>Qty</div>
-          <div style={{ padding: "8px 10px", textAlign: "right" }}>Rate (₹)</div>
-          <div style={{ padding: "8px 10px", textAlign: "right" }}>Discount</div>
-          <div style={{ padding: "8px 10px", textAlign: "right" }}>Amount (₹)</div>
-          <div />
-        </div>
-        {items.map((it, idx) => (
-          <div key={it.id} style={{ display: "grid", gridTemplateColumns: ROW_COLS, alignItems: "center", borderTop: "1px solid rgba(140,140,140,0.2)", background: idx % 2 ? "rgba(140,140,140,0.04)" : "transparent" }}>
-            <ItemNameField
-              value={it.name}
-              rowId={it.id}
-              items={items}
-              onTextChange={(v) => updateRow(it.id, { name: v, productId: undefined })}
-              onPick={(p) => pickProduct(it.id, p)}
-            />
+      <div className="qd-ci-scroll" style={{ containerType: "inline-size", width: "100%", minWidth: 0 }}>
+        <div className="qd-ci-box" style={{ border: "1px solid rgba(140,140,140,0.3)", borderRadius: 8, overflow: "hidden", minWidth: 0 }}>
+          <div className="qd-ci-head" style={{ display: "grid", gridTemplateColumns: ROW_COLS, background: accent, color: "#fff", fontSize: 11, fontWeight: 700 }}>
+            <div style={{ padding: "8px 10px" }}>Service / Item</div>
+            <div style={{ padding: "8px 10px", textAlign: "center" }}>Qty</div>
+            <div style={{ padding: "8px 10px", textAlign: "right" }}>Rate (₹)</div>
+            <div style={{ padding: "8px 10px", textAlign: "right" }}>Discount</div>
+            <div style={{ padding: "8px 10px", textAlign: "right" }}>Amount (₹)</div>
+            <div />
+          </div>
+          {items.map((it, idx) => (
+            <div key={it.id} className="qd-ci-row" style={{ display: "grid", gridTemplateColumns: ROW_COLS, alignItems: "center", borderTop: "1px solid rgba(140,140,140,0.2)", background: idx % 2 ? "rgba(140,140,140,0.04)" : "transparent" }}>
+              <div className="qd-ci-name" style={{ minWidth: 0 }}>
+                <ItemNameField
+                  value={it.name}
+                  rowId={it.id}
+                  items={items}
+                  onTextChange={(v) => updateRow(it.id, { name: v, productId: undefined })}
+                  onPick={(p) => pickProduct(it.id, p)}
+                />
+              </div>
 
-            {it.isDiscount ? (
-              <>
-                {/* whole-bill discount row: just a typed amount */}
-                <div /><div /><div />
-                <input
-                  type="number"
-                  className="qd-no-spinner"
-                  value={it.amount === 0 ? "" : Math.abs(it.amount)}
-                  onChange={(e) => updateRow(it.id, { amount: -Math.abs(Number(e.target.value) || 0) })}
-                  placeholder="0"
-                  style={{ border: "none", background: "transparent", padding: "8px 10px", fontSize: 13, textAlign: "right", outline: "none", color: "#ef4444" }}
-                />
-              </>
-            ) : (
-              <>
-                <input
-                  type="number"
-                  min="1"
-                  className="qd-no-spinner"
-                  value={it.qty ?? 1}
-                  onChange={(e) => updateRow(it.id, { qty: Math.max(1, Number(e.target.value) || 1) })}
-                  style={{ border: "none", background: "transparent", padding: "8px 4px", fontSize: 13, textAlign: "center", outline: "none", width: "100%", boxSizing: "border-box" }}
-                />
-                <input
-                  type="number"
-                  className="qd-no-spinner"
-                  value={getRate(it) || ""}
-                  onChange={(e) => updateRow(it.id, { rate: Number(e.target.value) || 0 })}
-                  placeholder="0"
-                  style={{ border: "none", background: "transparent", padding: "8px 10px", fontSize: 13, textAlign: "right", outline: "none", width: "100%", boxSizing: "border-box" }}
-                />
-                <div style={{ display: "flex", alignItems: "center", gap: 4, padding: "0 6px" }}>
+              {it.isDiscount ? (
+                <>
+                  {/* whole-bill discount row: just a typed amount */}
+                  <div className="qd-ci-hide" /><div className="qd-ci-hide" /><div className="qd-ci-hide" />
                   <input
                     type="number"
-                    min="0"
-                    className="qd-no-spinner"
-                    value={it.discount || ""}
-                    onChange={(e) => updateRow(it.id, { discount: Math.max(0, Number(e.target.value) || 0) })}
+                    className="qd-no-spinner qd-ci-amt"
+                    value={it.amount === 0 ? "" : Math.abs(it.amount)}
+                    onChange={(e) => updateRow(it.id, { amount: -Math.abs(Number(e.target.value) || 0) })}
                     placeholder="0"
-                    style={{ border: "none", background: "transparent", padding: "8px 4px", fontSize: 13, textAlign: "right", outline: "none", width: "100%", minWidth: 0 }}
+                    style={{ border: "none", background: "transparent", padding: "8px 10px", fontSize: 13, textAlign: "right", outline: "none", color: "#ef4444" }}
                   />
-                  <select
-                    value={it.discountType || "percent"}
-                    onChange={(e) => updateRow(it.id, { discountType: e.target.value })}
-                    style={{ border: "1px solid rgba(140,140,140,0.3)", borderRadius: 6, background: "rgba(140,140,140,0.08)", fontSize: 12, padding: "4px 4px", cursor: "pointer", flexShrink: 0 }}
-                  >
-                    <option value="percent">%</option>
-                    <option value="amount">₹</option>
-                  </select>
-                </div>
-                <div style={{ padding: "8px 10px", fontSize: 13, fontWeight: 700, textAlign: "right" }}>
-                  {Number(it.amount || 0).toLocaleString("en-IN")}
-                </div>
-              </>
-            )}
+                </>
+              ) : (
+                <>
+                  <div className="qd-ci-cell qd-ci-qty" data-label="Qty" style={{ minWidth: 0 }}>
+                    <input
+                      type="number"
+                      min="1"
+                      className="qd-no-spinner"
+                      value={it.qty ?? 1}
+                      onChange={(e) => updateRow(it.id, { qty: Math.max(1, Number(e.target.value) || 1) })}
+                      style={{ border: "none", background: "transparent", padding: "8px 4px", fontSize: 13, textAlign: "center", outline: "none", width: "100%", boxSizing: "border-box" }}
+                    />
+                  </div>
+                  <div className="qd-ci-cell qd-ci-rate" data-label="Rate (₹)" style={{ minWidth: 0 }}>
+                    <input
+                      type="number"
+                      className="qd-no-spinner"
+                      value={getRate(it) || ""}
+                      onChange={(e) => updateRow(it.id, { rate: Number(e.target.value) || 0 })}
+                      placeholder="0"
+                      style={{ border: "none", background: "transparent", padding: "8px 10px", fontSize: 13, textAlign: "right", outline: "none", width: "100%", boxSizing: "border-box" }}
+                    />
+                  </div>
+                  <div className="qd-ci-cell qd-ci-disc" data-label="Discount" style={{ minWidth: 0 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 4, padding: "0 6px" }}>
+                      <input
+                        type="number"
+                        min="0"
+                        className="qd-no-spinner"
+                        value={it.discount || ""}
+                        onChange={(e) => updateRow(it.id, { discount: Math.max(0, Number(e.target.value) || 0) })}
+                        placeholder="0"
+                        style={{ border: "none", background: "transparent", padding: "8px 4px", fontSize: 13, textAlign: "right", outline: "none", width: "100%", minWidth: 0 }}
+                      />
+                      <select
+                        value={it.discountType || "percent"}
+                        onChange={(e) => updateRow(it.id, { discountType: e.target.value })}
+                        style={{ border: "1px solid rgba(140,140,140,0.3)", borderRadius: 6, background: "rgba(140,140,140,0.08)", fontSize: 12, padding: "4px 4px", cursor: "pointer", flexShrink: 0 }}
+                      >
+                        <option value="percent">%</option>
+                        <option value="amount">₹</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div className="qd-ci-cell qd-ci-amt" data-label="Amount (₹)" style={{ padding: "8px 10px", fontSize: 13, fontWeight: 700, textAlign: "right" }}>
+                    {Number(it.amount || 0).toLocaleString("en-IN")}
+                  </div>
+                </>
+              )}
 
-            <button type="button" onClick={() => removeItem(it.id)} title="Remove item"
-              style={{ border: "none", background: "transparent", color: "#ef4444", cursor: "pointer" }}>✕</button>
+              <button type="button" className="qd-ci-rm" onClick={() => removeItem(it.id)} title="Remove item"
+                style={{ border: "none", background: "transparent", color: "#ef4444", cursor: "pointer" }}>✕</button>
             {(() => {
               const avail = availableFor(it);
               return Number(it.qty || 1) > avail ? (
@@ -431,9 +467,10 @@ export function CostItemsTable({ items = [], onChange, gstMode = "with", gstPerc
             })()}
           </div>
         ))}
-        {items.length === 0 && (
-          <div style={{ padding: 14, fontSize: 12, opacity: 0.6, textAlign: "center" }}>No items yet. Click "Add Item" below.</div>
-        )}
+          {items.length === 0 && (
+            <div style={{ padding: 14, fontSize: 12, opacity: 0.6, textAlign: "center" }}>No items yet. Click "Add Item" below.</div>
+          )}
+        </div>
       </div>
 
       <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 8 }}>
@@ -547,16 +584,23 @@ function ItemNameField({ value, rowId, items = [], onTextChange, onPick }) {
     const onScroll = (e) => { if (!menuRef.current?.contains(e.target)) closeMenu(); };
     document.addEventListener("mousedown", onDown);
     window.addEventListener("scroll", onScroll, true);
-    window.addEventListener("resize", closeMenu);
+    const startW = window.innerWidth;
+    const onResize = () => { if (window.innerWidth !== startW) closeMenu(); }; // keyboard only changes height
+    window.addEventListener("resize", onResize);
     return () => {
       document.removeEventListener("mousedown", onDown);
       window.removeEventListener("scroll", onScroll, true);
-      window.removeEventListener("resize", closeMenu);
+      window.removeEventListener("resize", onResize);
     };
   }, [open]);
 
   const toggle = () => {
     if (open) { closeMenu(); return; }
+    if (window.innerWidth <= 640) {
+      setPos({ left: 8, right: 8, bottom: 8, maxHeight: "65vh" });
+      setQuery(""); setFilter("All"); setOpen(true);
+      return;
+    }
     const r = btnRef.current.getBoundingClientRect();
     const width = Math.min(Math.max(r.width, 340), 440);
     const left = Math.max(8, Math.min(r.left, window.innerWidth - width - 8));
@@ -603,13 +647,14 @@ function ItemNameField({ value, rowId, items = [], onTextChange, onPick }) {
         <span style={{ fontSize: 10, opacity: 0.6, flexShrink: 0 }}>▾</span>
       </div>
 
-      {open && (
+      {open && createPortal(
         <div
           ref={menuRef}
           style={{
-            position: "fixed", zIndex: 10000, ...pos, background: "#fff", color: "#1f2937",
+            position: "fixed", zIndex: 10000, maxHeight: 360, ...pos, background: "#fff", color: "#1f2937",
             border: "1px solid rgba(140,140,140,0.45)", borderRadius: 10,
-            boxShadow: "0 12px 32px rgba(0,0,0,0.2)", display: "flex", flexDirection: "column", maxHeight: 360,
+            boxShadow: "0 12px 32px rgba(0,0,0,0.2)", display: "flex", flexDirection: "column", flexWrap: "nowrap",
+            fontFamily: "'Inter', system-ui, sans-serif", fontSize: 13,
           }}
         >
           <div style={{ padding: 8, borderBottom: "1px solid rgba(140,140,140,0.2)" }}>
@@ -694,7 +739,8 @@ function ItemNameField({ value, rowId, items = [], onTextChange, onPick }) {
               Use "{trimmed}" as a custom item
             </div>
           )}
-        </div>
+        </div>,
+        document.body
       )}
     </>
   );
@@ -707,7 +753,8 @@ function ItemNameField({ value, rowId, items = [], onTextChange, onPick }) {
 // section object.
 export function EditableSectionTable({ section, accent, onChange }) {
   const columns = section.columns && section.columns.length ? section.columns : ["Column 1", "Column 2"];
-  const rows = section.rows && section.rows.length ? section.rows : [columns.map(() => "")];
+  const rows = (section.rows && section.rows.length ? section.rows : [columns.map(() => "")])
+  .map((r) => (Array.isArray(r) ? r : Object.values(r || {})));
 
   const emit = (patch) => onChange({ columns, rows, ...patch });
 

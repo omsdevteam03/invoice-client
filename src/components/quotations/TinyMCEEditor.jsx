@@ -163,7 +163,7 @@ export default function TinyMCEEditor({
           disabled={disabled}
           init={{
             baseUrl: "/assets/tinymce",
-            auto_focus: false,
+          
             scrollbars: true,
             height,
             menubar: false,

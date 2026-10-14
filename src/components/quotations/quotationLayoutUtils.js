@@ -75,23 +75,16 @@ export function getCostLines(quotation, defaultGstPercent = 18) {
   const { items, gstPercent, gstMode, gstAmount, total } = computeCostTotals(quotation, defaultGstPercent);
   if (items.length === 0) return { lines: [], rows: [], grandLine: null };
 
-  const discountNote = (it) => {
-    const d = Number(it.discount) || 0;
-    if (it.isDiscount || d <= 0) return "";
-    return it.discountType === "amount" ? ` (₹${d.toLocaleString("en-IN")} off)` : ` (${d}% off)`;
-  };
-
-  // text lines (unchanged format, kept for anything else that uses them)
   const lines = items.map(it => {
     const qty = Number(it.qty) || 1;
     const label = qty > 1 ? `${it.name} × ${qty}` : it.name;
-    return `${label}${discountNote(it)}: ${formatINR(it.amount)}`;
+    return `${label}: ${formatINR(it.amount)}`;
   });
 
-  // structured rows for the view tables (Description | Qty | Line Total)
+  // Table rows used by every layout: Description | Qty | Line Total
   const rows = items.map(it => ({
-    label: `${it.name}${discountNote(it)}`,
-    qty: it.isDiscount ? "" : (Number(it.qty) || 1),
+    label: it.name || "",
+    qty: Number(it.qty) || 1,
     value: formatINR(it.amount),
   }));
 
@@ -106,7 +99,7 @@ export function getQuotationView(quotation = {}, companyInfo = {}) {
   const fields = {
     scopeOfWork: toLinesOrHtml(quotation.scopeOfWork),
     deliverables: toLinesOrHtml(quotation.deliverables),
-// removed
+    technologyUsed: toLinesOrHtml(quotation.technologyUsed),
     timelineDesc: toLinesOrHtml(quotation.timelineDesc),
     paymentTerms: toLinesOrHtml(quotation.paymentTerms),
     terms: toLinesOrHtml(quotation.terms),
@@ -134,7 +127,7 @@ export function getQuotationView(quotation = {}, companyInfo = {}) {
     // Legacy array fields (still filled when the value was plain text)
     scopeOfWork: fields.scopeOfWork.lines,
     deliverables: fields.deliverables.lines,
-// removed
+    technologyUsed: fields.technologyUsed.lines,
     timelineDesc: fields.timelineDesc.lines,
     paymentTerms: fields.paymentTerms.lines,
     terms: fields.terms.lines,
@@ -142,7 +135,7 @@ export function getQuotationView(quotation = {}, companyInfo = {}) {
     // Raw HTML (empty string when the field was plain text)
     scopeOfWorkHtml: fields.scopeOfWork.html,
     deliverablesHtml: fields.deliverables.html,
-// removed
+    technologyUsedHtml: fields.technologyUsed.html,
     timelineDescHtml: fields.timelineDesc.html,
     paymentTermsHtml: fields.paymentTerms.html,
     termsHtml: fields.terms.html,
@@ -150,7 +143,7 @@ export function getQuotationView(quotation = {}, companyInfo = {}) {
     // Flags
     scopeOfWorkIsHtml: fields.scopeOfWork.isHtml,
     deliverablesIsHtml: fields.deliverables.isHtml,
-// removed
+    technologyUsedIsHtml: fields.technologyUsed.isHtml,
     timelineDescIsHtml: fields.timelineDesc.isHtml,
     paymentTermsIsHtml: fields.paymentTerms.isHtml,
     termsIsHtml: fields.terms.isHtml,
@@ -195,7 +188,14 @@ export const mobileCss = (root, extra = "") => {
   return `
 @media screen and (max-width: 640px) {
   ${R}{ padding:0 !important; }
-  ${R} .sheet{ max-width:100% !important; border-radius:0 !important; }
+  ${R} .sheet{ max-width:100% !important; border-radius:0 !important; overflow-x:hidden !important; }
+
+  /* the print-margin table must not grow wider than the screen */
+  ${R} .page-frame{ table-layout:fixed !important; width:100% !important; }
+  ${R} .page-frame > tbody > tr > td,
+  ${R} .page-frame > thead > tr > td,
+  ${R} .page-frame > tfoot > tr > td{ min-width:0 !important; max-width:100% !important; }
+  ${R} .header, ${R} .masthead, ${R} .header-row{ min-width:0 !important; max-width:100% !important; }
 
   /* To / From stack instead of sitting side by side */
   ${R} .info-row{ flex-direction:column !important; }
@@ -218,6 +218,9 @@ export const mobileCss = (root, extra = "") => {
   /* long words / emails never push the page wider */
   ${R} .block, ${R} .terms{ overflow-wrap:anywhere; }
   ${R} img{ max-width:100%; }
+
+  ${R} input, ${R} select, ${R} textarea{ max-width:100% !important; min-width:0 !important; box-sizing:border-box !important; }
+  ${R} .info-cell *{ min-width:0 !important; }
 
   ${extra.replace(/&/g, R)}
 }`;

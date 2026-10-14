@@ -114,16 +114,24 @@ function normalizeFormQuotation(quotation) {
     if (initial[f] && !isHtml(initial[f])) initial[f] = linesToHtmlList(initial[f]);
   });
 
-  initial.customSections = initial.customSections.map((s) => ({
-    ...s,
-    // AI-created quotations save the heading as `title`; the manual editor
-    // has always used `heading`. Normalize once here so the rest of this
-    // file only ever has to read `heading`.
-    heading: s.heading || s.title || "",
-    content: s.type === "table"
-      ? (s.content || "")
-      : (s.content && !isHtml(s.content) ? plainTextToHtml(s.content) : (s.content || "")),
-  }));
+  initial.customSections = initial.customSections.map((s) => {
+    const base = {
+      ...s,
+      heading: s.heading || s.title || "",
+      content: s.type === "table"
+        ? (s.content || "")
+        : (s.content && !isHtml(s.content) ? plainTextToHtml(s.content) : (s.content || "")),
+    };
+    if (s.type !== "table") return base;
+
+    const columns = Array.isArray(s.columns) ? s.columns : [];
+    const rows = (Array.isArray(s.rows) ? s.rows : []).map((r) =>
+      Array.isArray(r)
+        ? r.map((c) => String(c ?? ""))
+        : Object.values(r || {}).map((c) => String(c ?? ""))
+    );
+    return { ...base, columns, rows };
+  });
 
   return initial;
 }
@@ -473,7 +481,9 @@ export default function QuotationDetail({
     };
   }, [editMode, form.templateStyle]);
 
-  const [showPreview, setShowPreview] = useState(true);
+  const [showPreview, setShowPreview] = useState(
+    typeof window !== "undefined" ? window.innerWidth > 1100 : true
+  );
   const [showTemplateSwitcher, setShowTemplateSwitcher] = useState(false);
   const isMobile = useIsMobile(1100);
   const accent = form.accentColor || T.orange;
@@ -710,6 +720,7 @@ const renderHeading = (key, fallback, isEditable, extraStyle = {}) =>
   const printBannerBlock = (
     <div style={{
       display: "flex", alignItems: "center", justifyContent: "center", gap: 16,
+      flexWrap: "wrap",
       borderTop: `4px solid ${accent}`, borderBottom: `4px solid ${accent}`,
       padding: "8px 10px", marginBottom: 10,
     }}>
@@ -873,14 +884,28 @@ const renderHeading = (key, fallback, isEditable, extraStyle = {}) =>
     .quotation-rich-text li { margin-bottom: 4px; }
     .quotation-rich-text strong { color: #0f172a; }
         .quotation-rich-text a { color: inherit; text-decoration: underline; }
-    .qt-print-frame td { padding: 0; vertical-align: top; }
-    @media screen and (max-width: 640px) {
-      .qt-party-table, .qt-party-table tbody, .qt-party-table tr, .qt-party-table td {
-        display: block; width: 100% !important; box-sizing: border-box;
-      }
-      .qt-party-table td + td { border-top: none !important; }
-      .qt-print-body td, .qt-print-body th { overflow-wrap: anywhere; }
-    }
+   .qt-print-frame { table-layout: fixed; width: 100%; }
+.qt-print-frame td { padding: 0; vertical-align: top; min-width: 0; }
+.qt-print-body { min-width: 0; max-width: 100%; }
+.qt-print-body input,
+.qt-print-body select,
+.qt-print-body textarea { max-width: 100%; box-sizing: border-box; }
+
+@media screen and (max-width: 640px) {
+  .qt-party-table, .qt-party-table tbody, .qt-party-table tr, .qt-party-table td {
+    display: block; width: 100% !important; box-sizing: border-box;
+  }
+  .qt-party-table td + td { border-top: none !important; }
+  .qt-print-body td, .qt-print-body th { overflow-wrap: anywhere; }
+
+  /* signature row stacks */
+  .qt-sign-row { flex-direction: column !important; gap: 20px !important; }
+  .qt-sign-row > div { flex: none !important; width: 100% !important; text-align: left !important; }
+  .qt-sign-row .d-flex { align-items: flex-start !important; }
+
+  /* party/banner inputs never exceed the screen */
+  .qt-print-body [style*="max-width: 360"] { max-width: 100% !important; }
+}
   `}</style>
 
     <table className="qt-print-frame">
@@ -1015,13 +1040,13 @@ const renderHeading = (key, fallback, isEditable, extraStyle = {}) =>
                 </tr>
               </thead>
               <tbody>
-                {(sec.rows || []).map((row, ri) => (
-                  <tr key={ri}>
-                    {row.map((cell, ci) => (
-                      <td key={ci} style={{ ...cellStyle, border: "none", borderBottom: `1px solid ${T.border}` }}>{cell}</td>
-                    ))}
-                  </tr>
-                ))}
+             {(sec.rows || []).map((row, ri) => (
+  <tr key={ri}>
+    {(Array.isArray(row) ? row : Object.values(row || {})).map((cell, ci) => (
+      <td key={ci} style={{ ...cellStyle, border: "none", borderBottom: `1px solid ${T.border}` }}>{String(cell ?? "")}</td>
+    ))}
+  </tr>
+))}
               </tbody>
             </table>
           ) : (
@@ -1075,7 +1100,7 @@ const renderHeading = (key, fallback, isEditable, extraStyle = {}) =>
                 </tr>
               </thead>
               <tbody>
-                {getCostLines(form, defaultGstPercent).rows.map((row, i) => (
+                {(getCostLines(form, defaultGstPercent).rows || []).map((row, i) => (
                   <tr key={i}>
                     <td style={{ ...cellStyle, border: "none", borderBottom: `1px solid ${T.border}` }}>{row.label}</td>
                     <td style={{ ...cellStyle, border: "none", borderBottom: `1px solid ${T.border}`, textAlign: "center" }}>{row.qty}</td>
@@ -1184,9 +1209,9 @@ const renderHeading = (key, fallback, isEditable, extraStyle = {}) =>
          {/* Signatures + footer, kept together on one page */}
       <div className="qt-sign-group">
       <div style={{ borderTop: `1px solid ${T.border}`, paddingTop: 16, marginTop: 16, marginBottom: 0 }}>
-        <div style={{ display: "flex", gap: 24, flexWrap: "nowrap" }}>
-          <div style={{ flex: "1 1 50%", minWidth: 0 }}>
-            <div style={{ height: 60, marginBottom: 8, display: "flex", alignItems: "flex-end" }} />
+<div className="qt-sign-row" style={{ display: "flex", gap: 24, flexWrap: "nowrap" }}>
+  <div style={{ flex: "1 1 50%", minWidth: 0 }}>
+    <div style={{ height: 60, marginBottom: 8, display: "flex", alignItems: "flex-end" }} />
             <div style={{ borderTop: `1px solid ${T.border}`, paddingTop: 6 }}>
                          <div style={{ fontSize: 14, fontWeight: 700, color: T.navy, wordBreak: "break-word" }}>{form.name || form.company}</div>
               <div style={{ fontSize: 12.5, color: T.faint, marginTop: 2 }}>Client Signature</div>
@@ -1311,9 +1336,27 @@ const renderHeading = (key, fallback, isEditable, extraStyle = {}) =>
   );
 
   return (
-    <div style={{ fontFamily: T.font, ...(editMode ? (isMobile ? styles.splitContainerMobile : styles.splitContainer) : { maxWidth: 900 }) }}>
+    <div style={{
+  fontFamily: T.font,
+  ...(editMode ? (isMobile ? styles.splitContainerMobile : styles.splitContainer) : { maxWidth: 900 }),
+  ...(isMobile ? { paddingBottom: 110 } : {}),
+}}>
 
-      <div className="qt-fluid" style={editMode ? styles.formSide : {}}>
+      <style>{`
+        @media screen and (max-width: 640px) {
+          .qt-fluid { width: 100%; max-width: 100%; min-width: 0; overflow-x: hidden; }
+          .qt-fluid div, .qt-fluid td, .qt-fluid th, .qt-fluid span { min-width: 0; }
+          .qt-fluid input, .qt-fluid select, .qt-fluid textarea {
+            max-width: 100% !important;
+            min-width: 0 !important;
+            box-sizing: border-box !important;
+          }
+          .qt-fluid [style*="display: flex"] { flex-wrap: wrap; }
+          .qt-fluid img { max-width: 100%; height: auto; }
+        }
+      `}</style>
+
+      <div className="qt-fluid" style={editMode ? (isMobile ? styles.formSideMobile : styles.formSide) : {}}>
         <div className="d-flex align-items-center no-print"
           style={{
             flexWrap: "wrap", gap: 6, rowGap: 8,
@@ -1496,7 +1539,8 @@ const renderHeading = (key, fallback, isEditable, extraStyle = {}) =>
 }
 function EditableSectionTable({ section, onChange, accent }) {
   const columns = section.columns && section.columns.length ? section.columns : ["Column 1", "Column 2"];
-  const rows = section.rows && section.rows.length ? section.rows : [columns.map(() => "")];
+const rows = (section.rows && section.rows.length ? section.rows : [columns.map(() => "")])
+  .map((r) => (Array.isArray(r) ? r : Object.values(r || {})));
 
   const updateColumn = (ci, value) => {
     const next = [...columns];
@@ -1593,6 +1637,7 @@ const styles = {
   splitContainer: { display: "flex", gap: 24, alignItems: "flex-start", width: "100%" },
   splitContainerMobile: { display: "flex", flexDirection: "column", gap: 20, width: "100%" },
   formSide: { flex: "1 1 0", minWidth: 0, maxWidth: 900 },
+  formSideMobile: { flex: "none", width: "100%", minWidth: 0, maxWidth: "100%" },
   previewPanel: {
     width: 380, flexShrink: 0, position: "sticky", top: 24, backgroundColor: "#fff", borderRadius: 16,
     boxShadow: "0 4px 20px rgba(0,0,0,0.08)", border: "1.5px solid #f1f5f9", display: "flex", flexDirection: "column",

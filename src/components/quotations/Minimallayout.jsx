@@ -147,6 +147,8 @@ function formatDateLong(value) {
 const MINIMAL_MOBILE = `
   & .page-frame > tbody > tr > td{ padding:0 16px !important; }
   & .brand img{ height:48px !important; }
+  & .brand{ min-width:0 !important; flex-wrap:wrap; }
+  & .brand > div{ min-width:0 !important; }
   & .titleblock{ margin:24px 0 24px !important; }
   & .titleblock h1{ font-size:32px !important; }
   & .info-grid{ grid-template-columns:1fr !important; gap:18px !important; }
@@ -337,7 +339,11 @@ export default function MinimalLayout({ quotation, companyInfo, customers = [], 
                           </thead>
                           <tbody>
                             {(s.rows || []).map((row, ri) => (
-                              <tr key={ri}>{row.map((cell, ci) => <td key={ci}>{cell}</td>)}</tr>
+                              <tr key={ri}>
+  {(Array.isArray(row) ? row : Object.values(row || {})).map((cell, ci) => (
+    <td key={ci}>{String(cell ?? "")}</td>
+  ))}
+</tr>
                             ))}
                           </tbody>
                         </table>

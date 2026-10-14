@@ -128,7 +128,9 @@ const styles = `
 const CREATIVE_MOBILE = `
   & .header{ padding:20px 16px !important; min-height:110px !important; gap:12px !important; }
   & .header-deco{ width:150px !important; height:75px !important; opacity:.55; }
-  & .header-brand{ max-width:100% !important; gap:10px !important; }
+  & .header-brand{ max-width:100% !important; width:100% !important; gap:10px !important; flex-wrap:wrap; }
+  & .header-brand .brand-text{ flex:1 1 160px !important; min-width:0 !important; }
+  & .header-title .quote-meta{ display:flex; flex-wrap:wrap; justify-content:center; gap:6px; }
   & .header-brand h3{ font-size:16px !important; }
   & .header-title .subline{ font-size:15px !important; padding:0 16px; }
   & .header-title .quote-meta{ padding:0 16px; }
@@ -342,8 +344,11 @@ shape={quotation.logoShape} onShapeChange={(s) => onChange("logoShape", s)} fall
                           </thead>
                           <tbody>
                             {(s.rows || []).map((row, ri) => (
-                              <tr key={ri}>{row.map((cell, ci) => <td key={ci}>{cell}</td>)}</tr>
-                            ))}
+<tr key={ri}>
+  {(Array.isArray(row) ? row : Object.values(row || {})).map((cell, ci) => (
+    <td key={ci}>{String(cell ?? "")}</td>
+  ))}
+</tr>                            ))}
                           </tbody>
                         </table>
                       ) : Array.isArray(s.lines) ? (

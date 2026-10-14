@@ -291,8 +291,11 @@ export default function ClassicLayout({
                 <thead><tr>{(s.columns || []).map((col, ci) => <th key={ci}>{col}</th>)}</tr></thead>
                 <tbody>
                   {(s.rows || []).map((row, ri) => (
-                    <tr key={ri}>{row.map((cell, ci) => <td key={ci}>{cell}</td>)}</tr>
-                  ))}
+<tr key={ri}>
+  {(Array.isArray(row) ? row : Object.values(row || {})).map((cell, ci) => (
+    <td key={ci}>{String(cell ?? "")}</td>
+  ))}
+</tr>                  ))}
                 </tbody>
               </table>
             ) : Array.isArray(s.lines) ? (

@@ -118,7 +118,8 @@ const CORPORATE_MOBILE = `
   & .header-bars{ height:36px !important; }
   & .header-row{ padding:14px 16px 6px !important; gap:10px !important; }
   & .header .doc h1{ font-size:22px !important; letter-spacing:2px !important; }
-  & .header .brand{ gap:10px !important; }
+  & .header .brand{ gap:10px !important; min-width:0 !important; flex-wrap:wrap; }
+  & .header .brand > div{ min-width:0 !important; }
   & .header .brand img{ height:44px !important; }
   & .body{ padding:20px 16px 28px !important; }
 `;
@@ -311,8 +312,11 @@ export default function CorporateLayout({ quotation, companyInfo, customers = []
                       <thead><tr>{(s.columns || []).map((col, ci) => <th key={ci}>{col}</th>)}</tr></thead>
                       <tbody>
                         {(s.rows || []).map((row, ri) => (
-                          <tr key={ri}>{row.map((cell, ci) => <td key={ci}>{cell}</td>)}</tr>
-                        ))}
+<tr key={ri}>
+  {(Array.isArray(row) ? row : Object.values(row || {})).map((cell, ci) => (
+    <td key={ci}>{String(cell ?? "")}</td>
+  ))}
+</tr>                        ))}
                       </tbody>
                     </table>
                   ) : Array.isArray(s.lines) ? (
