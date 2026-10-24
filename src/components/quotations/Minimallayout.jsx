@@ -1,6 +1,6 @@
 import { getQuotationView, getCostLines, getCostItems, splitCostLine, htmlToPlainText, mobileCss } from "./quotationLayoutUtils";
 import { useState } from "react";
-import { EditText, EditArea, LogoEdit, SignatureEdit, CostItemsTable, CustomSectionsEdit, CompanySelect, CustomerSelect, RichOrPlainView } from "./EditableField";
+import { EditText, EditArea, LogoEdit, SignatureEdit, CostItemsTable, CustomSectionsEdit, CompanySelect, CustomerSelect, RichOrPlainView, SalutationSelect } from "./EditableField";
 
 const styles = `
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
@@ -236,15 +236,18 @@ export default function MinimalLayout({ quotation, companyInfo, customers = [], 
                     {editMode ? (
                       <>
                         <CustomerSelect editMode as="div" style={{ fontWeight: 500, marginBottom: 4 }} customers={customers} value={quotation.company} onSelect={handleCustomerSelect} onManualChange={handleCustomerManualChange} placeholder="Select or search customer" />
-                        <EditText editMode as="div" style={{ marginBottom: 4 }} value={quotation.name} onChange={(val) => onChange("name", val)} placeholder="Contact name" />
+                        <div style={{ display: "flex", gap: 6, marginBottom: 4 }}>
+                          <SalutationSelect value={quotation.salutation} onChange={(val) => onChange("salutation", val)} />
+                          <EditText editMode as="div" style={{ flex: 1, minWidth: 0 }} value={quotation.name} onChange={(val) => onChange("name", val)} placeholder="Contact name" />
+                        </div>
                         <EditText editMode as="div" style={{ marginBottom: 4 }} value={quotation.clientAddress} onChange={(val) => onChange("clientAddress", val)} placeholder="Client address" />
                         <EditText editMode as="div" style={{ marginBottom: 4 }} value={quotation.phone} onChange={(val) => onChange("phone", val)} placeholder="Phone" />
                         <EditText editMode as="div" value={quotation.email} onChange={(val) => onChange("email", val)} placeholder="Email" />
                       </>
                     ) : (
                       <>
-                        {v.clientCompany && <div className="who-name">Company: {v.clientCompany}</div>}
-                        <div>Name: {v.clientName}</div>
+                        <div className="who-name">{v.clientName}</div>
+                        {v.clientCompany && <div className="who-name">{v.clientCompany}</div>}
                         {v.clientAddress && <div>Address: {v.clientAddress}</div>}
                         {v.clientPhone && <div>Mob: {v.clientPhone}</div>}
                         {v.clientEmail && <div>Email: {v.clientEmail}</div>}

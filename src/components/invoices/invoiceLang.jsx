@@ -136,8 +136,8 @@ export const INVOICE_LABELS = {
     gstNumber: "GST Number (GSTIN)",
     invoiceNo: "Invoice No.",
     dated: "Dated",
-    buyer: "Buyer (Bill to)",
-    name: "Name",
+to: "To:",
+    from: "From:",
     company: "Company",
     address: "Address",
     wordsPrefix: "INR – Indian Rupees",
@@ -168,8 +168,8 @@ export const INVOICE_LABELS = {
     gstNumber: "ஜிஎஸ்டி எண் (GSTIN)",
     invoiceNo: "பில் எண்",
     dated: "தேதி",
-    buyer: "பில் பெறுபவர்",
-    name: "பெயர்",
+  to: "பெறுநர்:",
+    from: "அனுப்புநர்:",
     company: "நிறுவனம்",
     address: "முகவரி",
     wordsPrefix: "இந்திய ரூபாய்",
@@ -205,7 +205,7 @@ export function InvoiceLangToggle({ lang, onChange }) {
   return (
     <div
       className="no-print d-flex"
-      style={{ border: "1.5px solid #e2e8f0", borderRadius: 10, overflow: "hidden", backgroundColor: "#fff" }}
+      style={{ border: "1px solid #e2e8f0", borderRadius: 6, overflow: "hidden", backgroundColor: "#fff" }}
     >
       {options.map((o) => (
         <button
@@ -214,8 +214,8 @@ export function InvoiceLangToggle({ lang, onChange }) {
           onClick={() => onChange(o.key)}
           className="border-0 fw-semibold"
           style={{
-            padding: "8px 12px",
-            fontSize: "0.8rem",
+            padding: "4px 10px",
+            fontSize: "0.74rem",
             cursor: "pointer",
             whiteSpace: "nowrap",
             backgroundColor: lang === o.key ? "#1F6F5C" : "transparent",

@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useMemo } from "react";
 import { FaArrowLeft, FaSave, FaPlus, FaTrash, FaEye, FaEyeSlash, FaTimes, FaChevronDown, FaSearch } from "react-icons/fa";
 import { INVOICE_LABELS, INVOICE_FONT, InvoiceLangToggle, useTamilDescriptions, translateToTamil, unitLabel, numberToWordsTamil } from "./invoiceLang";
 import axiosInstance from "../../api/axiosInstance"; // same helper CompanySettings uses
+import ProductForm from "../products/ProductForm";
 
 function logoStyle(shape, size) {
   if (shape === "circle") return { width: size, height: size, borderRadius: "50%", objectFit: "cover" };
@@ -25,8 +26,8 @@ const spinnerCSS = `
   }
 `;
 const inp = {
-  border: "1px solid #e2e8f0", borderRadius: "8px", padding: "8px 12px",
-  fontSize: "0.875rem", color: "#0f172a", width: "100%", outline: "none",
+  border: "1px solid #e2e8f0", borderRadius: "8px", padding: "5px 10px",
+  fontSize: "0.82rem", lineHeight: 1.3, color: "#0f172a", width: "100%", outline: "none",
   backgroundColor: "#fff", fontFamily: "inherit",
 };
 
@@ -260,7 +261,7 @@ function numberToWords(num) {
 }
 // Formats a number as Indian-grouped currency text, e.g. 70000 -> "70,000.00"
 function formatAmount(n) {
-  return Number(n || 0).toLocaleString("en-IN", {
+  return "₹" + Number(n || 0).toLocaleString("en-IN", {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });
@@ -273,13 +274,6 @@ const cell = (content, style = {}) => (
 );
 
 // ── Numbering helpers ────────────────────────────────────────────────────
-// A record is Proforma if it's explicitly tagged that way, OR — for older
-// records saved before invoiceType existed — if its number carries the
-// "PI-" prefix. Anything else counts as Final. Checking the prefix as a
-// fallback (instead of just `i.invoiceType || "Final"`) matters: any
-// record missing invoiceType would otherwise silently get counted as
-// Final, so the Proforma series never sees its own invoices and always
-// computes "0 existing" → always starts back at 001.
 const isProformaRecord = (i) =>
   i.invoiceType === "Proforma" || (i.invoiceNo || "").startsWith("PI-");
 const isFinalRecord = (i) => !isProformaRecord(i);
@@ -304,7 +298,6 @@ function useIsMobile(breakpoint = 900) {
 const PREVIEW_DOC_WIDTH = 560; // natural width of the invoice table
 
 function InvoicePreview({ form, isMobile, onClose }) {
-  // Mobile: scale the whole invoice down so it fits the screen width
   const wrapRef = useRef(null);
   const innerRef = useRef(null);
   const [scale, setScale] = useState(1);
@@ -354,9 +347,6 @@ function InvoicePreview({ form, isMobile, onClose }) {
         : `${L.wordsPrefix} ${numberToWords(total)} ${L.wordsSuffix}`)
     : "—";
 
-  // On mobile the preview is now rendered inline at the end of the form
-  // (not a fixed full-screen overlay), so it should flow naturally with
-  // the page instead of trying to fill the viewport height.
   const panelStyle = isMobile
     ? {
       ...styles.previewPanel,
@@ -410,7 +400,8 @@ function InvoicePreview({ form, isMobile, onClose }) {
           <table style={{ width: "100%", borderCollapse: "collapse", border: "1px solid #000" }}>
             <tbody>
               <tr>
-                <td colSpan={3} style={{ border: "1px solid #000", padding: "8px 10px", width: "60%" }}>                  <div className="d-flex align-items-start gap-2">
+                <td colSpan={3} style={{ border: "1px solid #000", padding: "8px 10px", width: "50%" }}>
+                  <div className="d-flex align-items-start gap-2">
                   {form.logo
                     ? <img src={form.logo} alt="Logo" style={{ ...logoStyle(form.logoShape, 36), flexShrink: 0 }} />
                     : <div style={{ width: 36, height: 36, backgroundColor: "#059669", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
@@ -421,51 +412,73 @@ function InvoicePreview({ form, isMobile, onClose }) {
                     <div style={{ fontWeight: 700, fontSize: "0.78rem", color: "#0f172a" }}>
                       {form.companyName || <span style={{ color: "#cbd5e1" }}>Company Name</span>}
                     </div>
-                    <div style={{ fontSize: "0.6rem", color: "#334155", whiteSpace: "pre-line" }}>
-                      {form.companyAddress || <span style={{ color: "#cbd5e1" }}>Company Address</span>}
-                    </div>
-                    <div style={{ fontSize: "0.62rem", color: "#334155" }}>
-                      GSTIN: {form.companyGSTIN || <span style={{ color: "#cbd5e1" }}>—</span>}
-                    </div>
+                    {form.companyAddress && (
+                      <div style={{ fontSize: "0.62rem", color: "#334155", whiteSpace: "pre-line", marginTop: 2 }}>
+                        {form.companyAddress}
+                      </div>
+                    )}
                   </div>
                 </div>
                 </td>
-                <td style={{ border: "1px solid #000", padding: "8px 10px", verticalAlign: "top", width: "25%" }}>
-                  <div style={{ fontSize: "0.62rem", color: "#64748b" }}>{L.invoiceNo}</div>
-                  <div style={{ fontWeight: 700, fontSize: "0.75rem", color: "#0f172a" }}>{form.invoiceNo || "—"}</div>
-                </td>
-                <td style={{ border: "1px solid #000", padding: "8px 10px", verticalAlign: "top", width: "15%" }}>
-                  <div style={{ fontSize: "0.62rem", color: "#64748b" }}>{L.dated}</div>
-                  <div style={{ fontWeight: 700, fontSize: "0.7rem", color: "#0f172a" }}>{formatDate(form.date)}</div>
-                </td>
+            <td colSpan={3} style={{ border: "1px solid #000", padding: "8px 10px", verticalAlign: "top", width: "50%" }}>
+  <div style={{ fontSize: "0.7rem", whiteSpace: "nowrap", marginBottom: 4 }}>
+    <span style={{ color: "#64748b" }}>{L.invoiceNo}: </span>
+    <span style={{ fontWeight: 700, color: "#0f172a" }}>{form.invoiceNo || "—"}</span>
+  </div>
+  <div style={{ fontSize: "0.7rem", whiteSpace: "nowrap" }}>
+    <span style={{ color: "#64748b" }}>{L.dated}: </span>
+    <span style={{ fontWeight: 700, color: "#0f172a" }}>{formatDate(form.date)}</span>
+  </div>
+</td>
               </tr>
 
-              <tr>
-                <td colSpan={5} style={{ border: "1px solid #000", padding: "6px 10px" }}>
-                  <div style={{ fontSize: "0.6rem", color: "#64748b" }}>{L.buyer}</div>
-                  <div style={{ fontWeight: 700, fontSize: "0.72rem", color: "#0f172a" }}>
-                    {L.name}: {form.buyerName || <span style={{ color: "#cbd5e1" }}>Buyer Name</span>}
-                  </div>
-                  {form.buyerCompanyName && (
-                    <div style={{ fontSize: "0.65rem", fontWeight: 600, color: "#334155" }}>{L.company}: {form.buyerCompanyName}</div>
-                  )}
-                  {form.buyerAddress && (
-                    <div style={{ fontSize: "0.65rem", color: "#334155", whiteSpace: "pre-line" }}>{L.address}: {form.buyerAddress}</div>
-                  )}
-
-                  <div style={{ fontSize: "0.65rem", color: "#334155" }}>{L.mobile}: {form.buyerMobile}</div>
-                  {form.buyerGSTIN && (
-                    <div style={{ fontSize: "0.65rem", color: "#334155" }}>GSTIN: {form.buyerGSTIN}</div>
-                  )}
-                </td>
-              </tr>
+       <tr>
+  <td colSpan={3} style={{ border: "1px solid #000", padding: "6px 10px", verticalAlign: "top" }}>
+    <div style={{ fontWeight: 700, fontSize: "0.65rem", color: "#0f172a", marginBottom: 2 }}>{previewLang === "ta" ? L.to.replace(/:$/, "") : "To"}</div>
+    <div style={{ fontWeight: 700, fontSize: "0.72rem", color: "#0f172a" }}>
+      {form.buyerSalutation ? form.buyerSalutation + " " : ""}{form.buyerName || <span style={{ color: "#cbd5e1" }}>Buyer Name</span>}
+    </div>
+    {form.buyerCompanyName && (
+      <div style={{ fontSize: "0.65rem", fontWeight: 600, color: "#334155" }}>{form.buyerCompanyName}</div>
+    )}
+    {form.buyerAddress && (
+      <div style={{ fontSize: "0.65rem", color: "#334155", whiteSpace: "pre-line" }}>{L.address}: {form.buyerAddress}</div>
+    )}
+    {form.buyerMobile && (
+      <div style={{ fontSize: "0.65rem", color: "#334155" }}>{L.mobile}: {form.buyerMobile}</div>
+    )}
+    {form.buyerGSTIN && (
+      <div style={{ fontSize: "0.65rem", color: "#334155" }}>GSTIN: {form.buyerGSTIN}</div>
+    )}
+  </td>
+  <td colSpan={3} style={{ border: "1px solid #000", padding: "6px 10px", verticalAlign: "top" }}>
+    <div style={{ fontWeight: 700, fontSize: "0.65rem", color: "#0f172a", marginBottom: 2 }}>{previewLang === "ta" ? L.from.replace(/:$/, "") : "From"}</div>
+    <div style={{ fontSize: "0.65rem", color: "#334155", whiteSpace: "pre-line" }}>
+      {L.address}: {form.companyAddress || <span style={{ color: "#cbd5e1" }}>Company Address</span>}
+    </div>
+    {form.companyMobile && (
+      <div style={{ fontSize: "0.65rem", color: "#334155" }}>
+        {L.mobile}: {form.companyMobile}
+      </div>
+    )}
+    {form.companyEmail && (
+      <div style={{ fontSize: "0.65rem", color: "#334155" }}>
+        Email: {form.companyEmail}
+      </div>
+    )}
+    <div style={{ fontSize: "0.65rem", color: "#334155" }}>
+      GSTIN: {form.companyGSTIN || <span style={{ color: "#cbd5e1" }}>—</span>}
+    </div>
+  </td>
+</tr>
 
               <tr style={{ backgroundColor: "#f1f5f9" }}>
                 {cell(L.sl, { fontWeight: 700, textAlign: "center", width: "6%" })}
-                {cell(L.description, { fontWeight: 700, width: "46%" })}
-                {cell(L.qty, { fontWeight: 700, textAlign: "center", width: "14%" })}
-                {cell(L.rate, { fontWeight: 700, textAlign: "right", width: "17%" })}
-                {cell(L.amount, { fontWeight: 700, textAlign: "right", width: "17%" })}
+                {cell(L.description, { fontWeight: 700, width: "34%" })}
+                {cell("HSN / SAC", { fontWeight: 700, textAlign: "center", width: "12%" })}
+                {cell(L.qty, { fontWeight: 700, textAlign: "center", width: "12%" })}
+                {cell(L.rate, { fontWeight: 700, textAlign: "right", width: "18%" })}
+                {cell(L.amount, { fontWeight: 700, textAlign: "right", width: "18%" })}
               </tr>
 
               {form.items.map((item, i) => (
@@ -481,6 +494,7 @@ function InvoicePreview({ form, isMobile, onClose }) {
                       )}
                     </>
                   )}
+                  {cell(item.hsnCode || "—", { textAlign: "center" })}
                   {cell(`${item.qty}${item.unit ? " " + unitLabel(item.unit, previewLang) : ""}`, { textAlign: "center", whiteSpace: "nowrap" })}
                   {cell(formatAmount(item.rate), { textAlign: "right" })}
                   {cell(formatAmount(item.amount), { textAlign: "right" })}
@@ -488,31 +502,31 @@ function InvoicePreview({ form, isMobile, onClose }) {
               ))}
 
               <tr>
-{cell("")}{cell(<strong>{L.subTotal}</strong>)}{cell("")}{cell("")}
+{cell("")}{cell(<strong>{L.subTotal}</strong>)}{cell("")}{cell("")}{cell("")}
 {cell(<strong>{formatAmount(form.gstType === "GST Included" ? total : subtotal)}</strong>, { textAlign: "right" })}
               </tr>
               {form.gstType === "With GST" && (
   <tr>
-    {cell("")}{cell(<strong>{`${L.gst} @ ${gstPercent}%`}</strong>)}{cell("")}{cell("")}   
+    {cell("")}{cell(<strong>{`${L.gst} @ ${gstPercent}%`}</strong>)}{cell("")}{cell("")}{cell("")}
                   {cell(<strong>{formatAmount(tax)}</strong>, { textAlign: "right" })}
                 </tr>
               )}
 
               <tr>
-                {cell("")}{cell(<strong>{L.total}</strong>)}{cell("")}{cell("")}
+                {cell("")}{cell(<strong>{L.total}</strong>)}{cell("")}{cell("")}{cell("")}
                 {cell(<strong>{formatAmount(total)}</strong>, { textAlign: "right" })}
               </tr>
               <tr>
-                {cell("")}{cell(L.paid)}{cell("")}{cell("")}
+                {cell("")}{cell(L.paid)}{cell("")}{cell("")}{cell("")}
                 {cell(formatAmount(amountPaid), { textAlign: "right" })}
               </tr>
               <tr style={{ backgroundColor: "#ecfdf5" }}>
-                {cell("")}{cell(<strong>{L.due}</strong>)}{cell("")}{cell("")}
+                {cell("")}{cell(<strong>{L.due}</strong>)}{cell("")}{cell("")}{cell("")}
                 {cell(<strong style={{ color: "#059669" }}>{formatAmount(due)}</strong>, { textAlign: "right" })}
               </tr>
 
               <tr>
-                <td colSpan={form.dueDate ? 3 : 5} style={{ border: "1px solid #000", padding: "6px 10px" }}>
+                <td colSpan={form.dueDate ? 4 : 6} style={{ border: "1px solid #000", padding: "6px 10px" }}>
                   <div style={{ fontSize: "0.58rem", color: "#64748b" }}>{L.inWords}</div>
                   <div style={{ fontWeight: 700, fontSize: "0.65rem", color: "#0f172a" }}>{words}</div>
                 </td>
@@ -536,7 +550,7 @@ function InvoicePreview({ form, isMobile, onClose }) {
                     </div>
                   )}
                 </td>
-                <td colSpan={2} style={{ border: "1px solid #000", padding: "6px 10px", textAlign: "right", verticalAlign: "bottom" }}>
+                <td colSpan={3} style={{ border: "1px solid #000", padding: "6px 10px", textAlign: "right", verticalAlign: "bottom" }}>
                   <div style={{ fontSize: "0.6rem", color: "#334155" }}>{L.forCompany(form.companyName || "Your Company")}</div>                  <div style={{ margin: "6px 0", minHeight: 36, display: "flex", justifyContent: "flex-end" }}>
                     {form.signature
                       ? <img src={form.signature} alt="Signature" style={{ maxHeight: 44, maxWidth: 120, objectFit: "contain" }} />
@@ -548,6 +562,19 @@ function InvoicePreview({ form, isMobile, onClose }) {
               </tr>
             </tbody>
           </table>
+
+          {/* System generated note */}
+          <div style={{
+            textAlign: "center",
+            marginTop: 8,
+            fontSize: "0.6rem",
+            color: "#64748b",
+            fontStyle: "italic",
+          }}>
+            {previewLang === "ta"
+              ? "இது கணினியால் உருவாக்கப்பட்ட விலைப்பட்டியல்."
+              : "This is a system generated invoice."}
+          </div>
         </div>
         </div>
       </div>
@@ -939,7 +966,7 @@ function ProductSelect({ products = [], value, onPick, style }) {
     </>
   );
 }
-function ItemDescriptionField({ products = [], item, onType, onPick, style, stockFor }) {
+function ItemDescriptionField({ products = [], item, onType, onPick, onAddNew, style, stockFor }) {
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState("all"); // all | products | services
   const [pos, setPos] = useState({});
@@ -1097,6 +1124,20 @@ function ItemDescriptionField({ products = [], item, onType, onPick, style, stoc
               );
             })}
           </div>
+
+          <button
+            type="button"
+            onClick={() => { closeMenu(); onAddNew && onAddNew(); }}
+            style={{
+              display: "flex", alignItems: "center", gap: 8,
+              width: "100%", border: "none", borderTop: "1px solid #f1f5f9",
+              background: "#f8fafc", color: "#1F6F5C",
+              padding: "10px 14px", fontSize: "0.82rem", fontWeight: 700,
+              cursor: "pointer", borderRadius: "0 0 14px 14px", textAlign: "left",
+            }}
+          >
+            <FaPlus size={10} /> New Product / Service
+          </button>
         </div>
       )}
     </>
@@ -1135,6 +1176,33 @@ useEffect(() => {
     .then(d => setProducts(Array.isArray(d) ? d : []))
     .catch(err => console.error("Failed to load products:", err));
 }, []);
+
+  // Quick-create product popup: holds the row index that asked for it
+  const [quickAddRow, setQuickAddRow] = useState(null);
+
+  const handleQuickSave = async (product) => {
+    const payload = { ...product, id: product.id || `PRD-${Date.now()}` };
+    try {
+      const res = await fetch(`${import.meta.env.VITE_API_URL}/products`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) throw new Error(`Save failed with status ${res.status}`);
+      const saved = await res.json();
+      setProducts(prev =>
+        prev.some(p => p.id === saved.id)
+          ? prev.map(p => (p.id === saved.id ? saved : p))
+          : [saved, ...prev]
+      );
+      if (quickAddRow !== null) pickProduct(quickAddRow, saved.id, saved);
+      setQuickAddRow(null);
+    } catch (err) {
+      console.error("Quick add product failed:", err);
+      alert("Failed to save product: " + err.message);
+    }
+  };
+
   const [showPreview, setShowPreview] = useState(() =>
     typeof window !== "undefined" ? window.innerWidth > 900 : true
   );
@@ -1170,6 +1238,8 @@ useEffect(() => {
     // will never be overwritten by later Settings changes.
     companyName: companyInfo?.companyName || "",
     companyAddress: companyInfo?.companyAddress || "",
+    companyMobile: companyInfo?.companyPhone || "",
+    companyEmail: companyInfo?.companyEmail || "",
     companyGSTIN: companyInfo?.gstin || "",
     logo: companyInfo?.logo || null,
     logoShape: "original",
@@ -1177,6 +1247,7 @@ useEffect(() => {
     //  — still fully replaceable via "Change Signature"
     // below, this just avoids showing an empty "No signature uploaded" box.
     signature: "/signature.png",
+    buyerSalutation: "",
     buyerName: "",
     buyerCompanyName: "",
     buyerAddress: "",
@@ -1209,6 +1280,8 @@ useEffect(() => {
       logo: prev.logo || companyInfo?.logo || null,
       companyName: prev.companyName || companyInfo?.companyName || "",
       companyAddress: prev.companyAddress || companyInfo?.companyAddress || "",
+      companyMobile: prev.companyMobile || companyInfo?.companyPhone || "",
+      companyEmail: prev.companyEmail || companyInfo?.companyEmail || "",
       companyGSTIN: prev.companyGSTIN || companyInfo?.gstin || "",
     }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1278,6 +1351,8 @@ useEffect(() => {
       ...prev,
       companyName: c.companyName || "",
       companyAddress: c.companyAddress || "",
+      companyMobile: c.companyPhone || "",
+      companyEmail: c.companyEmail || "",
       companyGSTIN: c.gstin || "",
       logo: c.logo || null,
     }));
@@ -1292,17 +1367,18 @@ useEffect(() => {
     }
     setForm(prev => ({ ...prev, items }));
   };
-  const pickProduct = (i, productId) => {
+  const pickProduct = (i, productId, productObj) => {
   const items = [...form.items];
   if (!productId) {
     items[i] = { ...items[i], productId: undefined };   // custom item
   } else {
-    const p = products.find(x => String(x.id) === String(productId));
+    const p = productObj || products.find(x => String(x.id) === String(productId));
     if (!p) return;
     const rate = Number(p.sale_rate ?? 0);
     items[i] = {
       ...items[i],
       productId: p.id,
+      hsnCode: p.hsn_code || p.hsnCode || "",
       description: p.name,
       descriptionTa: undefined,
       unit: p.unit || items[i].unit || "Nos",
@@ -1463,15 +1539,14 @@ const handleSave = async () => {
             : { ...styles.formSide, maxWidth: "100%" }
         }>
 
-          <div className="d-flex justify-content-between align-items-center mb-4 no-print"
+          <div className="d-flex justify-content-between align-items-center mb-2 no-print"
             style={{
-              flexWrap: "wrap", gap: 10,
-              position: "sticky", top: 0, zIndex: 20,
-              backgroundColor: "#fff", padding: "10px 0",
+              flexWrap: "nowrap", gap: 6,
+              backgroundColor: "#fff", padding: "4px 0",
             }}>
             <button onClick={onBack}
-              className="d-flex align-items-center gap-2 border-0 rounded-3 fw-semibold px-3 py-2"
-              style={{ backgroundColor: "#f1f5f9", color: "#475569", cursor: "pointer", fontSize: "0.85rem" }}
+              className="d-flex align-items-center gap-1 border-0 rounded-2 fw-semibold px-2 py-1"
+              style={{ backgroundColor: "#f1f5f9", color: "#475569", cursor: "pointer", fontSize: "0.74rem" }}
               onMouseEnter={e => e.currentTarget.style.backgroundColor = "#e2e8f0"}
               onMouseLeave={e => e.currentTarget.style.backgroundColor = "#f1f5f9"}
             >
@@ -1479,7 +1554,7 @@ const handleSave = async () => {
             </button>
             {!isMobile && (
               <div className="d-flex align-items-center gap-2">
-                <h5 className="fw-bold mb-0" style={{ color: "#0f172a" }}>
+                <h5 className="fw-bold mb-0" style={{ color: "#0f172a", fontSize: "0.95rem" }}>
                   {isEdit ? "Edit" : "New"}
                 </h5>
                 <select
@@ -1487,10 +1562,10 @@ const handleSave = async () => {
                   onChange={e => handleInvoiceTypeChange(e.target.value)}
                   style={{
                     border: "none", outline: "none", cursor: "pointer",
-                    fontWeight: 700, fontSize: "1.05rem",
+                    fontWeight: 700, fontSize: "0.8rem",
                     color: form.invoiceType === "Proforma" ? "#7c3aed" : "#0f172a",
                     backgroundColor: form.invoiceType === "Proforma" ? "#f5f3ff" : "#E6F1EC",
-                    borderRadius: 8, padding: "4px 10px",
+                    borderRadius: 6, padding: "3px 6px",
                   }}
                 >
                   <option value="Final">Invoice</option>
@@ -1498,18 +1573,22 @@ const handleSave = async () => {
                 </select>
               </div>
             )}
-            <div className="d-flex gap-2">
+            <div className="d-flex gap-2 align-items-center" style={{ flexWrap: "nowrap" }}>
+              <InvoiceLangToggle
+                lang={form.invoiceLang === "ta" ? "ta" : "en"}
+                onChange={(l) => updateField("invoiceLang", l)}
+              />
               <button
+                title={showPreview ? "Hide Preview" : "Show Preview"}
                 onClick={() => setShowPreview(v => !v)}
-                className="d-flex align-items-center gap-2 border-0 rounded-3 fw-semibold px-3 py-2"
-                style={{ backgroundColor: showPreview ? "#ecfdf5" : "#f1f5f9", color: showPreview ? "#059669" : "#475569", cursor: "pointer", fontSize: "0.85rem", border: showPreview ? "1px solid #a7f3d0" : "1px solid transparent" }}
+                className="d-flex align-items-center gap-1 border-0 rounded-2 fw-semibold px-2 py-1"
+                style={{ backgroundColor: showPreview ? "#ecfdf5" : "#f1f5f9", color: showPreview ? "#059669" : "#475569", cursor: "pointer", fontSize: "0.74rem", border: showPreview ? "1px solid #a7f3d0" : "1px solid transparent" }}
               >
                 {showPreview ? <FaEyeSlash size={12} /> : <FaEye size={12} />}
-                {showPreview ? "Hide Preview" : "Show Preview"}
               </button>
               <button onClick={handleSave}
-                className="d-flex align-items-center gap-2 border-0 rounded-3 fw-semibold px-4 py-2"
-                style={{ background: "linear-gradient(135deg,#10b981,#059669)", color: "#fff", cursor: "pointer", fontSize: "0.85rem", boxShadow: "0 4px 12px rgba(5,150,105,0.3)" }}
+                className="d-flex align-items-center gap-1 border-0 rounded-2 fw-semibold px-3 py-1"
+                style={{ background: "linear-gradient(135deg,#10b981,#059669)", color: "#fff", cursor: "pointer", fontSize: "0.74rem", boxShadow: "0 2px 8px rgba(5,150,105,0.3)" }}
               >
                 <FaSave size={12} /> {isEdit ? "Update Invoice" : "Generate Invoice"}
               </button>
@@ -1536,18 +1615,13 @@ const handleSave = async () => {
             </div>
           )}
 
-          <div className="mb-3">
-            <InvoiceLangToggle
-              lang={form.invoiceLang === "ta" ? "ta" : "en"}
-              onChange={(l) => updateField("invoiceLang", l)}
-            />
-          </div>
+      
 
           <div className="card border-0 shadow-sm" style={{ borderRadius: "16px" }}>
-            <div className="p-4">
+            <div className="p-3">
 
               {/* Invoice Meta */}
-              <div className="row g-3 mb-4 p-3 rounded-3" style={{ backgroundColor: "#f8fafc", border: "1px solid #e2e8f0" }}>
+              <div className="row g-2 mb-3 p-3 rounded-3" style={{ backgroundColor: "#f8fafc", border: "1px solid #e2e8f0" }}>
                 <div
                   className="col-12 d-flex justify-content-between align-items-center"
                   style={{ flexDirection: isMobile ? "column" : "row", alignItems: isMobile ? "flex-start" : "center", gap: isMobile ? 12 : 0 }}
@@ -1621,8 +1695,23 @@ const handleSave = async () => {
                     placeholder="Enter GSTIN"
                   />
                 </div>
-                <div className="col-12 col-md-3">
-                  {/* spacer to keep the grid tidy on desktop */}
+                <div className="col-12 col-md-4">
+                  <label style={{ fontSize: "0.75rem", fontWeight: 600, color: "#64748b", display: "block", marginBottom: 4 }}>Company Mobile</label>
+                  <input
+                    value={form.companyMobile || ""}
+                    onChange={e => updateField("companyMobile", e.target.value)}
+                    style={inp}
+                    placeholder="Enter Mobile"
+                  />
+                </div>
+                <div className="col-12 col-md-4">
+                  <label style={{ fontSize: "0.75rem", fontWeight: 600, color: "#64748b", display: "block", marginBottom: 4 }}>Company Email</label>
+                  <input
+                    value={form.companyEmail || ""}
+                    onChange={e => updateField("companyEmail", e.target.value)}
+                    style={inp}
+                    placeholder="Enter Email"
+                  />
                 </div>
                 <div className="col-12">
                   <label style={{ fontSize: "0.75rem", fontWeight: 600, color: "#64748b", display: "block", marginBottom: 4 }}>Company Address</label>
@@ -1738,15 +1827,28 @@ const handleSave = async () => {
               </div>
 
               {/* Buyer Details */}
-              <div className="row g-3 mb-4 p-3 rounded-3" style={{ backgroundColor: "#f8fafc", border: "1px solid #e2e8f0" }}>
+              <div className="row g-2 mb-3 p-3 rounded-3" style={{ backgroundColor: "#f8fafc", border: "1px solid #e2e8f0" }}>
                 <div className="col-12">
-                  <div className="fw-bold mb-2" style={{ color: "#0f172a", fontSize: "0.9rem" }}>Buyer Details (Bill To)</div>
+                  <div className="fw-bold mb-1" style={{ color: "#0f172a", fontSize: "0.9rem" }}>Buyer Details (Bill To)</div>
                 </div>
                 <div className="col-12 col-md-6">
-                  <label style={{ fontSize: "0.75rem", fontWeight: 600, color: "#64748b", display: "block", marginBottom: 4 }}>Buyer Name *</label>
-                  <div style={{ position: "relative" }}>
-                    <input
-                      name="buyerName"
+              <label style={{ fontSize: "0.75rem", fontWeight: 600, color: "#64748b", display: "block", marginBottom: 4 }}>Buyer Name *</label>
+<div style={{ display: "flex", gap: 8 }}>
+  <select
+    value={form.buyerSalutation || ""}
+    onChange={e => updateField("buyerSalutation", e.target.value)}
+    style={{ ...inp, width: 90, flexShrink: 0, cursor: "pointer" }}
+  >
+    <option value="">Title</option>
+    <option value="Mr.">Mr.</option>
+    <option value="Mrs.">Mrs.</option>
+    <option value="Ms.">Ms.</option>
+    <option value="Miss">Miss</option>
+    <option value="Dr.">Dr.</option>
+  </select>
+<div style={{ position: "relative", flex: 1, minWidth: 0 }}>
+  <input
+    name="buyerName"
                       autoComplete="off"
                       value={form.buyerName || ""}
                       onFocus={() => setShowCustomerList(true)}
@@ -1809,8 +1911,9 @@ const handleSave = async () => {
                           ))}
                       </div>
                     )}
-                  </div>   
-                       </div>
+                  </div>
+                  </div>
+                </div>
                 <div className="col-12 col-md-6">
                   <label style={{ fontSize: "0.75rem", fontWeight: 600, color: "#64748b", display: "block", marginBottom: 4 }}>Company Name</label>
                   <input name="buyerCompanyName" autoComplete="organization" value={form.buyerCompanyName || ""} onChange={e => updateField("buyerCompanyName", e.target.value)} style={inp} placeholder="Client Company Name" />              </div>
@@ -1832,8 +1935,8 @@ const handleSave = async () => {
               </div>
 
               {/* Items Table */}
-              <div className="mb-4">
-                <div className="fw-bold mb-3" style={{ color: "#0f172a", fontSize: "0.9rem" }}>Services / Items</div>
+              <div className="mb-3">
+                <div className="fw-bold mb-2" style={{ color: "#0f172a", fontSize: "0.9rem" }}>Services / Items</div>
 
                 {isMobile ? (
                   // ── Stacked card layout for items on mobile ──────────────
@@ -1856,7 +1959,14 @@ const handleSave = async () => {
         onType={v => typeDescription(i, v)}
 stockFor={p => availableStock(p.id, i)}
         onPick={v => pickProduct(i, v)}
+        onAddNew={() => setQuickAddRow(i)}
         style={{ ...inp, fontSize: "0.82rem" }}
+      />
+      <input
+        value={item.hsnCode ?? ""}
+        onChange={e => updateItem(i, "hsnCode", e.target.value.replace(/\D/g, "").slice(0, 8))}
+        placeholder="HSN / SAC code"
+        style={{ ...inp, fontSize: "0.72rem", padding: "4px 8px", marginTop: 4 }}
       />
     </div>
                         <div className="row g-2">
@@ -1921,14 +2031,23 @@ stockFor={p => availableStock(p.id, i)}
                       <div key={i} className="px-3 py-2" style={{ display: "grid", gridTemplateColumns: ITEM_GRID, gap: 6, alignItems: "center", borderTop: "1px solid #f1f5f9" }}>
                         <div style={{ fontSize: "0.82rem", color: "#94a3b8" }}>{item.sl}</div>
 
-                        <ItemDescriptionField
-                          products={products}
-                          item={item}
-                          onType={v => typeDescription(i, v)}
-                          stockFor={p => availableStock(p.id, i)}
-                          onPick={v => pickProduct(i, v)}
-                          style={{ ...inp, fontSize: "0.82rem" }}
-                        />
+                        <div>
+                          <ItemDescriptionField
+                            products={products}
+                            item={item}
+                            onType={v => typeDescription(i, v)}
+                            stockFor={p => availableStock(p.id, i)}
+                            onPick={v => pickProduct(i, v)}
+                            onAddNew={() => setQuickAddRow(i)}
+                            style={{ ...inp, fontSize: "0.82rem" }}
+                          />
+                          <input
+                            value={item.hsnCode ?? ""}
+                            onChange={e => updateItem(i, "hsnCode", e.target.value.replace(/\D/g, "").slice(0, 8))}
+                            placeholder="HSN / SAC code"
+                            style={{ ...inp, fontSize: "0.72rem", padding: "4px 8px", marginTop: 4 }}
+                          />
+                        </div>
 
                         <div className="d-flex gap-1">
                           <input type="number" className="no-spinner" value={item.qty} onChange={e => updateItem(i, "qty", e.target.value)} placeholder="1" style={{ ...inp, fontSize: "0.82rem", padding: "8px 6px", minWidth: 0 }} />
@@ -1983,7 +2102,7 @@ stockFor={p => availableStock(p.id, i)}
               </div>
 
               {/* Totals */}
-              <div className="d-flex justify-content-end mb-4">
+              <div className="d-flex justify-content-end mb-3">
                 <div style={{ minWidth: isMobile ? "100%" : "280px", width: isMobile ? "100%" : "auto" }}>
                   {[
                  { label: "Sub Total", value: `₹${(form.gstType === "GST Included" ? total : subtotal).toLocaleString()}` },
@@ -1994,12 +2113,12 @@ stockFor={p => availableStock(p.id, i)}
                     { label: "Total Invoice Value", value: `₹${total.toLocaleString()}`, bold: true },
                     { label: "Amount Paid", value: `₹${Number(form.amountPaid || 0).toLocaleString()}` },
                   ].map(({ label, value, bold }) => (
-                    <div key={label} className="d-flex justify-content-between py-2" style={{ borderBottom: "1px solid #f1f5f9" }}>
+                    <div key={label} className="d-flex justify-content-between py-1" style={{ borderBottom: "1px solid #f1f5f9" }}>
                       <span style={{ fontSize: "0.85rem", color: bold ? "#0f172a" : "#64748b", fontWeight: bold ? 700 : 400 }}>{label}</span>
                       <span style={{ fontSize: "0.85rem", color: "#0f172a", fontWeight: bold ? 700 : 600 }}>{value}</span>
                     </div>
                   ))}
-                  <div className="d-flex justify-content-between py-3 px-3 rounded-3 mt-2" style={{ backgroundColor: "#0f172a" }}>
+                  <div className="d-flex justify-content-between py-2 px-3 rounded-3 mt-1" style={{ backgroundColor: "#0f172a" }}>
                     <span className="fw-bold" style={{ color: "#fff", fontSize: "0.9rem" }}>Amount Due</span>
                     <span className="fw-bold" style={{ color: "#34d399", fontSize: "1.1rem" }}>₹{due.toLocaleString()}</span>
                   </div>
@@ -2007,7 +2126,7 @@ stockFor={p => availableStock(p.id, i)}
               </div>
 
               {/* Notes */}
-              <div className="mb-4">
+              <div className="mb-3">
                 <label style={{ fontSize: "0.75rem", fontWeight: 600, color: "#64748b", display: "block", marginBottom: 4 }}>Notes (optional)</label>
                 <textarea rows={2} value={form.notes} onChange={e => updateField("notes", e.target.value)}
                   style={{ ...inp, resize: "vertical" }} placeholder="Additional notes for the client..." />
@@ -2084,6 +2203,15 @@ stockFor={p => availableStock(p.id, i)}
 
         {/* ══ RIGHT: Preview — sticky sidebar on desktop only ══ */}
         {showPreview && !isMobile && <InvoicePreview form={form} isMobile={false} />}    </div>
+
+      {quickAddRow !== null && (
+        <ProductForm
+          product={null}
+          defaultType="Product"
+          onSave={handleQuickSave}
+          onClose={() => setQuickAddRow(null)}
+        />
+      )}
     </>
   );
 }

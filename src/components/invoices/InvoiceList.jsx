@@ -575,12 +575,28 @@ export default function InvoiceList({
 
       {/* Stat cards */}
       <div className="d-flex flex-wrap inv-stats-grid mb-4" style={{ gap: 12 }}>
-        <StatCard icon={<FaFileInvoiceDollar size={14} />} iconBg="#E6F1EC" iconColor="#1F6F5C" count={totalInvoices} label="Total Invoices" />
-       <StatCard icon={<FaCheckCircle size={14} />} iconBg="#ecfdf5" iconColor="#059669" count={paidCount} label="Paid" onClick={() => setStatusFilter("Paid")} active={statusFilter === "Paid"} />
-        <StatCard icon={<FaClock size={14} />} iconBg="#fff7ed" iconColor="#ea580c" count={unpaidCount} label="Unpaid" onClick={() => setStatusFilter("Unpaid")} active={statusFilter === "Unpaid"} />
-        <StatCard icon={<FaExclamationCircle size={14} />} iconBg="#fef2f2" iconColor="#dc2626" count={overdueCount} label="Overdue" onClick={() => setStatusFilter("Overdue")} active={statusFilter === "Overdue"} />
+        <StatCard
+          icon={<FaFileInvoiceDollar size={14} />}
+          iconBg="#E6F1EC"
+          iconColor="#1F6F5C"
+          count={totalInvoices}
+          label="Total Invoices"
+          onClick={() => { setStatusFilter("all"); setActiveTab("all"); }}
+          active={statusFilter === "all" && activeTab === "all"}
+        />
+       <StatCard icon={<FaCheckCircle size={14} />} iconBg="#ecfdf5" iconColor="#059669" count={paidCount} label="Paid" onClick={() => setStatusFilter(prev => prev === "Paid" ? "all" : "Paid")} active={statusFilter === "Paid"} />
+        <StatCard icon={<FaClock size={14} />} iconBg="#fff7ed" iconColor="#ea580c" count={unpaidCount} label="Unpaid" onClick={() => setStatusFilter(prev => prev === "Unpaid" ? "all" : "Unpaid")} active={statusFilter === "Unpaid"} />
+        <StatCard icon={<FaExclamationCircle size={14} />} iconBg="#fef2f2" iconColor="#dc2626" count={overdueCount} label="Overdue" onClick={() => setStatusFilter(prev => prev === "Overdue" ? "all" : "Overdue")} active={statusFilter === "Overdue"} />
         <StatCard icon={<FaRupeeSign size={14} />} iconBg="#E6F1EC" iconColor="#1F6F5C" count={`₹${totalDue.toLocaleString()}`} label="Total Due" />
-        <StatCard icon={<FaFileAlt size={14} />} iconBg="#f5f3ff" iconColor="#7c3aed" count={proformaCount} label="Proforma" />
+        <StatCard
+          icon={<FaFileAlt size={14} />}
+          iconBg="#f5f3ff"
+          iconColor="#7c3aed"
+          count={proformaCount}
+          label="Proforma"
+          onClick={() => { setStatusFilter("all"); setActiveTab("proforma"); }}
+          active={activeTab === "proforma"}
+        />
       </div>
 
       {/* "Related to Quotation" result banner — only shown when the search
@@ -621,7 +637,10 @@ export default function InvoiceList({
             ].map(tab => (
               <button
                 key={tab.key}
-                onClick={() => setActiveTab(tab.key)}
+                onClick={() => {
+                  setActiveTab(tab.key);
+                  if (tab.key === "all") setStatusFilter("all");
+                }}
                 className="border-0 fw-semibold d-flex align-items-center gap-2"
                 style={{
                   padding: "8px 16px",

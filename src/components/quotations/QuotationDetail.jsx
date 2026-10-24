@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import {
-  FaArrowLeft, FaPrint, FaEdit, FaSave, FaTimes, FaPlus, FaTrash, FaCheck,
+  FaArrowLeft, FaPrint, FaEdit, FaSave, FaTimes, FaPlus, FaTrash, FaCheck, FaThLarge, FaEye,
 } from "react-icons/fa";
 import { FiMapPin, FiPhone, FiMail, FiUser } from "react-icons/fi";
 import DOMPurify from "dompurify";
@@ -12,7 +12,6 @@ import CorporateLayout from "./Corporatelayout";
 import MinimalLayout from "./Minimallayout";
 import { CompanySelectField, CostItemsTable, CustomerSelectField } from "./EditableField";
 import { getCostItems, getCostLines, computeCostTotals, getGstMode } from "./quotationLayoutUtils";
-import QuotationTemplate from "./QuotationTemplate";
 import { templates } from "./QuotationTable";
 import TinyMCEEditor from "./TinyMCEEditor";
 
@@ -26,6 +25,17 @@ function logoStyle(shape, size) {
   if (shape === "square") return { width: size, height: size, borderRadius: 8, objectFit: "contain" };
   return { height: size, width: "auto", maxWidth: size * 3, objectFit: "contain" }; // original
 }
+
+const SALUTATIONS = ["Mr.", "Mrs.", "Ms.", "Miss", "Dr."];
+
+const STYLE_LABELS = {
+  classic: "Classic Formal",
+  creative: "Warm Friendly",
+  bold: "Bold Editorial",
+  modern: "Dark Tech",
+  corporate: "Corporate Blue",
+  minimal: "Minimal",
+};
 
 const QUOTATION_LAYOUTS = {
   classic: ClassicLayout,
@@ -239,7 +249,7 @@ function ToggleSwitch({ checked, onChange, accent, label }) {
       <span onClick={() => onChange(!checked)} style={{ width: 42, height: 24, borderRadius: 999, position: "relative", backgroundColor: checked ? accent : "#cbd5e1", transition: "background-color 0.18s", flexShrink: 0 }}>
         <span style={{ position: "absolute", top: 2, left: checked ? 20 : 2, width: 20, height: 20, borderRadius: "50%", backgroundColor: "#fff", boxShadow: "0 1px 3px rgba(0,0,0,0.25)", transition: "left 0.18s" }} />
       </span>
-      {label && <span style={{ fontWeight: 600, fontSize: 14, color: T.slate }}>{label}</span>}
+      {label && <span style={{ fontWeight: 600, fontSize: 14, color: T.slate, display: "flex", alignItems: "center" }}>{label}</span>}
     </label>
   );
 }
@@ -387,6 +397,7 @@ function ConfirmEditApprovedModal({ show, onCancel, onConfirm, accent = "#F97316
     </div>
   );
 }
+
 export default function QuotationDetail({
   quotation, companyInfo, docSettings, customers = [], products = [], isNew, editMode, isNewTemplate,
   onBack, onEdit, onSave, onSend, onCancelEdit,
@@ -394,7 +405,6 @@ export default function QuotationDetail({
   const [form, setForm] = useState(() => normalizeFormQuotation(quotation));
   const [showApprovedEditConfirm, setShowApprovedEditConfirm] = useState(false);
   const [isSending, setIsSending] = useState(false);
-
 
   const draftKeyRef = useRef(
     !isNew && quotation.id ? quotation.id : quotation._draftId || `draft_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`
@@ -412,8 +422,6 @@ export default function QuotationDetail({
         issuerAddress: prev.issuerAddress || companyInfo?.companyAddress || "",
         issuerPhone: prev.issuerPhone || companyInfo?.companyPhone || "",
         issuerEmail: prev.issuerEmail || companyInfo?.companyEmail || "",
-
-
       };
     });
   }, [companyInfo, isNew]);
@@ -481,10 +489,10 @@ export default function QuotationDetail({
     };
   }, [editMode, form.templateStyle]);
 
-  const [showPreview, setShowPreview] = useState(
-    typeof window !== "undefined" ? window.innerWidth > 1100 : true
+  const [showPreview, setShowPreview] = useState(false);
+  const [showTemplateSwitcher, setShowTemplateSwitcher] = useState(
+    typeof window !== "undefined" ? window.innerWidth > 1300 : false
   );
-  const [showTemplateSwitcher, setShowTemplateSwitcher] = useState(false);
   const isMobile = useIsMobile(1100);
   const accent = form.accentColor || T.orange;
   const accentBg = form.accentBg || `linear-gradient(135deg, ${accent}, ${shadeColor(accent, -25)})`;
@@ -497,32 +505,32 @@ export default function QuotationDetail({
     return { amount: total };
   };
 
-const updateField = (field, value) => {
-  dirtyRef.current = true;
-  const CAP_FIELDS = ["name", "company", "projectTitle", "clientAddress", "issuerAddress"];
-  if (CAP_FIELDS.includes(field) && typeof value === "string") {
-    value = capitalizeWords(value);
-  }
-  setForm((prev) => {
-    let next = { ...prev, [field]: value };
-
-    // Legacy layouts (Classic/Creative/Bold/Modern/Corporate/Minimal) still use
-    // the old boolean `includeGst` toggle via CostCalculatorBar. The newer
-    // CostItemsTable / getCostLines / getGstMode logic reads the string
-    // `gstMode` instead, and getGstMode() prefers `gstMode` when it's set.
-    // Without this sync, switching the old toggle to "No GST" left a stale
-    // `gstMode: "with"` in place, so GST kept being added to the total even
-    // though the toggle showed off.
-    if (field === "includeGst") {
-      next = { ...next, gstMode: value ? "with" : "without" };
+  const updateField = (field, value) => {
+    dirtyRef.current = true;
+    const CAP_FIELDS = ["name", "company", "projectTitle", "clientAddress", "issuerAddress"];
+    if (CAP_FIELDS.includes(field) && typeof value === "string") {
+      value = capitalizeWords(value);
     }
+    setForm((prev) => {
+      let next = { ...prev, [field]: value };
 
-    if (field === "includeGst" || field === "gstMode" || field === "gstPercent" || field === "costItems") {
-      return { ...next, ...computeProjectCostFields(next) };
-    }
-    return next;
-  });
-};
+      // Legacy layouts (Classic/Creative/Bold/Modern/Corporate/Minimal) still use
+      // the old boolean `includeGst` toggle via CostCalculatorBar. The newer
+      // CostItemsTable / getCostLines / getGstMode logic reads the string
+      // `gstMode` instead, and getGstMode() prefers `gstMode` when it's set.
+      // Without this sync, switching the old toggle to "No GST" left a stale
+      // `gstMode: "with"` in place, so GST kept being added to the total even
+      // though the toggle showed off.
+      if (field === "includeGst") {
+        next = { ...next, gstMode: value ? "with" : "without" };
+      }
+
+      if (field === "includeGst" || field === "gstMode" || field === "gstPercent" || field === "costItems") {
+        return { ...next, ...computeProjectCostFields(next) };
+      }
+      return next;
+    });
+  };
 
   const handleIssuerSelect = (name, company) => {
     dirtyRef.current = true;
@@ -539,7 +547,7 @@ const updateField = (field, value) => {
       }),
     }));
   };
-    const handleCustomerSelect = (cust) => {
+  const handleCustomerSelect = (cust) => {
     dirtyRef.current = true;
     setForm((prev) => ({
       ...prev,
@@ -566,7 +574,6 @@ const updateField = (field, value) => {
   const handleTemplateSwitch = (tpl) => {
     dirtyRef.current = true;
     updateField("templateStyle", tpl?.templateStyle || "default");
-    setShowTemplateSwitcher(false);
 
     const scrollToTop = () => {
       const mainContent = document.querySelector(".main-content");
@@ -607,7 +614,7 @@ const updateField = (field, value) => {
     }
   };
 
-    const stockProblem = () => {
+  const stockProblem = () => {
     const rows = getCostItems(form);
     for (const it of rows) {
       if (!it.productId) continue;
@@ -622,8 +629,6 @@ const updateField = (field, value) => {
     }
     return null;
   };
-
-
 
   const handleSaveClick = () => {
     const stockMsg = stockProblem();
@@ -673,7 +678,8 @@ const updateField = (field, value) => {
     }
   };
 
-  const handleCancelClick = () => {    removeDraft(draftKeyRef.current);
+  const handleCancelClick = () => {
+    removeDraft(draftKeyRef.current);
     setForm(normalizeFormQuotation(quotation));
     onCancelEdit();
     onBack();
@@ -682,26 +688,26 @@ const updateField = (field, value) => {
   const inp = { border: `1px solid ${T.border}`, borderRadius: 8, padding: "6px 10px", fontSize: 14, color: T.navy, width: "100%", outline: "none", backgroundColor: T.bgSoft, fontFamily: T.font, lineHeight: 1.75 };
   const headingInp = { ...inp, fontWeight: 700, fontSize: 15, color: T.navy, backgroundColor: accentSoftBg, border: `1px solid ${accentBorder}` };
 
-// Editable section headings, saved on the quotation as form.sectionHeadings
-const headingText = (key, fallback) => (form.sectionHeadings && form.sectionHeadings[key]) || fallback;
-const updateHeading = (key, value) => {
-  dirtyRef.current = true;
-  setForm((prev) => ({ ...prev, sectionHeadings: { ...(prev.sectionHeadings || {}), [key]: value } }));
-};
-// Called as a plain function (not a component) so the input keeps focus while typing
-const renderHeading = (key, fallback, isEditable, extraStyle = {}) =>
-  isEditable ? (
-    <input
-      className="no-print"
-      value={form.sectionHeadings?.[key] ?? fallback}
-      onChange={(e) => updateHeading(key, e.target.value)}
-      onBlur={(e) => { if (!e.target.value.trim()) updateHeading(key, fallback); }}
-      placeholder={fallback}
-      style={{ ...headingInp, maxWidth: 360, marginBottom: 8, ...extraStyle }}
-    />
-  ) : (
-    <div className="qt-heading-avoid" style={{ ...sectionTitle, ...extraStyle }}>{headingText(key, fallback)}</div>
-  );
+  // Editable section headings, saved on the quotation as form.sectionHeadings
+  const headingText = (key, fallback) => (form.sectionHeadings && form.sectionHeadings[key]) || fallback;
+  const updateHeading = (key, value) => {
+    dirtyRef.current = true;
+    setForm((prev) => ({ ...prev, sectionHeadings: { ...(prev.sectionHeadings || {}), [key]: value } }));
+  };
+  // Called as a plain function (not a component) so the input keeps focus while typing
+  const renderHeading = (key, fallback, isEditable, extraStyle = {}) =>
+    isEditable ? (
+      <input
+        className="no-print"
+        value={form.sectionHeadings?.[key] ?? fallback}
+        onChange={(e) => updateHeading(key, e.target.value)}
+        onBlur={(e) => { if (!e.target.value.trim()) updateHeading(key, fallback); }}
+        placeholder={fallback}
+        style={{ ...headingInp, maxWidth: 360, marginBottom: 8, ...extraStyle }}
+      />
+    ) : (
+      <div className="qt-heading-avoid" style={{ ...sectionTitle, ...extraStyle }}>{headingText(key, fallback)}</div>
+    );
   const sectionTitle = { fontWeight: 700, fontSize: 15, color: T.navy, marginBottom: 8, fontFamily: T.font };
   const sectionText = { fontSize: 13.5, color: T.slate, lineHeight: 1.85, fontFamily: T.font, margin: 0 };
   const cellStyle = { border: `1px solid ${T.border}`, padding: "10px 14px", verticalAlign: "top", fontSize: 13.5, color: T.slate };
@@ -727,7 +733,7 @@ const renderHeading = (key, fallback, isEditable, extraStyle = {}) =>
       <LogoBox form={form} editMode={editMode} accent={accent} onUpload={handleLogoUpload} onRemove={() => updateField("logo", null)} onShapeChange={(s) => updateField("logoShape", s)} />
       <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4, minWidth: 0 }}>
         {editMode ? (
-                 <CompanySelectField
+          <CompanySelectField
             value={form.issuerName}
             onChange={handleIssuerSelect}
             placeholder="Your Company Name"
@@ -776,7 +782,7 @@ const renderHeading = (key, fallback, isEditable, extraStyle = {}) =>
       <table className="qt-party-table" style={{ width: "100%", borderCollapse: "collapse", marginBottom: 24, tableLayout: "fixed" }}>
         <tbody>
           <tr>
-                      <td style={{ ...cellStyle, width: "50%" }}>
+            <td style={{ ...cellStyle, width: "50%" }}>
               <span style={cellLabel}>Quotation:</span>{" "}
               {form.quotationNumber
                 ? form.quotationNumber
@@ -800,15 +806,25 @@ const renderHeading = (key, fallback, isEditable, extraStyle = {}) =>
                     placeholder="Select or search customer"
                     style={{ ...cellInput, fontWeight: 700 }}
                   />
-                  <input value={form.name || ""} onChange={(e) => updateField("name", e.target.value)} placeholder="Client contact name" style={cellInput} />
+                  <div style={{ display: "flex", gap: 6 }}>
+                    <select
+                      value={form.salutation || ""}
+                      onChange={(e) => updateField("salutation", e.target.value)}
+                      style={{ ...cellInput, width: 80, flexShrink: 0, cursor: "pointer" }}
+                    >
+                      <option value="">Title</option>
+                      {SALUTATIONS.map((s) => <option key={s} value={s}>{s}</option>)}
+                    </select>
+                    <input value={form.name || ""} onChange={(e) => updateField("name", e.target.value)} placeholder="Client contact name" style={{ ...cellInput, flex: 1, minWidth: 0 }} />
+                  </div>
                   <input value={form.clientAddress || ""} onChange={(e) => updateField("clientAddress", e.target.value)} placeholder="Client address" style={cellInput} />
                   <input value={form.phone || ""} onChange={(e) => updateField("phone", e.target.value)} placeholder="Mob / Phone" style={cellInput} />
                   <input value={form.email || ""} onChange={(e) => updateField("email", e.target.value)} placeholder="Email" style={cellInput} />
                 </>
               ) : (
                 <>
-                  {form.name && <div><span style={{ fontWeight: 600, color: T.navy }}>Name:</span> {form.name}</div>}
-                  {form.company && <div style={{ fontWeight: 600, color: T.navy }}><span>Company:</span> {form.company}</div>}
+                  {form.name && <div style={{ fontWeight: 600, color: T.navy }}>{[form.salutation, form.name].filter(Boolean).join(" ")}</div>}
+                  {form.company && <div style={{ fontWeight: 600, color: T.navy }}>{form.company}</div>}
                   {form.clientAddress && <div><span style={{ fontWeight: 600, color: T.navy }}>Address:</span> {form.clientAddress}</div>}
                   {form.phone && <div><span style={{ fontWeight: 600, color: T.navy }}>Mob:</span> {form.phone}</div>}
                   {form.email && <div><span style={{ fontWeight: 600, color: T.navy }}>Email:</span> {form.email}</div>}
@@ -819,13 +835,14 @@ const renderHeading = (key, fallback, isEditable, extraStyle = {}) =>
               <div style={{ ...cellLabel, marginBottom: 4 }}>From:</div>
               {editMode ? (
                 <>
-                  <CompanySelectField value={form.issuerName} onChange={handleIssuerSelect} placeholder="Your Company Name" style={cellInput} />                  <input value={form.issuerAddress || ""} onChange={(e) => updateField("issuerAddress", e.target.value)} placeholder="Company address" style={cellInput} />
+                  <CompanySelectField value={form.issuerName} onChange={handleIssuerSelect} placeholder="Your Company Name" style={cellInput} />
+                  <input value={form.issuerAddress || ""} onChange={(e) => updateField("issuerAddress", e.target.value)} placeholder="Company address" style={cellInput} />
                   <input value={form.issuerPhone || ""} onChange={(e) => updateField("issuerPhone", e.target.value)} placeholder="Phone" style={cellInput} />
                   <input value={form.issuerEmail || ""} onChange={(e) => updateField("issuerEmail", e.target.value)} placeholder="Email" style={cellInput} />
                 </>
               ) : (
                 <>
-                  {form.issuerName && <div style={{ fontWeight: 600, color: T.navy }}><span>Company:</span> {form.issuerName}</div>}
+                  {form.issuerName && <div style={{ fontWeight: 600, color: T.navy }}>{form.issuerName}</div>}
                   {form.issuerAddress && <div><span style={{ fontWeight: 600, color: T.navy }}>Address:</span> {form.issuerAddress}</div>}
                   {form.issuerPhone && <div><span style={{ fontWeight: 600, color: T.navy }}>Mob:</span> {form.issuerPhone}</div>}
                   {form.issuerEmail && <div><span style={{ fontWeight: 600, color: T.navy }}>Email:</span> {form.issuerEmail}</div>}
@@ -873,7 +890,7 @@ const renderHeading = (key, fallback, isEditable, extraStyle = {}) =>
     .qt-print-body li { break-inside: avoid; page-break-inside: avoid; }
   }
 `}</style>
-  <style>{`
+    <style>{`
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
     @media print {
       .no-print { display: none !important; }
@@ -911,378 +928,439 @@ const renderHeading = (key, fallback, isEditable, extraStyle = {}) =>
     <table className="qt-print-frame">
       <thead><tr><td /></tr></thead>
       <tbody><tr><td>
-    <div className="qt-print-body">
-      {printBannerBlock}
-      {printHeaderBlock}
+        <div className="qt-print-body">
+          {printBannerBlock}
+          {printHeaderBlock}
 
-      {/* Project Description */}
-     <div style={{ marginBottom: 18 }}>
-  {renderHeading("description", "Project Description", isEditable)}
+          {/* Project Description */}
+          <div style={{ marginBottom: 18 }}>
+            {renderHeading("description", "Project Description", isEditable)}
 
-        {isEditable
-          ? <TinyMCEEditor
-            key={`qt-editor-description-${form.templateStyle}`}
-            id="qt-editor-description"
-            value={form.description || ""}
-            onChange={(html) => updateField("description", html)}
-            accent={accent}
-            height={200}
-            placeholder="Describe the project..."
-          />
-          : <RichView html={form.description || ""} />}
-      </div>
+            {isEditable
+              ? <TinyMCEEditor
+                key={`qt-editor-description-${form.templateStyle}`}
+                id="qt-editor-description"
+                value={form.description || ""}
+                onChange={(html) => updateField("description", html)}
+                accent={accent}
+                height={200}
+                placeholder="Describe the project..."
+              />
+              : <RichView html={form.description || ""} />}
+          </div>
 
-      {/* Scope of Work */}
-      {(isEditable || (form.scopeOfWork && form.scopeOfWork.trim())) && (
-        <div style={{ marginBottom: 24 }}>
-{renderHeading("scopeOfWork", "Scope of Work", isEditable)}          {isEditable ? (
-            <>
-              <div className="no-print" style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 10 }}>
-                {SCOPE_TEMPLATES.map((tpl) => {
-                  const tplHtml = linesToHtmlList(tpl.text);
-                  return (
-                    <button key={tpl.label} onClick={() => updateField("scopeOfWork", tplHtml)} title={`Use "${tpl.label}" scope template`} style={{
-                      border: form.scopeOfWork === tplHtml ? `1.5px solid ${accent}` : `1px solid ${T.border}`, borderRadius: 20, padding: "4px 12px",
-                      backgroundColor: form.scopeOfWork === tplHtml ? accentSoftBg : "#fff", color: form.scopeOfWork === tplHtml ? accent : T.muted,
+          {/* Scope of Work */}
+          {(isEditable || (form.scopeOfWork && form.scopeOfWork.trim())) && (
+            <div style={{ marginBottom: 24 }}>
+              {renderHeading("scopeOfWork", "Scope of Work", isEditable)}          {isEditable ? (
+                <>
+                  <div className="no-print" style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 10 }}>
+                    {SCOPE_TEMPLATES.map((tpl) => {
+                      const tplHtml = linesToHtmlList(tpl.text);
+                      return (
+                        <button key={tpl.label} onClick={() => updateField("scopeOfWork", tplHtml)} title={`Use "${tpl.label}" scope template`} style={{
+                          border: form.scopeOfWork === tplHtml ? `1.5px solid ${accent}` : `1px solid ${T.border}`, borderRadius: 20, padding: "4px 12px",
+                          backgroundColor: form.scopeOfWork === tplHtml ? accentSoftBg : "#fff", color: form.scopeOfWork === tplHtml ? accent : T.muted,
+                          fontSize: 12, fontWeight: 600, cursor: "pointer",
+                        }}>
+                          {tpl.label}
+                        </button>
+                      );
+                    })}
+                    <button onClick={() => updateField("scopeOfWork", "")} title="Write your own custom scope" style={{
+                      border: form.scopeOfWork === "" ? `1.5px dashed ${accent}` : `1px dashed ${T.border}`, borderRadius: 20, padding: "4px 12px",
+                      backgroundColor: form.scopeOfWork === "" ? accentSoftBg : "#fff", color: form.scopeOfWork === "" ? accent : T.muted,
                       fontSize: 12, fontWeight: 600, cursor: "pointer",
                     }}>
-                      {tpl.label}
+                      + Custom
                     </button>
-                  );
-                })}
-                <button onClick={() => updateField("scopeOfWork", "")} title="Write your own custom scope" style={{
-                  border: form.scopeOfWork === "" ? `1.5px dashed ${accent}` : `1px dashed ${T.border}`, borderRadius: 20, padding: "4px 12px",
-                  backgroundColor: form.scopeOfWork === "" ? accentSoftBg : "#fff", color: form.scopeOfWork === "" ? accent : T.muted,
-                  fontSize: 12, fontWeight: 600, cursor: "pointer",
-                }}>
-                  + Custom
-                </button>
-              </div>
-              <TinyMCEEditor
-                key={`qt-editor-scope-${form.templateStyle}`}
-                id="qt-editor-scope"
-                value={form.scopeOfWork || ""}
-                onChange={(html) => updateField("scopeOfWork", html)}
-                accent={accent}
-                height={220}
-                placeholder="Add scope items (use the bullet list button), or pick a template above..."
-              />
-            </>
-          ) : (
-            <RichView html={form.scopeOfWork} />
-          )}
-        </div>
-      )}
-
-      {/* Deliverables */}
-      {(isEditable || (form.deliverables && form.deliverables.trim())) && (
-        <div style={{ marginBottom: 24 }}>
-{renderHeading("deliverables", "Deliverables", isEditable)}          {isEditable ? (
-            <TinyMCEEditor
-              id="qt-editor-deliverables"
-              value={form.deliverables || ""}
-              onChange={(html) => updateField("deliverables", html)}
-              accent={accent}
-              height={220}
-              placeholder="Add deliverables (use the bullet list button)..."
-            />
-          ) : (
-            <RichView html={form.deliverables} />
-          )}
-        </div>
-      )}
-
-      {/* (Technology Used section removed) */}
-
-      {/* Custom Sections */}
-  {form.customSections.map((sec, i) => (
-  <div key={i} style={{ marginBottom: 24, paddingTop: 16, borderTop: `1px solid ${T.border}`, position: "relative" }}>
-    {isEditable ? (
-            <div style={{ display: "flex", alignItems: isMobile ? "stretch" : "center", flexDirection: isMobile ? "column" : "row", gap: 8, marginBottom: 8 }}>
-              <input value={sec.heading} onChange={(e) => updateCustomSection(i, "heading", e.target.value)} placeholder="Section Heading (e.g. Payment Terms)" style={headingInp} />
-              <button onClick={() => removeCustomSection(i)} title="Remove this section" style={{
-                flexShrink: 0, width: isMobile ? "100%" : 30, height: 30, border: "none", borderRadius: 6,
-                backgroundColor: T.redSoft, color: T.red, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
-              }}>
-                <FaTrash size={12} />
-              </button>
+                  </div>
+                  <TinyMCEEditor
+                    key={`qt-editor-scope-${form.templateStyle}`}
+                    id="qt-editor-scope"
+                    value={form.scopeOfWork || ""}
+                    onChange={(html) => updateField("scopeOfWork", html)}
+                    accent={accent}
+                    height={220}
+                    placeholder="Add scope items (use the bullet list button), or pick a template above..."
+                  />
+                </>
+              ) : (
+                <RichView html={form.scopeOfWork} />
+              )}
             </div>
-          ) : (
-      sec.heading && <div className="qt-heading-avoid" style={sectionTitle}>{sec.heading}</div>
-    )}
-          {isEditable ? (
-            sec.type === "table" ? (
-              <EditableSectionTable
-                section={sec}
-                onChange={(updated) => updateCustomSectionTable(i, updated)}
-                accent={accent}
-              />
-            ) : (
-              <TinyMCEEditor
-                key={`qt-editor-custom-${i}-${form.templateStyle}`}
-                id={`qt-editor-custom-${i}`}
-                value={sec.content || ""}
-                onChange={(html) => updateCustomSection(i, "content", html)}
-                accent={accent}
-                height={180}
-                placeholder="Type section content here..."
-              />
-            )
-          ) : sec.type === "table" ? (
-            <table style={{ width: "100%", borderCollapse: "collapse" }}>
-              <thead>
-                <tr>
-                  {(sec.columns || []).map((col, ci) => (
-                    <th key={ci} style={{ textAlign: "left", fontSize: 12, fontWeight: 700, color: "#fff", backgroundColor: accent, padding: "8px 12px", border: "none" }}>
-                      {col}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-             {(sec.rows || []).map((row, ri) => (
-  <tr key={ri}>
-    {(Array.isArray(row) ? row : Object.values(row || {})).map((cell, ci) => (
-      <td key={ci} style={{ ...cellStyle, border: "none", borderBottom: `1px solid ${T.border}` }}>{String(cell ?? "")}</td>
-    ))}
-  </tr>
-))}
-              </tbody>
-            </table>
-          ) : (
-            <RichView html={sec.content} />
           )}
-        </div>
-      ))}
 
-      {isEditable && (
-        <div className="no-print" style={{ marginBottom: 24 }}>
-          <button onClick={addCustomSection} style={{
-            display: "flex", alignItems: "center", gap: 8, padding: "10px 18px", border: `2px dashed ${accent}`, borderRadius: 10,
-            backgroundColor: accentSoftBg, color: accent, fontWeight: 600, fontSize: 14, cursor: "pointer", width: "100%", justifyContent: "center",
-          }}
-            onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = `${accent}20`; }}
-            onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = accentSoftBg; }}>
-            <FaPlus size={12} /> Add Custom Section
-          </button>
-        </div>
-      )}
-
-      {/* Project Cost */}
-      {(isEditable || getCostItems(form).length > 0) && (
-      <div style={{ marginBottom: 24 }}>
-  {renderHeading("projectCost", "Project Cost", isEditable)}
-
-          {isEditable ? (
-        <CostItemsTable
-  items={getCostItems(form)}
-  products={products}
-  onChange={(items) => updateField("costItems", items)}
-  gstMode={form.gstMode || (form.includeGst === true ? "with" : "without")}
-  gstPercent={form.gstPercent}
-  defaultGstPercent={defaultGstPercent}
-  onGstChange={updateField}
-  accent={accent}
-/>
-          ) : (
-            <table style={{ width: "100%", borderCollapse: "collapse" }}>
-              <thead>
-                <tr>
-                  <th style={{ textAlign: "left", fontSize: 12, fontWeight: 700, color: "#fff", backgroundColor: accent, padding: "8px 12px", border: "none" }}>
-                    Description
-                  </th>
-                  <th style={{ textAlign: "center", width: 70, fontSize: 12, fontWeight: 700, color: "#fff", backgroundColor: accent, padding: "8px 12px", border: "none" }}>
-                    Qty
-                  </th>
-                  <th style={{ textAlign: "right", fontSize: 12, fontWeight: 700, color: "#fff", backgroundColor: accent, padding: "8px 12px", border: "none" }}>
-                    Line Total
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {(getCostLines(form, defaultGstPercent).rows || []).map((row, i) => (
-                  <tr key={i}>
-                    <td style={{ ...cellStyle, border: "none", borderBottom: `1px solid ${T.border}` }}>{row.label}</td>
-                    <td style={{ ...cellStyle, border: "none", borderBottom: `1px solid ${T.border}`, textAlign: "center" }}>{row.qty}</td>
-                    <td style={{ ...cellStyle, border: "none", borderBottom: `1px solid ${T.border}`, textAlign: "right" }}>{row.value}</td>
-                  </tr>
-                ))}
-              </tbody>
-              {getCostLines(form, defaultGstPercent).grandLine && (() => {
-                const grandLine = getCostLines(form, defaultGstPercent).grandLine;
-                const [label, value] = grandLine.includes(":") ? grandLine.split(/:(.+)/).map((s) => s.trim()) : [grandLine, ""];
-                return (
-                  <tfoot>
-                    <tr>
-                      <td colSpan={2} style={{ padding: "10px 12px", fontSize: 13.5, fontWeight: 700, color: T.navy, borderTop: `2px solid ${T.navy}` }}>{label}</td>
-                      <td style={{ padding: "10px 12px", fontSize: 13.5, fontWeight: 700, color: T.navy, borderTop: `2px solid ${T.navy}`, textAlign: "right" }}>{value}</td>
-                    </tr>
-                  </tfoot>
-                );
-              })()}
-            </table>
+          {/* Deliverables */}
+          {(isEditable || (form.deliverables && form.deliverables.trim())) && (
+            <div style={{ marginBottom: 24 }}>
+              {renderHeading("deliverables", "Deliverables", isEditable)}          {isEditable ? (
+                <TinyMCEEditor
+                  id="qt-editor-deliverables"
+                  value={form.deliverables || ""}
+                  onChange={(html) => updateField("deliverables", html)}
+                  accent={accent}
+                  height={220}
+                  placeholder="Add deliverables (use the bullet list button)..."
+                />
+              ) : (
+                <RichView html={form.deliverables} />
+              )}
+            </div>
           )}
-        </div>
-      )}
 
-      {/* Project Timeline */}
-      {(isEditable || (form.timelineDesc && form.timelineDesc.trim())) && (
-        <div style={{ marginBottom: 24 }}>
-{renderHeading("timeline", "Project Timeline", isEditable)}
-          {isEditable ? (
-            <TinyMCEEditor
-              id="qt-editor-timeline"
-              value={form.timelineDesc || ""}
-              onChange={(html) => updateField("timelineDesc", html)}
-              accent={accent}
-              height={200}
-              placeholder="Describe the project timeline..."
-            />
-          ) : (
-            <RichView html={form.timelineDesc} />
-          )}
-        </div>
-      )}
+          {/* (Technology Used section removed) */}
 
-      {/* Terms & Conditions */}
-      {(isEditable || (form.terms && form.terms.trim())) && (
-        <div style={{ marginBottom: 24 }}>
-{renderHeading("terms", "Terms & Conditions", isEditable, { marginBottom: 6 })}
-          {isEditable && (
-            <div className="no-print" style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 10 }}>
-              {TERMS_TEMPLATES.map((tpl) => {
-                const tplHtml = plainTextToHtml(tpl.text);
-                return (
-                  <button
-                    key={tpl.label}
-                    onClick={() => updateField("terms", tplHtml)}
-                    title={`Use "${tpl.label}" terms template`}
-                    style={{
-                      border: form.terms === tplHtml ? `1.5px solid ${accent}` : `1px solid ${T.border}`,
-                      borderRadius: 20, padding: "4px 12px",
-                      backgroundColor: form.terms === tplHtml ? accentSoftBg : "#fff",
-                      color: form.terms === tplHtml ? accent : T.muted,
-                      fontSize: 12, fontWeight: 600, cursor: "pointer",
-                    }}
-                  >
-                    {tpl.label}
+          {/* Custom Sections */}
+          {form.customSections.map((sec, i) => (
+            <div key={i} style={{ marginBottom: 24, paddingTop: 16, borderTop: `1px solid ${T.border}`, position: "relative" }}>
+              {isEditable ? (
+                <div style={{ display: "flex", alignItems: isMobile ? "stretch" : "center", flexDirection: isMobile ? "column" : "row", gap: 8, marginBottom: 8 }}>
+                  <input value={sec.heading} onChange={(e) => updateCustomSection(i, "heading", e.target.value)} placeholder="Section Heading (e.g. Payment Terms)" style={headingInp} />
+                  <button onClick={() => removeCustomSection(i)} title="Remove this section" style={{
+                    flexShrink: 0, width: isMobile ? "100%" : 30, height: 30, border: "none", borderRadius: 6,
+                    backgroundColor: T.redSoft, color: T.red, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
+                  }}>
+                    <FaTrash size={12} />
                   </button>
-                );
-              })}
-            </div>
-          )}
-          {isEditable ? (
-            <TinyMCEEditor
-              id="qt-editor-terms"
-              value={form.terms || ""}
-              onChange={(html) => updateField("terms", html)}
-              accent={accent}
-              height={300}
-              placeholder="Add your terms & conditions here, or pick a template above..."
-            />
-          ) : (
-            <RichView html={form.terms} />
-          )}
-        </div>
-      )}
-
-      {/* Note */}
-      {(form.notes || isEditable) && (
-        <div style={{ marginBottom: 24, paddingTop: 16, borderTop: `1px solid ${T.border}` }}>
-  {renderHeading("notes", "Note:", isEditable)}
-  
-          {isEditable ? (
-            <TinyMCEEditor
-              id="qt-editor-notes"
-              value={form.notes || ""}
-              onChange={(html) => updateField("notes", html)}
-              accent={accent}
-              height={160}
-              placeholder="Additional notes..."
-            />
-          ) : (
-            <RichView html={form.notes} />
-          )}
-        </div>
-      )}
-
-         {/* Signatures + footer, kept together on one page */}
-      <div className="qt-sign-group">
-      <div style={{ borderTop: `1px solid ${T.border}`, paddingTop: 16, marginTop: 16, marginBottom: 0 }}>
-<div className="qt-sign-row" style={{ display: "flex", gap: 24, flexWrap: "nowrap" }}>
-  <div style={{ flex: "1 1 50%", minWidth: 0 }}>
-    <div style={{ height: 60, marginBottom: 8, display: "flex", alignItems: "flex-end" }} />
-            <div style={{ borderTop: `1px solid ${T.border}`, paddingTop: 6 }}>
-                         <div style={{ fontSize: 14, fontWeight: 700, color: T.navy, wordBreak: "break-word" }}>{form.name || form.company}</div>
-              <div style={{ fontSize: 12.5, color: T.faint, marginTop: 2 }}>Client Signature</div>
-            </div>
-          </div>
-
-          <div style={{ flex: "1 1 50%", minWidth: 0, textAlign: "end" }}>
-            {isEditable ? (
-              <div className={`d-flex flex-column gap-2 mb-2 ${isMobile ? "align-items-start" : "align-items-end"}`}>
-                <div style={{ width: isMobile ? "100%" : 220, maxWidth: 220, height: 90, border: `1px solid ${T.border}`, borderRadius: 8, backgroundColor: T.bgSoft, display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
-                  {form.signature ? (
-                    <img
-                      src={form.signature}
-                      alt="Signature"
-                      style={{
-                        maxWidth: "92%",
-                        maxHeight: "92%",
-                        objectFit: "contain",
-                        mixBlendMode: "multiply",
-                      }}
-                    />
-                  ) : <span style={{ fontSize: 10.5, color: T.faint }}>No signature</span>}
                 </div>
-                <div className="d-flex gap-2">
-                  <label htmlFor="qt-sig-upload" style={{ fontSize: 11.5, fontWeight: 600, color: accent, border: `1px solid ${accent}`, borderRadius: 6, padding: "4px 10px", cursor: "pointer" }}>
-                    {form.signature ? "Change" : "Upload Signature"}
-                  </label>
-                  <input id="qt-sig-upload" type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => {
-                    const file = e.target.files[0];
-                    if (file) { const reader = new FileReader(); reader.onloadend = () => updateField("signature", reader.result); reader.readAsDataURL(file); }
-                  }} />
-                  {form.signature && (
-                    <button onClick={() => updateField("signature", null)} className="border-0 rounded-3 px-2 py-1" style={{ backgroundColor: T.redSoft, color: T.red, fontSize: 11, cursor: "pointer" }}>Remove</button>
-                  )}
-                </div>
-              </div>
-            ) : (
-              <div style={{ height: 60, display: "flex", justifyContent: isMobile ? "flex-start" : "flex-end", alignItems: "flex-end", marginBottom: 8, overflow: "visible" }}>
-                {form.signature ? (
-                  <img
-                    src={form.signature}
-                    alt="Signature"
-                    style={{
-                      maxHeight: 60,
-                      maxWidth: 240,
-                      objectFit: "contain",
-                      mixBlendMode: "multiply",
-                      transform: "rotate(-1.5deg)",
-                      filter: "contrast(1.15)",
-                    }}
+              ) : (
+                sec.heading && <div className="qt-heading-avoid" style={sectionTitle}>{sec.heading}</div>
+              )}
+              {isEditable ? (
+                sec.type === "table" ? (
+                  <EditableSectionTable
+                    section={sec}
+                    onChange={(updated) => updateCustomSectionTable(i, updated)}
+                    accent={accent}
                   />
                 ) : (
-                  <div style={{ width: 180, height: 52 }} />
-                )}
-              </div>
-            )}
-
-            <div style={{ borderTop: `1px solid ${T.border}`, paddingTop: 6, textAlign: isMobile ? "left" : "right" }}>
-              <div style={{ fontSize: 14, fontWeight: 700, color: T.navy, wordBreak: "break-word" }}>{issuerName}</div>
-              <div style={{ fontSize: 12.5, color: T.faint, marginTop: 2 }}>Authorized Signature</div>
+                  <TinyMCEEditor
+                    key={`qt-editor-custom-${i}-${form.templateStyle}`}
+                    id={`qt-editor-custom-${i}`}
+                    value={sec.content || ""}
+                    onChange={(html) => updateCustomSection(i, "content", html)}
+                    accent={accent}
+                    height={180}
+                    placeholder="Type section content here..."
+                  />
+                )
+              ) : sec.type === "table" ? (
+                <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                  <thead>
+                    <tr>
+                      {(sec.columns || []).map((col, ci) => (
+                        <th key={ci} style={{ textAlign: "left", fontSize: 12, fontWeight: 700, color: "#fff", backgroundColor: accent, padding: "8px 12px", border: "none" }}>
+                          {col}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(sec.rows || []).map((row, ri) => (
+                      <tr key={ri}>
+                        {(Array.isArray(row) ? row : Object.values(row || {})).map((cell, ci) => (
+                          <td key={ci} style={{ ...cellStyle, border: "none", borderBottom: `1px solid ${T.border}` }}>{String(cell ?? "")}</td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              ) : (
+                <RichView html={sec.content} />
+              )}
             </div>
+          ))}
+
+          {isEditable && (
+            <div className="no-print" style={{ marginBottom: 24 }}>
+              <button onClick={addCustomSection} style={{
+                display: "flex", alignItems: "center", gap: 8, padding: "10px 18px", border: `2px dashed ${accent}`, borderRadius: 10,
+                backgroundColor: accentSoftBg, color: accent, fontWeight: 600, fontSize: 14, cursor: "pointer", width: "100%", justifyContent: "center",
+              }}
+                onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = `${accent}20`; }}
+                onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = accentSoftBg; }}>
+                <FaPlus size={12} /> Add Custom Section
+              </button>
+            </div>
+          )}
+
+          {/* Project Cost */}
+          {(isEditable || getCostItems(form).length > 0) && (
+            <div style={{ marginBottom: 24 }}>
+              {renderHeading("projectCost", "Project Cost", isEditable)}
+
+              {isEditable ? (
+                <CostItemsTable
+                  items={getCostItems(form)}
+                  products={products}
+                  onChange={(items) => updateField("costItems", items)}
+                  gstMode={form.gstMode || (form.includeGst === true ? "with" : "without")}
+                  gstPercent={form.gstPercent}
+                  defaultGstPercent={defaultGstPercent}
+                  onGstChange={updateField}
+                  accent={accent}
+                />
+              ) : (
+                <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                  <thead>
+                    <tr>
+                      <th style={{ textAlign: "left", fontSize: 12, fontWeight: 700, color: "#fff", backgroundColor: accent, padding: "8px 12px", border: "none" }}>
+                        Description
+                      </th>
+                      <th style={{ textAlign: "center", width: 70, fontSize: 12, fontWeight: 700, color: "#fff", backgroundColor: accent, padding: "8px 12px", border: "none" }}>
+                        Qty
+                      </th>
+                      <th style={{ textAlign: "right", fontSize: 12, fontWeight: 700, color: "#fff", backgroundColor: accent, padding: "8px 12px", border: "none" }}>
+                        Line Total
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(getCostLines(form, defaultGstPercent).rows || []).map((row, i) => (
+                      <tr key={i}>
+                        <td style={{ ...cellStyle, border: "none", borderBottom: `1px solid ${T.border}` }}>{row.label}</td>
+                        <td style={{ ...cellStyle, border: "none", borderBottom: `1px solid ${T.border}`, textAlign: "center" }}>{row.qty}</td>
+                        <td style={{ ...cellStyle, border: "none", borderBottom: `1px solid ${T.border}`, textAlign: "right" }}>{row.value}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  {getCostLines(form, defaultGstPercent).grandLine && (() => {
+                    const grandLine = getCostLines(form, defaultGstPercent).grandLine;
+                    const [label, value] = grandLine.includes(":") ? grandLine.split(/:(.+)/).map((s) => s.trim()) : [grandLine, ""];
+                    return (
+                      <tfoot>
+                        <tr>
+                          <td colSpan={2} style={{ padding: "10px 12px", fontSize: 13.5, fontWeight: 700, color: T.navy, borderTop: `2px solid ${T.navy}` }}>{label}</td>
+                          <td style={{ padding: "10px 12px", fontSize: 13.5, fontWeight: 700, color: T.navy, borderTop: `2px solid ${T.navy}`, textAlign: "right" }}>{value}</td>
+                        </tr>
+                      </tfoot>
+                    );
+                  })()}
+                </table>
+              )}
+            </div>
+          )}
+
+          {/* Project Timeline */}
+          {(isEditable || (form.timelineDesc && form.timelineDesc.trim())) && (
+            <div style={{ marginBottom: 24 }}>
+              {renderHeading("timeline", "Project Timeline", isEditable)}
+              {isEditable ? (
+                <TinyMCEEditor
+                  id="qt-editor-timeline"
+                  value={form.timelineDesc || ""}
+                  onChange={(html) => updateField("timelineDesc", html)}
+                  accent={accent}
+                  height={200}
+                  placeholder="Describe the project timeline..."
+                />
+              ) : (
+                <RichView html={form.timelineDesc} />
+              )}
+            </div>
+          )}
+
+          {/* Terms & Conditions */}
+          {(isEditable || (form.terms && form.terms.trim())) && (
+            <div style={{ marginBottom: 24 }}>
+              {renderHeading("terms", "Terms & Conditions", isEditable, { marginBottom: 6 })}
+              {isEditable && (
+                <div className="no-print" style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 10 }}>
+                  {TERMS_TEMPLATES.map((tpl) => {
+                    const tplHtml = plainTextToHtml(tpl.text);
+                    return (
+                      <button
+                        key={tpl.label}
+                        onClick={() => updateField("terms", tplHtml)}
+                        title={`Use "${tpl.label}" terms template`}
+                        style={{
+                          border: form.terms === tplHtml ? `1.5px solid ${accent}` : `1px solid ${T.border}`,
+                          borderRadius: 20, padding: "4px 12px",
+                          backgroundColor: form.terms === tplHtml ? accentSoftBg : "#fff",
+                          color: form.terms === tplHtml ? accent : T.muted,
+                          fontSize: 12, fontWeight: 600, cursor: "pointer",
+                        }}
+                      >
+                        {tpl.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+              {isEditable ? (
+                <TinyMCEEditor
+                  id="qt-editor-terms"
+                  value={form.terms || ""}
+                  onChange={(html) => updateField("terms", html)}
+                  accent={accent}
+                  height={300}
+                  placeholder="Add your terms & conditions here, or pick a template above..."
+                />
+              ) : (
+                <RichView html={form.terms} />
+              )}
+            </div>
+          )}
+
+          {/* Note */}
+          {(form.notes || isEditable) && (
+            <div style={{ marginBottom: 24, paddingTop: 16, borderTop: `1px solid ${T.border}` }}>
+              {renderHeading("notes", "Note:", isEditable)}
+
+              {isEditable ? (
+                <TinyMCEEditor
+                  id="qt-editor-notes"
+                  value={form.notes || ""}
+                  onChange={(html) => updateField("notes", html)}
+                  accent={accent}
+                  height={160}
+                  placeholder="Additional notes..."
+                />
+              ) : (
+                <RichView html={form.notes} />
+              )}
+            </div>
+          )}
+
+          {/* Signatures + footer, kept together on one page */}
+          <div className="qt-sign-group">
+            <div style={{ borderTop: `1px solid ${T.border}`, paddingTop: 16, marginTop: 16, marginBottom: 0 }}>
+              <div className="qt-sign-row" style={{ display: "flex", gap: 24, flexWrap: "nowrap" }}>
+                <div style={{ flex: "1 1 50%", minWidth: 0 }}>
+                  <div style={{ height: 60, marginBottom: 8, display: "flex", alignItems: "flex-end" }} />
+                  <div style={{ borderTop: `1px solid ${T.border}`, paddingTop: 6 }}>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: T.navy, wordBreak: "break-word" }}>{[form.salutation, form.name].filter(Boolean).join(" ") || form.company}</div>
+                    <div style={{ fontSize: 12.5, color: T.faint, marginTop: 2 }}>Client Signature</div>
+                  </div>
+                </div>
+
+                <div style={{ flex: "1 1 50%", minWidth: 0, textAlign: "end" }}>
+                  {isEditable ? (
+                    <div className={`d-flex flex-column gap-2 mb-2 ${isMobile ? "align-items-start" : "align-items-end"}`}>
+                      <div style={{ width: isMobile ? "100%" : 220, maxWidth: 220, height: 90, border: `1px solid ${T.border}`, borderRadius: 8, backgroundColor: T.bgSoft, display: "flex", alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
+                        {form.signature ? (
+                          <img
+                            src={form.signature}
+                            alt="Signature"
+                            style={{
+                              maxWidth: "92%",
+                              maxHeight: "92%",
+                              objectFit: "contain",
+                              mixBlendMode: "multiply",
+                            }}
+                          />
+                        ) : <span style={{ fontSize: 10.5, color: T.faint }}>No signature</span>}
+                      </div>
+                      <div className="d-flex gap-2">
+                        <label htmlFor="qt-sig-upload" style={{ fontSize: 11.5, fontWeight: 600, color: accent, border: `1px solid ${accent}`, borderRadius: 6, padding: "4px 10px", cursor: "pointer" }}>
+                          {form.signature ? "Change" : "Upload Signature"}
+                        </label>
+                        <input id="qt-sig-upload" type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => {
+                          const file = e.target.files[0];
+                          if (file) { const reader = new FileReader(); reader.onloadend = () => updateField("signature", reader.result); reader.readAsDataURL(file); }
+                        }} />
+                        {form.signature && (
+                          <button onClick={() => updateField("signature", null)} className="border-0 rounded-3 px-2 py-1" style={{ backgroundColor: T.redSoft, color: T.red, fontSize: 11, cursor: "pointer" }}>Remove</button>
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{ height: 60, display: "flex", justifyContent: isMobile ? "flex-start" : "flex-end", alignItems: "flex-end", marginBottom: 8, overflow: "visible" }}>
+                      {form.signature ? (
+                        <img
+                          src={form.signature}
+                          alt="Signature"
+                          style={{
+                            maxHeight: 60,
+                            maxWidth: 240,
+                            objectFit: "contain",
+                            mixBlendMode: "multiply",
+                            transform: "rotate(-1.5deg)",
+                            filter: "contrast(1.15)",
+                          }}
+                        />
+                      ) : (
+                        <div style={{ width: 180, height: 52 }} />
+                      )}
+                    </div>
+                  )}
+
+                  <div style={{ borderTop: `1px solid ${T.border}`, paddingTop: 6, textAlign: isMobile ? "left" : "right" }}>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: T.navy, wordBreak: "break-word" }}>{issuerName}</div>
+                    <div style={{ fontSize: 12.5, color: T.faint, marginTop: 2 }}>Authorized Signature</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            {printFooterBlock}
           </div>
         </div>
-      </div>
-               {printFooterBlock}
-      </div>
-    </div>
       </td></tr></tbody>
       <tfoot><tr><td /></tr></tfoot>
     </table>
   </div>
+  );
+
+  const isCustomTemplate = !form.templateStyle || form.templateStyle === "default";
+  const tplCard = (active, color) => ({
+    flex: isMobile ? "0 0 130px" : "none",
+    display: "flex", alignItems: "center", gap: 8,
+    padding: "8px 10px", borderRadius: 10, cursor: "pointer",
+    border: active ? `2px solid ${color}` : `1.5px solid ${T.border}`,
+    backgroundColor: active ? `${color}12` : "#fff",
+    transition: "all 0.15s",
+  });
+
+  const templatePanel = (
+    <div
+      className="no-print"
+      style={isMobile
+        ? { width: "100%", display: "flex", flexDirection: "column", gap: 8 }
+        : {
+          width: 190, flexShrink: 0, position: "sticky", top: 24,
+          maxHeight: "calc(100vh - 48px)", overflowY: "auto",
+          display: "flex", flexDirection: "column", gap: 8,
+          backgroundColor: "#fff", borderRadius: 16, padding: 12,
+          border: "1.5px solid #f1f5f9", boxShadow: "0 4px 20px rgba(0,0,0,0.08)",
+        }}
+    >
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <span style={{ fontWeight: 700, fontSize: 13, color: T.navy }}>Templates</span>
+        <button onClick={() => setShowTemplateSwitcher(false)} aria-label="Hide templates"
+          style={{ border: "none", background: "#f1f5f9", color: T.muted, width: 24, height: 24, borderRadius: "50%", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <FaTimes size={10} />
+        </button>
+      </div>
+
+      <div style={isMobile
+        ? { display: "flex", gap: 8, overflowX: "auto", paddingBottom: 6 }
+        : { display: "flex", flexDirection: "column", gap: 8 }}>
+        {templates.map((tpl) => {
+          const active = form.templateStyle === tpl.templateStyle;
+          return (
+            <div key={tpl.id} onClick={() => handleTemplateSwitch(tpl)} style={tplCard(active, tpl.color)}>
+              <div style={{ width: 28, height: 28, borderRadius: 8, background: tpl.bg, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                {tpl.icon}
+              </div>
+              <span style={{ fontSize: 12.5, fontWeight: 600, color: T.navy, flex: 1, lineHeight: 1.25 }}>
+                {STYLE_LABELS[tpl.templateStyle] || tpl.title}
+              </span>
+              {active && <FaCheck size={10} color={tpl.color} />}
+            </div>
+          );
+        })}
+
+        <div onClick={() => handleTemplateSwitch(null)}
+          style={{ ...tplCard(isCustomTemplate, T.green), border: isCustomTemplate ? `2px solid ${T.green}` : "1.5px dashed #cbd5e1" }}>
+          <div style={{ width: 28, height: 28, borderRadius: 8, background: "#f1f5f9", color: T.green, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+            <FaPlus size={11} />
+          </div>
+          <span style={{ fontSize: 12.5, fontWeight: 600, color: T.navy, flex: 1, lineHeight: 1.25 }}>Customize Your Own</span>
+          {isCustomTemplate && <FaCheck size={10} color={T.green} />}
+        </div>
+      </div>
+    </div>
   );
 
   const docContent = renderDocContent(editMode);
@@ -1337,10 +1415,12 @@ const renderHeading = (key, fallback, isEditable, extraStyle = {}) =>
 
   return (
     <div style={{
-  fontFamily: T.font,
-  ...(editMode ? (isMobile ? styles.splitContainerMobile : styles.splitContainer) : { maxWidth: 900 }),
-  ...(isMobile ? { paddingBottom: 110 } : {}),
-}}>
+      fontFamily: T.font,
+      ...(editMode ? (isMobile ? styles.splitContainerMobile : styles.splitContainer) : { maxWidth: 900 }),
+      ...(isMobile ? { paddingBottom: 110 } : {}),
+    }}>
+
+      {editMode && showTemplateSwitcher && templatePanel}
 
       <style>{`
         @media screen and (max-width: 640px) {
@@ -1356,108 +1436,127 @@ const renderHeading = (key, fallback, isEditable, extraStyle = {}) =>
         }
       `}</style>
 
-      <div className="qt-fluid" style={editMode ? (isMobile ? styles.formSideMobile : styles.formSide) : {}}>
-        <div className="d-flex align-items-center no-print"
-          style={{
-            flexWrap: "wrap", gap: 6, rowGap: 8,
-            backgroundColor: "#fff",
-            padding: "8px 12px",
-            marginBottom: 8,
-            borderBottom: `1px solid ${T.border}`,
-          }}>
-          <button onClick={onBack} title="Back" aria-label="Back"
+      <style>{`
+        /* Tighter line height for the 6 template layouts */
+        [class^="qd-"] .info-lines div,
+        [class^="qd-"] .info-col div { line-height: 1.35 !important; }
+
+        [class^="qd-"] .meta-table td,
+        [class^="qd-"] .block p,
+        [class^="qd-"] .block ul,
+        [class^="qd-"] .terms,
+        [class^="qd-"] .terms ul,
+        [class^="qd-"] .section-body,
+        [class^="qd-"] .section-body p,
+        [class^="qd-"] .quotation-rich-text { line-height: 1.5 !important; }
+
+        [class^="qd-"] .block li,
+        [class^="qd-"] .terms li { margin-bottom: 2px !important; }
+
+        [class^="qd-"] input { line-height: 1.3 !important; }
+        [class^="qd-"] textarea { line-height: 1.45 !important; }
+      `}</style>
+      <div className="qt-fluid" style={editMode ? (isMobile ? styles.formSideMobile : styles.formSide) : {}}>        <div className="d-flex align-items-center no-print"
+        style={{
+          flexWrap: "wrap", gap: 6, rowGap: 8,
+          backgroundColor: "#fff",
+          padding: "8px 12px",
+          marginBottom: 8,
+          borderBottom: `1px solid ${T.border}`,
+        }}>
+        <button onClick={onBack} title="Back" aria-label="Back"
+          className="d-flex align-items-center justify-content-center border-0 rounded-3"
+          style={{ backgroundColor: T.bgSoft, color: T.slate, cursor: "pointer", width: 30, height: 30, padding: 0, flexShrink: 0 }}
+          onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#e2e8f0")}
+          onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = T.bgSoft)}>
+          <FaArrowLeft size={12} />
+        </button>
+
+        {!editMode && (
+          <button
+            onClick={() => {
+              if (quotation.status === "Approved") {
+                setShowApprovedEditConfirm(true);
+                return;
+              }
+              onEdit();
+            }}
+            title="Edit" aria-label="Edit"
             className="d-flex align-items-center justify-content-center border-0 rounded-3"
             style={{ backgroundColor: T.bgSoft, color: T.slate, cursor: "pointer", width: 30, height: 30, padding: 0, flexShrink: 0 }}
-            onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "#e2e8f0")}
-            onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = T.bgSoft)}>
-            <FaArrowLeft size={12} />
+            onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = accent; e.currentTarget.style.color = "#fff"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = T.bgSoft; e.currentTarget.style.color = T.slate; }}>
+            <FaEdit size={12} />
           </button>
+        )}
 
-          {!editMode && (
-            <button
-              onClick={() => {
-                if (quotation.status === "Approved") {
-                  setShowApprovedEditConfirm(true);
-                  return;
-                }
-                onEdit();
-              }}
-              title="Edit" aria-label="Edit"
-              className="d-flex align-items-center justify-content-center border-0 rounded-3"
-              style={{ backgroundColor: T.bgSoft, color: T.slate, cursor: "pointer", width: 30, height: 30, padding: 0, flexShrink: 0 }}
-              onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = accent; e.currentTarget.style.color = "#fff"; }}
-              onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = T.bgSoft; e.currentTarget.style.color = T.slate; }}>
-              <FaEdit size={12} />
-            </button>
-          )}
+        {editMode && (
+          <button onClick={handleCancelClick} title="Cancel" aria-label="Cancel"
+            className="d-flex align-items-center justify-content-center border-0 rounded-3"
+            style={{ backgroundColor: T.bgSoft, color: T.slate, cursor: "pointer", width: 30, height: 30, padding: 0, flexShrink: 0 }}>
+            <FaTimes size={12} />
+          </button>
+        )}
 
-          {editMode && (
-            <button onClick={handleCancelClick} title="Cancel" aria-label="Cancel"
-              className="d-flex align-items-center justify-content-center border-0 rounded-3"
-              style={{ backgroundColor: T.bgSoft, color: T.slate, cursor: "pointer", width: 30, height: 30, padding: 0, flexShrink: 0 }}>
-              <FaTimes size={12} />
-            </button>
-          )}
+        {!editMode && (
+          <button
+            onClick={() => {
+              const seenKey = "qt_print_tip_seen";
+              if (!localStorage.getItem(seenKey)) {
+                window.alert(
+                  "For a clean PDF: in the print dialog, click 'More settings' and turn OFF 'Headers and footers'.\n\nThis removes the URL, date, and page numbers the browser normally adds."
+                );
+                try { localStorage.setItem(seenKey, "1"); } catch (err) { console.error("Failed to save print tip flag:", err); }
+              }
+              window.print();
+            }}
+            title="In the print dialog, open 'More settings' and turn OFF 'Headers and footers' for a clean PDF"
+            aria-label="Print / Download PDF"
+            className="d-flex align-items-center justify-content-center border-0 rounded-3"
+            style={{ background: accentBg, color: "#fff", cursor: "pointer", height: 30, padding: isMobile ? 0 : "0 14px", width: isMobile ? 34 : "auto", gap: 7, boxShadow: `0 4px 12px ${accent}4d`, flexShrink: 0, fontSize: 13, fontWeight: 600, fontFamily: T.font }}>
+            <FaPrint size={12} /> {!isMobile && "Print"}
+          </button>
+        )}
 
-          {!editMode && (
-           <button
-  onClick={() => {
-    const seenKey = "qt_print_tip_seen";
-    if (!localStorage.getItem(seenKey)) {
-      window.alert(
-        "For a clean PDF: in the print dialog, click 'More settings' and turn OFF 'Headers and footers'.\n\nThis removes the URL, date, and page numbers the browser normally adds."
-      );
-      try { localStorage.setItem(seenKey, "1"); } catch (err) { console.error("Failed to save print tip flag:", err); }
-    }
-    window.print();
-  }}
-  title="In the print dialog, open 'More settings' and turn OFF 'Headers and footers' for a clean PDF"
-  aria-label="Print / Download PDF"
-              className="d-flex align-items-center justify-content-center border-0 rounded-3"
-              style={{ background: accentBg, color: "#fff", cursor: "pointer", height: 30, padding: "0 14px", gap: 7, boxShadow: `0 4px 12px ${accent}4d`, flexShrink: 0, fontSize: 13, fontWeight: 600, fontFamily: T.font }}>
-              <FaPrint size={12} /> Print
-            </button>
-          )}
+        {editMode && (
+          <button
+            onClick={() => setShowTemplateSwitcher((v) => !v)}
+            title="Templates" aria-label="Templates"
+            className="d-flex align-items-center justify-content-center border-0 rounded-3"
+            style={{
+              backgroundColor: T.bgSoft, color: T.slate, cursor: "pointer",
+              height: 30, padding: isMobile ? 0 : "0 12px", width: isMobile ? 30 : "auto",
+              gap: 6, fontSize: 12.5, fontWeight: 600,
+              fontFamily: T.font, flexShrink: 0, marginLeft: 4,
+            }}
+            onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = accent; e.currentTarget.style.color = "#fff"; }}
+            onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = T.bgSoft; e.currentTarget.style.color = T.slate; }}
+          >
+            {isMobile ? <FaThLarge size={12} /> : (showTemplateSwitcher ? "Hide Templates" : "Templates")}
+          </button>
+        )}
+        {editMode && (
+          <div style={{ marginLeft: 4 }}>
+            <ToggleSwitch checked={showPreview} onChange={setShowPreview} accent={accent} label={isMobile ? "" : "Live Preview"} />
+          </div>
+        )}
 
-          {editMode && (
-            <button
-              onClick={() => setShowTemplateSwitcher(true)}
-              title="Change Template" aria-label="Change Template"
-              className="d-flex align-items-center justify-content-center border-0 rounded-3"
-              style={{
-                backgroundColor: T.bgSoft, color: T.slate, cursor: "pointer",
-                height: 30, padding: "0 12px", gap: 6, fontSize: 12.5, fontWeight: 600,
-                fontFamily: T.font, flexShrink: 0, marginLeft: 4,
-              }}
-              onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = accent; e.currentTarget.style.color = "#fff"; }}
-              onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = T.bgSoft; e.currentTarget.style.color = T.slate; }}
-            >
-              Change Template
-            </button>
-          )}
+        {editMode && form.status === "Draft" && (
+          <button onClick={handleSendClick} disabled={isSending} title="Send" aria-label="Send"
+            className="d-flex align-items-center justify-content-center border-0 rounded-3"
+            style={{ backgroundColor: T.orange, color: "#fff", cursor: "pointer", height: 30, padding: isMobile ? 0 : "0 16px", width: isMobile ? 34 : "auto", gap: 7, fontSize: 13, fontWeight: 600, fontFamily: T.font, flexShrink: 0, marginLeft: "auto" }}>
+            <FaCheck size={12} /> {!isMobile && (isSending ? "Sending..." : "Send")}
+          </button>
+        )}
 
-          {editMode && (
-            <div style={{ marginLeft: 4 }}>
-              <ToggleSwitch checked={showPreview} onChange={setShowPreview} accent={accent} label="Live Preview" />
-            </div>
-          )}
-
-                 {editMode && form.status === "Draft" && (
-            <button onClick={handleSendClick} disabled={isSending} title="Send" aria-label="Send"
-              className="d-flex align-items-center justify-content-center border-0 rounded-3"
-              style={{ backgroundColor: T.orange, color: "#fff", cursor: "pointer", height: 30, padding: "0 16px", gap: 7, fontSize: 13, fontWeight: 600, fontFamily: T.font, flexShrink: 0, marginLeft: "auto" }}>
-              <FaCheck size={12} /> {isSending ? "Sending..." : "Send"}
-            </button>
-          )}
-
-          {editMode && (
-            <button onClick={handleSaveClick} title="Save" aria-label="Save"
-              className="d-flex align-items-center justify-content-center border-0 rounded-3"
-              style={{ backgroundColor: T.green, color: "#fff", cursor: "pointer", height: 30, padding: "0 16px", gap: 7, fontSize: 13, fontWeight: 600, fontFamily: T.font, flexShrink: 0, marginLeft: form.status === "Draft" ? 8 : "auto" }}>
-              <FaSave size={12} /> Save
-            </button>
-          )}
-        </div>
+        {editMode && (
+          <button onClick={handleSaveClick} title="Save" aria-label="Save"
+            className="d-flex align-items-center justify-content-center border-0 rounded-3"
+            style={{ backgroundColor: T.green, color: "#fff", cursor: "pointer", height: 30, padding: isMobile ? 0 : "0 16px", width: isMobile ? 34 : "auto", gap: 7, fontSize: 13, fontWeight: 600, fontFamily: T.font, flexShrink: 0, marginLeft: form.status === "Draft" ? 8 : "auto" }}>
+            <FaSave size={12} /> {!isMobile && "Save"}
+          </button>
+        )}
+      </div>
 
         {(form.templateStyle === "default" || !form.templateStyle) ? docContent : (() => {
           const Layout = QUOTATION_LAYOUTS[form.templateStyle];
@@ -1478,7 +1577,7 @@ const renderHeading = (key, fallback, isEditable, extraStyle = {}) =>
               onRemoveSignature={() => updateField("signature", null)}
               defaultGstPercent={defaultGstPercent}
             />
-                    ) : docContent;
+          ) : docContent;
         })()}
 
         {/* Activity history: only when viewing a saved quotation */}
@@ -1519,16 +1618,6 @@ const renderHeading = (key, fallback, isEditable, extraStyle = {}) =>
 
       {editMode && showPreview && previewPanel}
 
-      {showTemplateSwitcher && (
-        <QuotationTemplate
-          templates={templates}
-          currentTemplateStyle={form.templateStyle}
-          onClose={() => setShowTemplateSwitcher(false)}
-          onSelect={handleTemplateSwitch}
-          onCustom={() => handleTemplateSwitch(null)}
-        />
-      )}
-
       <ConfirmEditApprovedModal
         show={showApprovedEditConfirm}
         onCancel={() => setShowApprovedEditConfirm(false)}
@@ -1539,8 +1628,8 @@ const renderHeading = (key, fallback, isEditable, extraStyle = {}) =>
 }
 function EditableSectionTable({ section, onChange, accent }) {
   const columns = section.columns && section.columns.length ? section.columns : ["Column 1", "Column 2"];
-const rows = (section.rows && section.rows.length ? section.rows : [columns.map(() => "")])
-  .map((r) => (Array.isArray(r) ? r : Object.values(r || {})));
+  const rows = (section.rows && section.rows.length ? section.rows : [columns.map(() => "")])
+    .map((r) => (Array.isArray(r) ? r : Object.values(r || {})));
 
   const updateColumn = (ci, value) => {
     const next = [...columns];

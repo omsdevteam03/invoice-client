@@ -4,15 +4,17 @@ import DOMPurify from "dompurify";
 import { createPortal } from "react-dom";
 import axiosInstance from "../../api/axiosInstance";
 import { htmlToPlainText } from "./quotationLayoutUtils";
+import ProductForm from "../products/ProductForm";
 
 const base = {
   font: "inherit",
+  lineHeight: 1.3,
   color: "inherit",
   background: "rgba(140,140,140,0.10)",
   border: "1px dashed rgba(140,140,140,0.45)",
   borderRadius: 4,
   outline: "none",
-  padding: "2px 6px",
+  padding: "1px 6px",
   width: "100%",
   boxSizing: "border-box",
 };
@@ -32,6 +34,21 @@ export function EditText({ editMode, value, onChange, placeholder, style, as = "
       placeholder={placeholder}
       style={{ ...base, ...style }}
     />
+  );
+}
+
+export const SALUTATIONS = ["Mr.", "Mrs.", "Ms.", "Miss", "Dr."];
+
+export function SalutationSelect({ value, onChange, style }) {
+  return (
+    <select
+      value={value || ""}
+      onChange={(e) => onChange(e.target.value)}
+      style={{ ...base, width: 78, flexShrink: 0, cursor: "pointer", padding: "1px 4px", ...style }}
+    >
+      <option value="">Title</option>
+      {SALUTATIONS.map((s) => <option key={s} value={s}>{s}</option>)}
+    </select>
   );
 }
 
@@ -348,7 +365,7 @@ export function CostItemsTable({ items = [], onChange, gstMode = "with", gstPerc
         }
       `}</style>
 
-    
+
       <div style={{
         display: "flex", flexWrap: "wrap", gap: 10, alignItems: "flex-end", marginBottom: 10,
         padding: "8px 10px", borderRadius: 8, background: "rgba(140,140,140,0.08)", border: "1px dashed rgba(140,140,140,0.4)",
@@ -547,11 +564,17 @@ function useProducts() {
 
   useEffect(() => {
     let cancelled = false;
-    fetchProducts()
-      .then((list) => { if (!cancelled) setProducts(list); })
-      .catch((err) => console.error("Failed to load products:", err))
-      .finally(() => { if (!cancelled) setLoading(false); });
-    return () => { cancelled = true; };
+    const load = () =>
+      fetchProducts()
+        .then((list) => { if (!cancelled) setProducts(list); })
+        .catch((err) => console.error("Failed to load products:", err))
+        .finally(() => { if (!cancelled) setLoading(false); });
+    load();
+    window.addEventListener("products-updated", load);
+    return () => {
+      cancelled = true;
+      window.removeEventListener("products-updated", load);
+    };
   }, []);
 
   return { products, loading };
@@ -569,9 +592,24 @@ function ItemNameField({ value, rowId, items = [], onTextChange, onPick }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState("All"); // All | Product | Service
+  const [showQuickAdd, setShowQuickAdd] = useState(false);
   const [pos, setPos] = useState({});
   const btnRef = useRef(null);
   const menuRef = useRef(null);
+
+  const saveNewProduct = async (product) => {
+    const payload = { ...product, id: product.id || `PRD-${Date.now()}` };
+    try {
+      const res = await axiosInstance.post("/products", payload);
+      const saved = res.data && res.data.id ? res.data : payload;
+      window.dispatchEvent(new Event("products-updated")); // refresh every dropdown
+      onPick(saved);                                       // fill this row
+      setShowQuickAdd(false);
+    } catch (err) {
+      console.error("Quick add product failed:", err);
+      alert("Failed to save product: " + (err.response?.data?.message || err.message));
+    }
+  };
 
   const closeMenu = () => { setOpen(false); setQuery(""); };
 
@@ -739,7 +777,24 @@ function ItemNameField({ value, rowId, items = [], onTextChange, onPick }) {
               Use "{trimmed}" as a custom item
             </div>
           )}
+
+          <div
+            onClick={() => { closeMenu(); setShowQuickAdd(true); }}
+            style={{ padding: "10px 12px", cursor: "pointer", fontSize: 13, fontWeight: 700, color: "#1F6F5C", borderTop: "1px solid rgba(140,140,140,0.2)", background: "#f8fafc", borderRadius: "0 0 10px 10px" }}
+          >
+            + New Product / Service
+          </div>
         </div>,
+        document.body
+      )}
+
+      {showQuickAdd && createPortal(
+        <ProductForm
+          product={null}
+          defaultType="Product"
+          onSave={saveNewProduct}
+          onClose={() => setShowQuickAdd(false)}
+        />,
         document.body
       )}
     </>

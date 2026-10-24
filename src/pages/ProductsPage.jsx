@@ -6,6 +6,8 @@ const API = `${import.meta.env.VITE_API_URL}/products`;
 
 export default function ProductsPage() {
   const [products, setProducts] = useState([]);
+  const [invoices, setInvoices] = useState([]);
+  const [newType, setNewType] = useState("Product");
   const [search, setSearch] = useState("");
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState(null); // product being edited, or null for a new one
@@ -19,12 +21,20 @@ export default function ProductsPage() {
       .catch(err => console.error("Failed to load products:", err));
   }, []);
 
+  // Load invoices (used for each item's Transactions table)
+  useEffect(() => {
+    fetch(`${import.meta.env.VITE_API_URL}/invoices`)
+      .then(res => res.json())
+      .then(data => setInvoices(Array.isArray(data) ? data : []))
+      .catch(err => console.error("Failed to load invoices:", err));
+  }, []);
+
   const showToast = (message) => {
     setToast(message);
     setTimeout(() => setToast(null), 2500);
   };
 
-  const handleNew = () => { setEditing(null); setShowForm(true); };
+  const handleNew = (type = "Product") => { setEditing(null); setNewType(type); setShowForm(true); };
   const handleEdit = (p) => { setEditing(p); setShowForm(true); };
   const handleClose = () => { setShowForm(false); setEditing(null); };
 
@@ -77,6 +87,7 @@ export default function ProductsPage() {
 
       <ProductList
         products={products}
+        invoices={invoices}
         search={search}
         setSearch={setSearch}
         onNew={handleNew}
@@ -85,7 +96,7 @@ export default function ProductsPage() {
       />
 
       {showForm && (
-        <ProductForm product={editing} onSave={handleSave} onClose={handleClose} />
+        <ProductForm product={editing} defaultType={newType} onSave={handleSave} onClose={handleClose} />
       )}
     </>
   );

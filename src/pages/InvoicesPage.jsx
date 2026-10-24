@@ -8,6 +8,7 @@ import { FaFileInvoiceDollar } from "react-icons/fa";
 import axiosInstance from "../api/axiosInstance";
 import { useAuth } from "../context/AuthContext";
 import { getCostItems } from "../components/quotations/quotationLayoutUtils";
+import { validateForEwayBill, GSTIN_REGEX, VEHICLE_REGEX } from "../components/invoices/EwayBillChecklist";
 
 const API = `${import.meta.env.VITE_API_URL}/invoices`;
 const SETTINGS_API = `${import.meta.env.VITE_API_URL}/settings/company`;
@@ -42,6 +43,7 @@ const deductStock = async (invoice) => {
     console.error("Failed to update stock:", err);
   }
 };
+
 // ── Numbering helpers ────────────────────────────────────────────────────
 // A record is Proforma if it's explicitly tagged that way, OR — for older
 // records saved before invoiceType existed — if its number carries the
@@ -99,6 +101,106 @@ function ConvertToFinalModal({ invoiceNo, onCancel, onConfirm }) {
   );
 }
 
+function EwayBillModal({ invoice, onCancel, onSubmit }) {
+  const [vehicleNo, setVehicleNo] = useState("");
+  const [transporterId, setTransporterId] = useState("");
+  const [error, setError] = useState("");
+  if (!invoice) return null;
+
+  const submit = () => {
+    const cleanVehicle = vehicleNo.toUpperCase().replace(/[\s-]/g, "");
+    const cleanTransporter = transporterId.trim().toUpperCase();
+    if (!VEHICLE_REGEX.test(cleanVehicle)) {
+      setError("Invalid vehicle number. Example: TN01AB1234");
+      return;
+    }
+    if (cleanTransporter && !GSTIN_REGEX.test(cleanTransporter)) {
+      setError("Transporter ID must be a valid 15-character GSTIN.");
+      return;
+    }
+    onSubmit(invoice, cleanVehicle, cleanTransporter);
+  };
+
+  const inputStyle = {
+    width: "100%", border: "1.5px solid #e2e8f0", borderRadius: 10, padding: "9px 12px",
+    fontSize: "0.85rem", color: "#0f172a", outline: "none", textTransform: "uppercase",
+  };
+  const labelStyle = { display: "block", fontSize: "0.78rem", fontWeight: 600, color: "#334155", marginBottom: 6 };
+
+  return (
+    <div
+      className="d-flex align-items-center justify-content-center"
+      style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.5)", zIndex: 1000, padding: 16 }}
+      onClick={onCancel}
+    >
+      <div
+        className="bg-white"
+        style={{ borderRadius: 14, padding: 24, width: "90%", maxWidth: 380, boxShadow: "0 12px 32px rgba(0,0,0,0.2)" }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div
+          className="d-flex align-items-center justify-content-center mx-auto mb-3"
+          style={{ width: 48, height: 48, borderRadius: "50%", background: "#fef3c7", color: "#b45309" }}
+        >
+          <FaFileInvoiceDollar size={18} />
+        </div>
+        <div className="text-center fw-bold mb-1" style={{ fontSize: "1rem", color: "#0f172a" }}>
+          Generate E-Way Bill
+        </div>
+        <div className="text-center mb-3" style={{ fontSize: "0.85rem", color: "#64748b" }}>
+          Invoice <strong>{invoice.invoiceNo}</strong> — enter the transport details
+        </div>
+
+        <div style={{ marginBottom: 12 }}>
+          <label style={labelStyle}>Vehicle Number *</label>
+          <input
+            autoFocus
+            value={vehicleNo}
+            onChange={(e) => { setVehicleNo(e.target.value); setError(""); }}
+            onKeyDown={(e) => { if (e.key === "Enter") submit(); }}
+            placeholder="e.g. TN01AB1234"
+            style={inputStyle}
+          />
+        </div>
+        <div style={{ marginBottom: 12 }}>
+          <label style={labelStyle}>
+            Transporter ID / GSTIN <span style={{ color: "#94a3b8", fontWeight: 400 }}>(optional)</span>
+          </label>
+          <input
+            value={transporterId}
+            maxLength={15}
+            onChange={(e) => { setTransporterId(e.target.value); setError(""); }}
+            onKeyDown={(e) => { if (e.key === "Enter") submit(); }}
+            placeholder="15-character GSTIN"
+            style={inputStyle}
+          />
+        </div>
+
+        {error && (
+          <div style={{ color: "#ef4444", fontSize: "0.78rem", fontWeight: 600, marginBottom: 10 }}>{error}</div>
+        )}
+
+        <div className="d-flex gap-2 mt-3">
+          <button
+            onClick={onCancel}
+            className="flex-fill fw-semibold border-0"
+            style={{ background: "#f1f5f9", color: "#334155", borderRadius: 8, padding: "10px", fontSize: "0.85rem" }}
+          >
+            Cancel
+          </button>
+          <button
+            onClick={submit}
+            className="flex-fill fw-semibold border-0"
+            style={{ background: "linear-gradient(135deg,#10b981,#059669)", color: "#fff", borderRadius: 8, padding: "10px", fontSize: "0.85rem" }}
+          >
+            Generate
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // Appends one entry to an invoice's activity log. Used everywhere an
 // // invoice is created, edited, has its status changed, receives a payment,
 // or is converted — so the Activity Log tab always has a full history.
@@ -118,11 +220,11 @@ export default function InvoicesPage() {
     location.state?.fromAI ? location.state.returnTo || "/ai" : null
   );
 
-const [invoices, setInvoices] = useState([]);
-const [customers, setCustomers] = useState([]);
-const [companies, setCompanies] = useState([]);
-const [invoicesLoaded, setInvoicesLoaded] = useState(false);
-const [singleInvoice, setSingleInvoice] = useState(null);
+  const [invoices, setInvoices] = useState([]);
+  const [customers, setCustomers] = useState([]);
+  const [companies, setCompanies] = useState([]);
+  const [invoicesLoaded, setInvoicesLoaded] = useState(false);
+  const [singleInvoice, setSingleInvoice] = useState(null);
   // Only used for an UNSAVED draft (New / Choose Customer / Choose Quotation
   // flows) — once an invoice is saved it's identified purely by URL :id,
   // so a page refresh always re-derives the correct screen from invoices[].
@@ -180,20 +282,20 @@ const [singleInvoice, setSingleInvoice] = useState(null);
       .catch(() => { });
     return () => { cancelled = true; };
   }, [id]);
-   // Load customers (used by the Buyer Name picker in the invoice form)
-useEffect(() => {
-  fetch(CUSTOMERS_API)
-    .then(res => res.json())
-    .then(data => setCustomers(Array.isArray(data) ? data : []))
-    .catch(err => console.error('Failed to load customers:', err));
-}, []);
+  // Load customers (used by the Buyer Name picker in the invoice form)
+  useEffect(() => {
+    fetch(CUSTOMERS_API)
+      .then(res => res.json())
+      .then(data => setCustomers(Array.isArray(data) ? data : []))
+      .catch(err => console.error('Failed to load customers:', err));
+  }, []);
 
-// Load company profiles from Settings (same list the Quotation page uses)
-useEffect(() => {
-  axiosInstance.get('/settings/companies')
-    .then(res => setCompanies(Array.isArray(res.data) ? res.data : []))
-    .catch(err => console.error('Failed to load companies:', err));
-}, []);
+  // Load company profiles from Settings (same list the Quotation page uses)
+  useEffect(() => {
+    axiosInstance.get('/settings/companies')
+      .then(res => setCompanies(Array.isArray(res.data) ? res.data : []))
+      .catch(err => console.error('Failed to load companies:', err));
+  }, []);
 
   // If someone lands on /invoices/:id (view or edit) for an invoice that
   // doesn't exist once loading has finished, send them back to the list
@@ -355,18 +457,20 @@ useEffect(() => {
       gstPercent: docSettings.gstPercent ?? 18,
       companyName: freshCompanyInfo.companyName,
       companyAddress: freshCompanyInfo.companyAddress,
+      companyMobile: freshCompanyInfo.companyPhone || "",
+      companyEmail: freshCompanyInfo.companyEmail || "",
       companyGSTIN: freshCompanyInfo.gstin,
       logo: freshCompanyInfo.logo || null,
-      signature: "/default-signature.png",
+      signature: "/signature.png",
       buyerName: customer.name || customer.company || "",
       buyerCompanyName: customer.company || "",
       buyerAddress: customer.address || "",
       buyerMobile: customer.phone || "",
-      buyerGSTIN: "",
+      buyerGSTIN: customer.gst_number || customer.gstNumber || customer.gstin || "",
       amountPaid: 0,
       notes: docSettings.defaultNotes || "",
       invoiceType: "Final",
-      items: [{ sl: 1, description: "", qty: 1, rate: 0, amount: 0 }],
+      items: [{ sl: 1, description: "", qty: 1, unit: "Nos", rate: 0, amount: 0 }],
     };
     setDraftInvoice(draftInvoice);
     navigate("/invoices/new");
@@ -449,6 +553,8 @@ useEffect(() => {
 
       companyName: freshCompanyInfo.companyName,
       companyAddress: freshCompanyInfo.companyAddress,
+      companyMobile: freshCompanyInfo.companyPhone || "",
+      companyEmail: freshCompanyInfo.companyEmail || "",
       companyGSTIN: freshCompanyInfo.gstin,
       logo: freshCompanyInfo.logo || null,
       signature: "/signature.png",
@@ -472,7 +578,7 @@ useEffect(() => {
   const handleSave = async (updated) => {
     try {
       const old = invoices.find(i => i.id === updated.id);
-const isNew = !old;
+      const isNew = !old;
       const withLog = logActivity(
         isNew ? { ...updated, createdBy: user?.id, createdByName: user?.name } : updated,
         isNew ? "Invoice created" : "Invoice details updated"
@@ -489,9 +595,9 @@ const isNew = !old;
       }
       const saved = await res.json();
       if (!isProformaRecord(updated)) {
-  const oldItems = isNew || isProformaRecord(old) ? [] : old.items || [];
-  await adjustStock(oldItems, updated.items);
-}
+        const oldItems = isNew || isProformaRecord(old) ? [] : old.items || [];
+        await adjustStock(oldItems, updated.items);
+      }
 
       setInvoices(prev => {
         const exists = prev.find(i => i.id === saved.id);
@@ -510,17 +616,17 @@ const isNew = !old;
   };
 
   // Delete from DB
- const handleDelete = async (id) => {
-  try {
-    const inv = invoices.find(i => i.id === id);
-const res = await fetch(`${API}/${id}`, { method: 'DELETE' });
-if (!res.ok) throw new Error(`Delete failed with status ${res.status}`);
-if (inv && !isProformaRecord(inv)) await adjustStock(inv.items || [], []);
-setInvoices(prev => prev.filter(i => i.id !== id));
-  } catch (err) {
-    console.error('Delete failed:', err);
-  }
-};
+  const handleDelete = async (id) => {
+    try {
+      const inv = invoices.find(i => i.id === id);
+      const res = await fetch(`${API}/${id}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error(`Delete failed with status ${res.status}`);
+      if (inv && !isProformaRecord(inv)) await adjustStock(inv.items || [], []);
+      setInvoices(prev => prev.filter(i => i.id !== id));
+    } catch (err) {
+      console.error('Delete failed:', err);
+    }
+  };
 
   // Totals used only for deciding whether a payment fully settles the
   // invoice, or a status change should reset amountPaid — kept local/simple
@@ -600,6 +706,101 @@ setInvoices(prev => prev.filter(i => i.id !== id));
       // Roll back on failure
       setInvoices(prev => prev.map(i => (i.id === invoice.id ? invoice : i)));
       alert("Failed to save payment: " + err.message);
+    }
+  };
+
+  // Step 1: validate, then open the popup
+  const handleGenerateEWB = (invoice) => {
+    if (invoice.ewayBillNo) return;
+    const errors = validateForEwayBill(invoice);
+    if (errors.length > 0) {
+      alert("Fix these before generating the E-Way Bill:\n\n• " + errors.join("\n• "));
+      return;
+    }
+    setEwbTarget(invoice);
+  };
+
+  // Step 2: called by the popup's Generate button
+  const submitGenerateEWB = async (invoice, vehicleNo, transporterId) => {
+    setEwbTarget(null);
+    try {
+      setToast({ message: "Generating E-Way Bill..." });
+
+      const response = await axiosInstance.post("/ewaybill/generate", {
+        invoiceId: invoice.id,
+        vehicleNo,
+        transporterId,
+      });
+
+      const { ewayBillNo, ewayBillDate, validUpto, ewayBillDetails } = response.data;
+      const applyEwb = (i) => i.id === invoice.id
+        ? { ...i, ewayBillNo, ewayBillDate, ewayBillValidUpto: validUpto, ewayBillDetails,
+            activityLog: [...(i.activityLog || []), { message: "E-Way Bill generated", date: new Date().toISOString() }] }
+        : i;
+      setInvoices(prev => prev.map(applyEwb));
+      setSingleInvoice(prev => (prev ? applyEwb(prev) : prev));
+
+      setToast({ message: `E-Way Bill generated: ${ewayBillNo}` });
+      setTimeout(() => setToast(null), 3000);
+    } catch (error) {
+      console.error("EWB generation failed:", error);
+      const detail = error.response?.data?.details
+        || error.response?.data?.error
+        || error.response?.data?.message
+        || error.message;
+      alert("Failed to generate E-Way Bill:\n\n" + (Array.isArray(detail) ? "• " + detail.join("\n• ") : JSON.stringify(detail, null, 2)));
+      setToast(null);
+    }
+  };
+
+  const handleUpdateEwbVehicle = async (invoice) => {
+    const vehicleNo = prompt("New vehicle number (e.g., KA01AB1234):");
+    if (!vehicleNo) return;
+    const fromPlace = prompt("Current place / city:");
+    if (!fromPlace) return;
+    try {
+      setToast({ message: "Updating vehicle..." });
+      const res = await axiosInstance.post("/ewaybill/vehicle", {
+        invoiceId: invoice.id, vehicleNo: vehicleNo.toUpperCase(), fromPlace,
+      });
+      const log = { message: `E-Way Bill vehicle updated to ${vehicleNo.toUpperCase()}`, date: new Date().toISOString() };
+      const cleanVehicle = vehicleNo.toUpperCase().replace(/[\s-]/g, "");
+      const apply = (i) => i.id === invoice.id
+        ? {
+            ...i,
+            ewayBillDetails: res.data?.ewayBillDetails
+              || { ...(i.ewayBillDetails || {}), vehicleNo: cleanVehicle, fromPlace },
+            activityLog: [...(i.activityLog || []), log],
+          }
+        : i;
+      setInvoices(prev => prev.map(apply));
+      setSingleInvoice(prev => (prev ? apply(prev) : prev));
+      setToast({ message: "Vehicle updated" });
+      setTimeout(() => setToast(null), 2500);
+    } catch (error) {
+      setToast(null);
+      alert("Vehicle update failed:\n\n" + (error.response?.data?.error || error.message));
+    }
+  };
+
+  const handleCancelEwb = async (invoice) => {
+    if (!window.confirm(`Cancel E-Way Bill ${invoice.ewayBillNo}? This cannot be undone.`)) return;
+    const reason = prompt("Reason: 1 = Duplicate, 2 = Order cancelled, 3 = Data entry mistake, 4 = Others", "3");
+    if (!["1", "2", "3", "4"].includes(reason)) return;
+    try {
+      setToast({ message: "Cancelling E-Way Bill..." });
+      await axiosInstance.post("/ewaybill/cancel", { invoiceId: invoice.id, reasonCode: Number(reason) });
+      const log = { message: `E-Way Bill ${invoice.ewayBillNo} cancelled`, date: new Date().toISOString() };
+      const apply = (i) => i.id === invoice.id
+        ? { ...i, ewayBillNo: null, ewayBillDate: null, ewayBillValidUpto: null, ewayBillDetails: null, activityLog: [...(i.activityLog || []), log] }
+        : i;
+      setInvoices(prev => prev.map(apply));
+      setSingleInvoice(prev => (prev ? apply(prev) : prev));
+      setToast({ message: "E-Way Bill cancelled" });
+      setTimeout(() => setToast(null), 2500);
+    } catch (error) {
+      setToast(null);
+      alert("Cancel failed:\n\n" + (error.response?.data?.error || error.message));
     }
   };
 
@@ -687,40 +888,40 @@ setInvoices(prev => prev.filter(i => i.id !== id));
   };
 
   // Compares the OLD items with the NEW items and fixes stock by the difference.
-// adjustStock([], items)  -> deduct (new invoice)
-// adjustStock(items, [])  -> give back (invoice deleted)
-// adjustStock(old, new)   -> only the difference (invoice edited)
-const adjustStock = async (oldItems = [], newItems = []) => {
-  const delta = {}; // positive = stock goes down, negative = stock goes up
-  newItems.forEach((it) => {
-    if (it.productId) delta[it.productId] = (delta[it.productId] || 0) + (Number(it.qty) || 1);
-  });
-  oldItems.forEach((it) => {
-    if (it.productId) delta[it.productId] = (delta[it.productId] || 0) - (Number(it.qty) || 1);
-  });
-  const ids = Object.keys(delta).filter((pid) => delta[pid] !== 0);
-  if (!ids.length) return;
-  try {
-    const all = await (await fetch(PRODUCTS_API)).json();
-    await Promise.all(ids.map(async (pid) => {
-      const p = all.find((x) => x.id === pid);
-      if (!p || p.type === "Service") return;
-      const next = Math.max(0, (Number(p.stock_qty) || 0) - delta[pid]);
-      await fetch(PRODUCTS_API, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...p, stock_qty: next }),
-      });
-    }));
-  } catch (err) {
-    console.error("Failed to update stock:", err);
-  }
-};
+  // adjustStock([], items)  -> deduct (new invoice)
+  // adjustStock(items, [])  -> give back (invoice deleted)
+  // adjustStock(old, new)   -> only the difference (invoice edited)
+  const adjustStock = async (oldItems = [], newItems = []) => {
+    const delta = {}; // positive = stock goes down, negative = stock goes up
+    newItems.forEach((it) => {
+      if (it.productId) delta[it.productId] = (delta[it.productId] || 0) + (Number(it.qty) || 1);
+    });
+    oldItems.forEach((it) => {
+      if (it.productId) delta[it.productId] = (delta[it.productId] || 0) - (Number(it.qty) || 1);
+    });
+    const ids = Object.keys(delta).filter((pid) => delta[pid] !== 0);
+    if (!ids.length) return;
+    try {
+      const all = await (await fetch(PRODUCTS_API)).json();
+      await Promise.all(ids.map(async (pid) => {
+        const p = all.find((x) => x.id === pid);
+        if (!p || p.type === "Service") return;
+        const next = Math.max(0, (Number(p.stock_qty) || 0) - delta[pid]);
+        await fetch(PRODUCTS_API, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...p, stock_qty: next }),
+        });
+      }));
+    } catch (err) {
+      console.error("Failed to update stock:", err);
+    }
+  };
 
   // Holds the proforma pending conversion confirmation, or null when the
   // modal is closed
   const [convertTarget, setConvertTarget] = useState(null);
-
+const [ewbTarget, setEwbTarget] = useState(null);
   const handleBack = () => { setDraftInvoice(null); navigate("/invoices"); };
 
   // Back button on the invoice view page only
@@ -789,7 +990,7 @@ const adjustStock = async (oldItems = [], newItems = []) => {
     return (
       <>
         {toastEl}
-       <InvoiceForm
+        <InvoiceForm
           key={selected?.id || "new"}
           invoice={selected}
           invoices={invoices}
@@ -818,7 +1019,18 @@ const adjustStock = async (oldItems = [], newItems = []) => {
           companyInfo={companyInfo}
           onUpdateInvoice={handleUpdateInvoice}
           onConvertToFinal={setConvertTarget}
+          onGenerateEWB={handleGenerateEWB}
+          onUpdateEwbVehicle={handleUpdateEwbVehicle}
+          onCancelEwb={handleCancelEwb}
         />
+
+        <EwayBillModal
+          key={ewbTarget?.id || "closed"}
+          invoice={ewbTarget}
+          onCancel={() => setEwbTarget(null)}
+          onSubmit={submitGenerateEWB}
+        />
+
         <ConvertToFinalModal
           invoiceNo={convertTarget?.invoiceNo}
           onCancel={() => setConvertTarget(null)}

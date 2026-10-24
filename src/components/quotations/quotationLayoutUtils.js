@@ -111,7 +111,7 @@ export function getQuotationView(quotation = {}, companyInfo = {}) {
     validUntil: formatDate(quotation.validUntil),
     projectTitle: quotation.projectTitle || "Project Quotation",
     description: quotation.description || "",
-    clientName: quotation.name || "Client",
+    clientName: [quotation.salutation, quotation.name].filter(Boolean).join(" ") || "Client",
     clientCompany: quotation.company || "",
     clientEmail: quotation.email || "",
     clientPhone: quotation.phone || "",

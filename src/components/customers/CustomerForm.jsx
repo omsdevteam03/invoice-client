@@ -128,8 +128,25 @@ export const COUNTRIES = [
   { iso: "KE", name: "Kenya", code: "+254" },
   { iso: "EG", name: "Egypt", code: "+20" },
   { iso: "BR", name: "Brazil", code: "+55" },
-  { iso: "MX", name: "Mexico", code: "+52" },
+   { iso: "MX", name: "Mexico", code: "+52" },
 ];
+
+const COUNTRY_NAMES = [...new Set(COUNTRIES.map((c) => c.name))].sort();
+
+const INDIAN_STATES = [
+  "Andhra Pradesh", "Arunachal Pradesh", "Assam", "Bihar", "Chhattisgarh", "Goa",
+  "Gujarat", "Haryana", "Himachal Pradesh", "Jharkhand", "Karnataka", "Kerala",
+  "Madhya Pradesh", "Maharashtra", "Manipur", "Meghalaya", "Mizoram", "Nagaland",
+  "Odisha", "Punjab", "Rajasthan", "Sikkim", "Tamil Nadu", "Telangana", "Tripura",
+  "Uttar Pradesh", "Uttarakhand", "West Bengal",
+  // Union Territories
+  "Andaman and Nicobar Islands", "Chandigarh", "Dadra and Nagar Haveli and Daman and Diu",
+  "Delhi", "Jammu and Kashmir", "Ladakh", "Lakshadweep", "Puducherry",
+];
+
+// Keeps an older, manually typed value visible in the dropdown instead of losing it
+const withCurrent = (list, value) =>
+  value && !list.includes(value) ? [value, ...list] : list;
 
 // Display form: "+91 9940895128". Numbers already stored with a "+" are left alone.
 export function formatPhone(code, value) {
@@ -335,7 +352,7 @@ const EMPTY_FORM = {
   addresses: [{ id: nextId(), type: "Home", value: "" }],
   city: "",
   state: "",
-  country: "India",
+  country: "",
   gstNumber: "",
   customerType: "Business",
   status: "Active",
@@ -370,7 +387,7 @@ function buildFormFromCustomer(c) {
       : [{ id: nextId(), type: "Home", value: c.address ?? "" }],
     city: c.city ?? "",
     state: c.state ?? "",
-    country: c.country ?? "India",
+    country: c.country ?? "",
     gstNumber: c.gstNumber ?? "",
     customerType: c.customerType ?? c.type ?? "Business",
     status: c.status === "Lead" ? "Active" : (c.status ?? "Active"),
@@ -648,6 +665,10 @@ export default function CustomerForm({ customer, allCustomers = [], onSave, onBa
     setForm((prev) => ({ ...prev, [name]: next }));
     setErrors((prev) => ({ ...prev, [name]: undefined }));
   }, []);
+
+  // Changing country clears the state, since the state list depends on it
+  const handleCountryChange = (country) =>
+    setForm(f => ({ ...f, country, state: country === f.country ? f.state : "" }));
 
   const addEmail = () => setForm(f => ({ ...f, emails: [...f.emails, { id: nextId(), type: "Personal", value: "" }] }));
   const removeEmail = (id) => setForm(f => ({ ...f, emails: f.emails.filter(e => e.id !== id) }));
@@ -1031,16 +1052,36 @@ export default function CustomerForm({ customer, allCustomers = [], onSave, onBa
                 </div>
                 <div className="col-12 col-md-4">
                   <Field label="State">
-                    <input type="text" value={form.state}
-                      onChange={e => setForm(f => ({ ...f, state: titleCase(e.target.value) }))}
-                      placeholder="e.g. Tamil Nadu" style={styles.input} autoComplete="off" />
+                    {!form.country ? (
+                      <select disabled style={{ ...styles.select, cursor: "not-allowed", backgroundColor: "#f8fafc" }}>
+                        <option>Select country first</option>
+                      </select>
+                    ) : form.country === "India" ? (
+                      <select value={form.state}
+                        onChange={e => setForm(f => ({ ...f, state: e.target.value }))}
+                        style={styles.select}>
+                        <option value="">Select state</option>
+                        {withCurrent(INDIAN_STATES, form.state).map(s => (
+                          <option key={s} value={s}>{s}</option>
+                        ))}
+                      </select>
+                    ) : (
+                      <input type="text" value={form.state}
+                        onChange={e => setForm(f => ({ ...f, state: titleCase(e.target.value) }))}
+                        placeholder="State / Province" style={styles.input} autoComplete="off" />
+                    )}
                   </Field>
                 </div>
                 <div className="col-12 col-md-4">
                   <Field label="Country">
-                    <input type="text" value={form.country}
-                      onChange={e => setForm(f => ({ ...f, country: titleCase(e.target.value) }))}
-                      placeholder="e.g. India" style={styles.input} autoComplete="off" />
+                    <select value={form.country}
+                      onChange={e => handleCountryChange(e.target.value)}
+                      style={styles.select}>
+                      <option value="">Select country</option>
+                      {withCurrent(COUNTRY_NAMES, form.country).map(c => (
+                        <option key={c} value={c}>{c}</option>
+                      ))}
+                    </select>
                   </Field>
                 </div>
               </div>

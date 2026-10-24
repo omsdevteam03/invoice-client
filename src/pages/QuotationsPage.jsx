@@ -212,10 +212,14 @@ useEffect(() => {
 }, []);
 
 useEffect(() => {
-  fetch(PRODUCTS_API)
-    .then(res => res.json())
-    .then(data => setProducts(Array.isArray(data) ? data : []))
-    .catch(err => console.error('Failed to load products:', err));
+  const load = () =>
+    fetch(PRODUCTS_API)
+      .then(res => res.json())
+      .then(data => setProducts(Array.isArray(data) ? data : []))
+      .catch(err => console.error('Failed to load products:', err));
+  load();
+  window.addEventListener("products-updated", load);
+  return () => window.removeEventListener("products-updated", load);
 }, []);
 
   useEffect(() => {

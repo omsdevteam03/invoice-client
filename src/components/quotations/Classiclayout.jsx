@@ -1,5 +1,5 @@
 import { getQuotationView, getCostLines, getCostItems, splitCostLine, htmlToPlainText, mobileCss } from "./quotationLayoutUtils"; import { useState } from "react";
-import { EditText, EditArea, LogoEdit, SignatureEdit, CostItemsTable, CustomSectionsEdit, CompanySelect, CustomerSelect, RichOrPlainView } from "./EditableField";
+import { EditText, EditArea, LogoEdit, SignatureEdit, CostItemsTable, CustomSectionsEdit, CompanySelect, CustomerSelect, RichOrPlainView, SalutationSelect } from "./EditableField";
 const TERMS_TEMPLATES = [
   { label: "Standard", text: "50% advance payment required to begin work, balance due on delivery.\nDelivery timelines are estimates and may shift with scope changes.\nRevisions beyond the agreed scope will be billed separately.\nThis quotation is valid for 15 days from the date of issue." },
   { label: "Project-based", text: "This quotation is valid for 30 days from the date of issue.\nAny additional work outside the agreed scope will be charged separately.\n50% advance payment is required before project commencement.\nFinal deliverables handed over after full payment is received." },
@@ -236,15 +236,22 @@ export default function ClassicLayout({
             <tr>
               <td>
                 <h4>Presented To</h4>
-                <CustomerSelect editMode={editMode} as="div" customers={customers} value={quotation.company} onSelect={handleCustomerSelect} onManualChange={handleCustomerManualChange} placeholder="Select or search customer" viewRender={(val) => <div>Company: {val}</div>} />
-                <EditText editMode={editMode} as="div" value={quotation.name} onChange={(val) => onChange("name", val)} placeholder="Client contact name" viewRender={(val) => <div>Name: {val}</div>} />
+                {editMode ? (
+                  <div style={{ display: "flex", gap: 6, marginBottom: 4 }}>
+                    <SalutationSelect value={quotation.salutation} onChange={(val) => onChange("salutation", val)} />
+                    <EditText editMode as="div" style={{ flex: 1, minWidth: 0 }} value={quotation.name} onChange={(val) => onChange("name", val)} placeholder="Client contact name" />
+                  </div>
+                ) : (
+                  quotation.name && <div style={{ fontWeight: 700 }}>{[quotation.salutation, quotation.name].filter(Boolean).join(" ")}</div>
+                )}
+                <CustomerSelect editMode={editMode} as="div" customers={customers} value={quotation.company} onSelect={handleCustomerSelect} onManualChange={handleCustomerManualChange} placeholder="Select or search customer" />
                 <EditText editMode={editMode} as="div" value={quotation.clientAddress} onChange={(val) => onChange("clientAddress", val)} placeholder="Client address" viewRender={(val) => <div>Address: {val}</div>} />
                 <EditText editMode={editMode} as="div" value={quotation.phone} onChange={(val) => onChange("phone", val)} placeholder="Phone" viewRender={(val) => <div>Mob: {val}</div>} />
                 <EditText editMode={editMode} as="div" value={quotation.email} onChange={(val) => onChange("email", val)} placeholder="Email" viewRender={(val) => <div>Email: {val}</div>} />
               </td>
               <td>
                 <h4>From</h4>
-                <CompanySelect editMode={editMode} as="div" value={quotation.issuerName} onChange={(val) => onChange("issuerName", val)} placeholder="Your Company Name" viewRender={(val) => <div>Company: {val}</div>} />
+                <CompanySelect editMode={editMode} as="div" value={quotation.issuerName} onChange={(val) => onChange("issuerName", val)} placeholder="Your Company Name" viewRender={(val) => <div>{val}</div>} />
                 <EditText editMode={editMode} as="div" value={quotation.issuerAddress} onChange={(val) => onChange("issuerAddress", val)} placeholder="Company address" viewRender={(val) => <div>Address: {val}</div>} />
                 <EditText editMode={editMode} as="div" value={quotation.issuerPhone} onChange={(val) => onChange("issuerPhone", val)} placeholder="Phone" viewRender={(val) => <div>Mob: {val}</div>} />
                 <EditText editMode={editMode} as="div" value={quotation.issuerEmail} onChange={(val) => onChange("issuerEmail", val)} placeholder="Email" viewRender={(val) => <div>Email: {val}</div>} />
