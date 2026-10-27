@@ -197,7 +197,7 @@ to: "To:",
   },
 };
 
-export function InvoiceLangToggle({ lang, onChange }) {
+export function InvoiceLangToggle({ lang, onChange, compact = false }) {
   const options = [
     { key: "en", label: "English Invoice" },
     { key: "ta", label: "Tamil Invoice" },
@@ -222,9 +222,41 @@ export function InvoiceLangToggle({ lang, onChange }) {
             color: lang === o.key ? "#fff" : "#475569",
           }}
         >
-          {o.label}
+          {compact ? (o.key === "en" ? "EN" : "தமிழ்") : o.label}
         </button>
       ))}
     </div>
   );
 }
+
+// ── GST split: same state = CGST + SGST, different state = IGST ──
+export const stateCode = (gstin) => String(gstin || "").trim().slice(0, 2);
+
+export function splitGst(tax, gstPercent, sellerGSTIN, buyerGSTIN) {
+  const from = stateCode(sellerGSTIN);
+  const to = stateCode(buyerGSTIN);
+  const interState = from.length === 2 && to.length === 2 && from !== to;
+
+  if (interState) {
+    return { interState, rate: gstPercent, cgst: 0, sgst: 0, igst: tax };
+  }
+  const cgst = Math.round((tax / 2) * 100) / 100;
+  const sgst = Math.round((tax - cgst) * 100) / 100;
+  return { interState, rate: gstPercent, cgst, sgst, igst: 0 };
+}
+
+// Rows to display (1 row for IGST, 2 rows for CGST + SGST)
+export function gstRows(s) {
+  return s.interState
+    ? [{ label: `IGST @ ${s.rate}%`, value: s.igst }]
+    : [
+        { label: `CGST @ ${s.rate / 2}%`, value: s.cgst },
+        { label: `SGST @ ${s.rate / 2}%`, value: s.sgst },
+      ];
+}
+
+// E-Way Bill is only for goods. SAC codes for services start with "99".
+export const isServiceItem = (it) =>
+  it.itemType === "Service" || String(it.hsnCode || "").trim().startsWith("99");
+export const invoiceHasGoods = (invoice) =>
+  (invoice.items || []).some((it) => !isServiceItem(it));

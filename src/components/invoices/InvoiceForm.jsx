@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { FaArrowLeft, FaSave, FaPlus, FaTrash, FaEye, FaEyeSlash, FaTimes, FaChevronDown, FaSearch } from "react-icons/fa";
-import { INVOICE_LABELS, INVOICE_FONT, InvoiceLangToggle, useTamilDescriptions, translateToTamil, unitLabel, numberToWordsTamil } from "./invoiceLang";
+import { INVOICE_LABELS, INVOICE_FONT, InvoiceLangToggle, useTamilDescriptions, translateToTamil, unitLabel, numberToWordsTamil, splitGst, gstRows } from "./invoiceLang";
 import axiosInstance from "../../api/axiosInstance"; // same helper CompanySettings uses
 import ProductForm from "../products/ProductForm";
 
@@ -297,11 +297,20 @@ function useIsMobile(breakpoint = 900) {
 // ── Live Preview (full mirror of InvoiceDocument, shown alongside the form) ─
 const PREVIEW_DOC_WIDTH = 560; // natural width of the invoice table
 
-function InvoicePreview({ form, isMobile, onClose }) {
+function InvoicePreview({ form, isMobile, onClose, showHsn = true }) {
   const wrapRef = useRef(null);
   const innerRef = useRef(null);
   const [scale, setScale] = useState(1);
   const [scaledHeight, setScaledHeight] = useState(null);
+  const customCols = form.customColumns || [];
+  const cols = (showHsn ? 6 : 5) + customCols.length;   // table columns in the preview
+  const customTd = (key, content, extra = {}) => (
+    <td key={key} style={{ border: "1px solid #000", padding: "5px 7px", fontSize: "0.7rem", verticalAlign: "top", ...extra }}>
+      {content}
+    </td>
+  );
+  // empty HSN + custom cells for the total rows
+  const hsnBlank = (<>{showHsn && cell("")}{customCols.map(c => customTd(c.key, ""))}</>);
 
   useEffect(() => {
     if (!isMobile) return;
@@ -338,6 +347,9 @@ function InvoicePreview({ form, isMobile, onClose }) {
     tax = 0;
     total = subtotal;
   }
+  const gst = splitGst(tax, gstPercent, form.companyGSTIN, form.buyerGSTIN);
+  const gstComponentRows = form.gstType !== "No GST" ? gstRows(gst, gstPercent, form.gstType, L) : [];
+
   const amountPaid = Number(form.amountPaid || 0);
   const due = total - amountPaid;
 
@@ -420,7 +432,7 @@ function InvoicePreview({ form, isMobile, onClose }) {
                   </div>
                 </div>
                 </td>
-            <td colSpan={3} style={{ border: "1px solid #000", padding: "8px 10px", verticalAlign: "top", width: "50%" }}>
+            <td colSpan={cols - 3} style={{ border: "1px solid #000", padding: "8px 10px", verticalAlign: "top", width: "50%" }}>
   <div style={{ fontSize: "0.7rem", whiteSpace: "nowrap", marginBottom: 4 }}>
     <span style={{ color: "#64748b" }}>{L.invoiceNo}: </span>
     <span style={{ fontWeight: 700, color: "#0f172a" }}>{form.invoiceNo || "—"}</span>
@@ -451,7 +463,7 @@ function InvoicePreview({ form, isMobile, onClose }) {
       <div style={{ fontSize: "0.65rem", color: "#334155" }}>GSTIN: {form.buyerGSTIN}</div>
     )}
   </td>
-  <td colSpan={3} style={{ border: "1px solid #000", padding: "6px 10px", verticalAlign: "top" }}>
+  <td colSpan={cols - 3} style={{ border: "1px solid #000", padding: "6px 10px", verticalAlign: "top" }}>
     <div style={{ fontWeight: 700, fontSize: "0.65rem", color: "#0f172a", marginBottom: 2 }}>{previewLang === "ta" ? L.from.replace(/:$/, "") : "From"}</div>
     <div style={{ fontSize: "0.65rem", color: "#334155", whiteSpace: "pre-line" }}>
       {L.address}: {form.companyAddress || <span style={{ color: "#cbd5e1" }}>Company Address</span>}
@@ -475,7 +487,8 @@ function InvoicePreview({ form, isMobile, onClose }) {
               <tr style={{ backgroundColor: "#f1f5f9" }}>
                 {cell(L.sl, { fontWeight: 700, textAlign: "center", width: "6%" })}
                 {cell(L.description, { fontWeight: 700, width: "34%" })}
-                {cell("HSN / SAC", { fontWeight: 700, textAlign: "center", width: "12%" })}
+                {showHsn && cell("HSN / SAC", { fontWeight: 700, textAlign: "center", width: "12%" })}
+                {customCols.map(c => customTd(c.key, c.label, { fontWeight: 700, textAlign: "center" }))}
                 {cell(L.qty, { fontWeight: 700, textAlign: "center", width: "12%" })}
                 {cell(L.rate, { fontWeight: 700, textAlign: "right", width: "18%" })}
                 {cell(L.amount, { fontWeight: 700, textAlign: "right", width: "18%" })}
@@ -494,7 +507,8 @@ function InvoicePreview({ form, isMobile, onClose }) {
                       )}
                     </>
                   )}
-                  {cell(item.hsnCode || "—", { textAlign: "center" })}
+                  {showHsn && cell(item.hsnCode || "—", { textAlign: "center" })}
+                  {customCols.map(c => customTd(c.key, item.custom?.[c.key] || "—", { textAlign: "center" }))}
                   {cell(`${item.qty}${item.unit ? " " + unitLabel(item.unit, previewLang) : ""}`, { textAlign: "center", whiteSpace: "nowrap" })}
                   {cell(formatAmount(item.rate), { textAlign: "right" })}
                   {cell(formatAmount(item.amount), { textAlign: "right" })}
@@ -502,31 +516,33 @@ function InvoicePreview({ form, isMobile, onClose }) {
               ))}
 
               <tr>
-{cell("")}{cell(<strong>{L.subTotal}</strong>)}{cell("")}{cell("")}{cell("")}
+{cell("")}{cell(<strong>{L.subTotal}</strong>)}{hsnBlank}{cell("")}{cell("")}
 {cell(<strong>{formatAmount(form.gstType === "GST Included" ? total : subtotal)}</strong>, { textAlign: "right" })}
               </tr>
-              {form.gstType === "With GST" && (
-  <tr>
-    {cell("")}{cell(<strong>{`${L.gst} @ ${gstPercent}%`}</strong>)}{cell("")}{cell("")}{cell("")}
-                  {cell(<strong>{formatAmount(tax)}</strong>, { textAlign: "right" })}
+
+              {/* GST — one row per component (CGST/SGST or IGST) */}
+              {gstComponentRows.map((row, i) => (
+                <tr key={`gst-${i}`}>
+                  {cell("")}{cell(<strong>{row.label}</strong>)}{hsnBlank}{cell("")}{cell("")}
+                  {cell(<strong>{formatAmount(row.amount)}</strong>, { textAlign: "right" })}
                 </tr>
-              )}
+              ))}
 
               <tr>
-                {cell("")}{cell(<strong>{L.total}</strong>)}{cell("")}{cell("")}{cell("")}
+                {cell("")}{cell(<strong>{L.total}</strong>)}{hsnBlank}{cell("")}{cell("")}
                 {cell(<strong>{formatAmount(total)}</strong>, { textAlign: "right" })}
               </tr>
               <tr>
-                {cell("")}{cell(L.paid)}{cell("")}{cell("")}{cell("")}
+                {cell("")}{cell(L.paid)}{hsnBlank}{cell("")}{cell("")}
                 {cell(formatAmount(amountPaid), { textAlign: "right" })}
               </tr>
               <tr style={{ backgroundColor: "#ecfdf5" }}>
-                {cell("")}{cell(<strong>{L.due}</strong>)}{cell("")}{cell("")}{cell("")}
+                {cell("")}{cell(<strong>{L.due}</strong>)}{hsnBlank}{cell("")}{cell("")}
                 {cell(<strong style={{ color: "#059669" }}>{formatAmount(due)}</strong>, { textAlign: "right" })}
               </tr>
 
               <tr>
-                <td colSpan={form.dueDate ? 4 : 6} style={{ border: "1px solid #000", padding: "6px 10px" }}>
+                <td colSpan={form.dueDate ? cols - 2 : cols} style={{ border: "1px solid #000", padding: "6px 10px" }}>
                   <div style={{ fontSize: "0.58rem", color: "#64748b" }}>{L.inWords}</div>
                   <div style={{ fontWeight: 700, fontSize: "0.65rem", color: "#0f172a" }}>{words}</div>
                 </td>
@@ -550,7 +566,7 @@ function InvoicePreview({ form, isMobile, onClose }) {
                     </div>
                   )}
                 </td>
-                <td colSpan={3} style={{ border: "1px solid #000", padding: "6px 10px", textAlign: "right", verticalAlign: "bottom" }}>
+                <td colSpan={cols - 3} style={{ border: "1px solid #000", padding: "6px 10px", textAlign: "right", verticalAlign: "bottom" }}>
                   <div style={{ fontSize: "0.6rem", color: "#334155" }}>{L.forCompany(form.companyName || "Your Company")}</div>                  <div style={{ margin: "6px 0", minHeight: 36, display: "flex", justifyContent: "flex-end" }}>
                     {form.signature
                       ? <img src={form.signature} alt="Signature" style={{ maxHeight: 44, maxWidth: 120, objectFit: "contain" }} />
@@ -966,6 +982,12 @@ function ProductSelect({ products = [], value, onPick, style }) {
     </>
   );
 }
+
+// Finds the product for a row: by productId, or by the same name (ignores capital letters)
+const findProduct = (products, item) =>
+  products.find(p => String(p.id) === String(item.productId)) ||
+  products.find(p => (p.name || "").trim().toLowerCase() === (item.description || "").trim().toLowerCase());
+
 function ItemDescriptionField({ products = [], item, onType, onPick, onAddNew, style, stockFor }) {
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState("all"); // all | products | services
@@ -974,7 +996,7 @@ function ItemDescriptionField({ products = [], item, onType, onPick, onAddNew, s
   const menuRef = useRef(null);
   const MENU_W = 340;
 
-  const linked = products.find(p => String(p.id) === String(item.productId));
+  const linked = findProduct(products, item);
   const text = item.description || "";
   // when a product is already picked, show the full list instead of only that product
   const q = linked && linked.name === text ? "" : text.trim().toLowerCase();
@@ -1152,8 +1174,130 @@ const calcAmount = (it) => {
   return Math.max(0, Math.round((gross - off) * 100) / 100);
 };
 
-// Desktop items grid: Sl | Description | Qty+Unit | Rate | Discount | Amount | delete
-const ITEM_GRID = "22px minmax(130px,1fr) 110px 84px 108px 84px 20px";
+// Optional item columns the user can add / remove with the "+" button
+const OPTIONAL_COLS = [
+  { key: "hsn", label: "HSN / SAC", hint: "Needed for E-Way Bill" },
+  { key: "discount", label: "Discount", hint: "% or ₹ per item" },
+];
+
+// Desktop items grid: Sl | Description | Qty+Unit | Rate | [HSN] | [Discount] | Amount | +/delete
+const itemGrid = (showHsn, showDiscount, customCount = 0) =>
+  ["22px", "minmax(130px,1fr)", "110px", "84px", showHsn && "96px", showDiscount && "108px", ...Array(customCount).fill("96px"), "84px", "20px"]
+    .filter(Boolean)
+    .join(" ");
+
+// "+" button that lists the columns not added yet
+function AddColumnButton({ available, onAdd, onCustom, buttonStyle, children }) {
+  const [open, setOpen] = useState(false);
+  const [adding, setAdding] = useState(false);
+  const [draft, setDraft] = useState("");
+  const [pos, setPos] = useState({});
+  const btnRef = useRef(null);
+  const menuRef = useRef(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const close = () => setOpen(false);
+    const onDown = (e) => {
+      if (btnRef.current?.contains(e.target) || menuRef.current?.contains(e.target)) return;
+      close();
+    };
+    document.addEventListener("mousedown", onDown);
+    window.addEventListener("scroll", close, true);
+    window.addEventListener("resize", close);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      window.removeEventListener("scroll", close, true);
+      window.removeEventListener("resize", close);
+    };
+  }, [open]);
+
+  const saveCustom = () => {
+    const name = draft.trim();
+    if (!name) return;
+    onCustom && onCustom(name);
+    setOpen(false);
+  };
+
+  const toggle = () => {
+    if (open) { setOpen(false); return; }
+    const r = btnRef.current.getBoundingClientRect();
+    const left = Math.max(8, Math.min(r.right - 220, window.innerWidth - 228));
+    setPos({ left, top: r.bottom + 6 });
+    setAdding(false);
+    setDraft("");
+    setOpen(true);
+  };
+
+  return (
+    <>
+      <button ref={btnRef} type="button" onClick={toggle} title="Add column" style={buttonStyle}>
+        {children}
+      </button>
+      {open && (
+        <div
+          ref={menuRef}
+          style={{
+            position: "fixed", zIndex: 10000, width: 220, boxSizing: "border-box",
+            background: "#fff", border: "1px solid #e2e8f0", borderRadius: 12,
+            boxShadow: "0 12px 32px rgba(15,23,42,0.18)", padding: 6, ...pos,
+          }}
+        >
+          <div style={{ fontSize: "0.68rem", fontWeight: 700, color: "#94a3b8", letterSpacing: "0.05em", padding: "6px 10px 4px" }}>
+            ADD COLUMN
+          </div>
+          {available.map((c) => (
+            <div
+              key={c.key}
+              onClick={() => { onAdd(c.key); setOpen(false); }}
+              style={{ padding: "8px 10px", borderRadius: 8, cursor: "pointer" }}
+              onMouseEnter={e => e.currentTarget.style.background = "#E6F1EC"}
+              onMouseLeave={e => e.currentTarget.style.background = "transparent"}
+            >
+              <div style={{ fontWeight: 700, fontSize: "0.82rem", color: "#0f172a" }}>{c.label}</div>
+              <div style={{ fontSize: "0.7rem", color: "#94a3b8" }}>{c.hint}</div>
+            </div>
+          ))}
+
+          {adding ? (
+            <div style={{ display: "flex", gap: 6, padding: "8px 6px 4px" }}>
+              <input
+                autoFocus
+                value={draft}
+                maxLength={20}
+                placeholder="e.g. Batch No"
+                onChange={e => setDraft(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === "Enter") { e.preventDefault(); saveCustom(); }
+                  if (e.key === "Escape") { e.preventDefault(); setOpen(false); }
+                }}
+                style={{ flex: 1, minWidth: 0, border: "1.5px solid #1F6F5C", borderRadius: 8, padding: "6px 8px", fontSize: "0.8rem", outline: "none" }}
+              />
+              <button
+                type="button"
+                onClick={saveCustom}
+                style={{ border: "none", borderRadius: 8, padding: "0 12px", background: "#1F6F5C", color: "#fff", fontSize: "0.78rem", fontWeight: 700, cursor: "pointer" }}
+              >
+                Add
+              </button>
+            </div>
+          ) : (
+            <div
+              onClick={() => setAdding(true)}
+              style={{
+                margin: "6px 4px 2px", padding: "8px 10px", border: "1.5px dashed #1F6F5C", borderRadius: 8,
+                background: "#E6F1EC", color: "#175646", fontWeight: 700, fontSize: "0.8rem",
+                cursor: "pointer", display: "flex", alignItems: "center", gap: 6,
+              }}
+            >
+              <FaPlus size={9} /> Custom column
+            </div>
+          )}
+        </div>
+      )}
+    </>
+  );
+}
 
 export default function InvoiceForm({ invoice, invoices = [], customers = [], onSave, onBack, companyInfo, onCompanyChange, docSettings, invoiceType = "Final" }) {
   const isEdit = !!invoice;
@@ -1161,6 +1305,15 @@ export default function InvoiceForm({ invoice, invoices = [], customers = [], on
   const GST_PRESETS = [1, 3, 5, 12, 18, 28];
   const [customGst, setCustomGst] = useState(false);
   const [showCustomerList, setShowCustomerList] = useState(false);
+  // Optional item columns the user switched on with the "+" button
+  const [itemCols, setItemCols] = useState({ hsn: false, discount: false });
+
+  // In-app error message (replaces the browser alert popup)
+  const [formAlert, setFormAlert] = useState(null);
+  const showAlert = (message) => {
+    setFormAlert(message);
+    setTimeout(() => setFormAlert(null), 4000);
+  };
 
   const [companies, setCompanies] = useState([]);
   useEffect(() => {
@@ -1199,7 +1352,7 @@ useEffect(() => {
       setQuickAddRow(null);
     } catch (err) {
       console.error("Quick add product failed:", err);
-      alert("Failed to save product: " + err.message);
+      showAlert("Failed to save product: " + err.message);
     }
   };
 
@@ -1370,7 +1523,7 @@ useEffect(() => {
   const pickProduct = (i, productId, productObj) => {
   const items = [...form.items];
   if (!productId) {
-    items[i] = { ...items[i], productId: undefined };   // custom item
+    items[i] = { ...items[i], productId: undefined, itemType: undefined };   // custom item
   } else {
     const p = productObj || products.find(x => String(x.id) === String(productId));
     if (!p) return;
@@ -1378,6 +1531,7 @@ useEffect(() => {
     items[i] = {
       ...items[i],
       productId: p.id,
+      itemType: p.type === "Service" ? "Service" : "Product",
       hsnCode: p.hsn_code || p.hsnCode || "",
       description: p.name,
       descriptionTa: undefined,
@@ -1397,6 +1551,7 @@ useEffect(() => {
       description: value,
       descriptionTa: undefined,
       productId: linked && linked.name === value ? items[i].productId : undefined,
+      itemType: linked && linked.name === value ? items[i].itemType : undefined,
     };
     setForm(prev => ({ ...prev, items }));
   };
@@ -1416,7 +1571,7 @@ useEffect(() => {
     // qty used by the OTHER rows of this same invoice
     const usedElsewhere = form.items.reduce(
       (s, it, idx) =>
-        idx !== rowIdx && String(it.productId) === String(productId)
+        idx !== rowIdx && String(findProduct(products, it)?.id) === String(productId)
           ? s + (Number(it.qty) || 0)
           : s,
       0
@@ -1434,6 +1589,58 @@ useEffect(() => {
   const removeItem = (i) => {
     const items = form.items.filter((_, idx) => idx !== i).map((item, idx) => ({ ...item, sl: idx + 1 }));
     setForm(prev => ({ ...prev, items }));
+  };
+
+  // A column is visible if the user added it, or if any item already has data for it
+  // (e.g. a product with an HSN code, or an invoice being edited).
+  const showHsn = itemCols.hsn || form.items.some(it => String(it.hsnCode || "").trim());
+  const showDiscount = itemCols.discount || form.items.some(it => Number(it.discount) > 0);
+  const availableCols = OPTIONAL_COLS.filter(c => (c.key === "hsn" ? !showHsn : !showDiscount));
+
+  const addColumn = (key) => setItemCols(prev => ({ ...prev, [key]: true }));
+
+  // Custom columns the user created with "+ Custom column" (saved on the invoice)
+  const customCols = form.customColumns || [];
+
+  const addCustomColumn = (label) => {
+    if (customCols.some(c => c.label.toLowerCase() === label.toLowerCase())) {
+      showAlert(`"${label}" column is already added.`);
+      return;
+    }
+    setForm(prev => ({
+      ...prev,
+      customColumns: [...(prev.customColumns || []), { key: `cc_${Date.now().toString(36)}`, label }],
+    }));
+  };
+
+  const removeCustomColumn = (key) => {
+    setForm(prev => ({
+      ...prev,
+      customColumns: (prev.customColumns || []).filter(c => c.key !== key),
+      items: prev.items.map(it => {
+        const { [key]: _removed, ...rest } = it.custom || {};
+        return { ...it, custom: rest };
+      }),
+    }));
+  };
+
+  const updateCustom = (i, key, value) => {
+    const items = [...form.items];
+    items[i] = { ...items[i], custom: { ...(items[i].custom || {}), [key]: value } };
+    setForm(prev => ({ ...prev, items }));
+  };
+
+  // Removing a column also clears its values so hidden data can't affect the invoice
+  const removeColumn = (key) => {
+    setItemCols(prev => ({ ...prev, [key]: false }));
+    setForm(prev => ({
+      ...prev,
+      items: prev.items.map(it => {
+        if (key === "hsn") return { ...it, hsnCode: "" };
+        const cleared = { ...it, discount: 0 };
+        return { ...cleared, amount: calcAmount(cleared) };
+      }),
+    }));
   };
 
   const rawSum = form.items.reduce((a, b) => a + Number(b.amount), 0);
@@ -1454,6 +1661,10 @@ useEffect(() => {
   }
 const due = total - Number(form.amountPaid || 0);
 
+// GST split (CGST+SGST for intra-state, IGST for inter-state) for the Totals block
+const formGst = splitGst(tax, gstPercent, form.companyGSTIN, form.buyerGSTIN);
+const formGstRows = form.gstType !== "No GST" ? gstRows(formGst, gstPercent, form.gstType, INVOICE_LABELS[form.invoiceLang === "ta" ? "ta" : "en"]) : [];
+
 // Keep Amount Paid in sync with the chosen status (same rule as InvoicesPage)
 const handleStatusSelect = (newStatus) => {
   setForm(prev => ({
@@ -1468,17 +1679,18 @@ const handleStatusSelect = (newStatus) => {
 
 const handleSave = async () => {
     if (!form.buyerName || !form.invoiceNo) {
-      alert("Please fill Invoice No and Buyer Name.");
+      showAlert("Please fill Invoice No and Buyer Name.");
       return;
     }
     if (form.invoiceType !== "Proforma") {
-      const badIdx = form.items.findIndex(
-        (it, i) => it.productId && Number(it.qty || 0) > availableStock(it.productId, i)
-      );
+      const badIdx = form.items.findIndex((it, i) => {
+        const p = findProduct(products, it);
+        return p && Number(it.qty || 0) > availableStock(p.id, i);
+      });
       if (badIdx !== -1) {
         const it = form.items[badIdx];
-        const avail = Math.max(availableStock(it.productId, badIdx), 0);
-        alert(`Not enough stock for "${it.description}". Only ${avail} available for item #${it.sl}.`);
+        const avail = Math.max(availableStock(findProduct(products, it).id, badIdx), 0);
+        showAlert(`Not enough stock for "${it.description}". Only ${avail} available for item #${it.sl}.`);
         return;
       }
     }
@@ -1531,6 +1743,32 @@ const handleSave = async () => {
   return (
     <>
       <style>{spinnerCSS}</style>
+
+      {formAlert && (
+        <div
+          style={{
+            position: "fixed", top: 20, right: 20, zIndex: 3000,
+            maxWidth: "min(380px, calc(100vw - 40px))",
+            backgroundColor: "#fef2f2", color: "#b91c1c",
+            border: "1px solid #fecaca", borderLeft: "4px solid #ef4444",
+            padding: "12px 14px", borderRadius: 10,
+            fontSize: "0.85rem", fontWeight: 600,
+            boxShadow: "0 8px 24px rgba(0,0,0,0.15)",
+            display: "flex", alignItems: "flex-start", gap: 10,
+          }}
+        >
+          <span style={{ flex: 1 }}>⚠ {formAlert}</span>
+          <button
+            onClick={() => setFormAlert(null)}
+            className="border-0 bg-transparent p-0"
+            style={{ color: "#b91c1c", cursor: "pointer", fontSize: "0.9rem" }}
+            aria-label="Close"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
       <div style={isMobile ? styles.splitContainerMobile : styles.splitContainer}>
         {/* ══ LEFT: Form ══ */}
         <div style={
@@ -1962,12 +2200,20 @@ stockFor={p => availableStock(p.id, i)}
         onAddNew={() => setQuickAddRow(i)}
         style={{ ...inp, fontSize: "0.82rem" }}
       />
-      <input
-        value={item.hsnCode ?? ""}
-        onChange={e => updateItem(i, "hsnCode", e.target.value.replace(/\D/g, "").slice(0, 8))}
-        placeholder="HSN / SAC code"
-        style={{ ...inp, fontSize: "0.72rem", padding: "4px 8px", marginTop: 4 }}
-      />
+      {showHsn && (
+        <div className="d-flex align-items-center gap-1" style={{ marginTop: 4 }}>
+          <input
+            value={item.hsnCode ?? ""}
+            onChange={e => updateItem(i, "hsnCode", e.target.value.replace(/\D/g, "").slice(0, 8))}
+            placeholder="HSN / SAC code"
+            style={{ ...inp, fontSize: "0.72rem", padding: "4px 8px" }}
+          />
+          <button type="button" title="Remove HSN / SAC column" onClick={() => removeColumn("hsn")}
+            style={{ border: "none", background: "transparent", color: "#ef4444", cursor: "pointer", padding: "0 4px" }}>
+            ✕
+          </button>
+        </div>
+      )}
     </div>
                         <div className="row g-2">
                           <div className="col-6">
@@ -1986,26 +2232,51 @@ stockFor={p => availableStock(p.id, i)}
                             <label style={{ fontSize: "0.72rem", fontWeight: 600, color: "#64748b", display: "block", marginBottom: 4 }}>Rate</label>
                             <input type="number" className="no-spinner" value={item.rate} onChange={e => updateItem(i, "rate", e.target.value)} placeholder="0" style={{ ...inp, fontSize: "0.82rem" }} />
                           </div>
-                          <div className="col-6">
-                            <label style={{ fontSize: "0.72rem", fontWeight: 600, color: "#64748b", display: "block", marginBottom: 4 }}>Discount</label>
-                            <div className="d-flex gap-1">
+                          {showDiscount && (
+                            <div className="col-6">
+                              <label style={{ fontSize: "0.72rem", fontWeight: 600, color: "#64748b", display: "block", marginBottom: 4 }}>
+                                Discount{" "}
+                                <button type="button" title="Remove Discount column" onClick={() => removeColumn("discount")}
+                                  style={{ border: "none", background: "transparent", color: "#ef4444", cursor: "pointer", padding: 0 }}>
+                                  ✕
+                                </button>
+                              </label>
+                              <div className="d-flex gap-1">
+                                <input
+                                  type="number" className="no-spinner" min="0"
+                                  value={item.discount ?? ""}
+                                  onChange={e => updateItem(i, "discount", e.target.value)}
+                                  placeholder="0"
+                                  style={{ ...inp, fontSize: "0.82rem", minWidth: 0 }}
+                                />
+                                <select
+                                  value={item.discountType || "percent"}
+                                  onChange={e => updateItem(i, "discountType", e.target.value)}
+                                  style={{ ...inp, fontSize: "0.82rem", padding: "8px 2px", width: 52, flexShrink: 0, cursor: "pointer" }}
+                                >
+                                  <option value="percent">%</option>
+                                  <option value="amount">₹</option>
+                                </select>
+                              </div>
+                            </div>
+                          )}
+                          {customCols.map(c => (
+                            <div className="col-6" key={c.key}>
+                              <label style={{ fontSize: "0.72rem", fontWeight: 600, color: "#64748b", display: "block", marginBottom: 4 }}>
+                                {c.label}{" "}
+                                <button type="button" title={`Remove ${c.label} column`} onClick={() => removeCustomColumn(c.key)}
+                                  style={{ border: "none", background: "transparent", color: "#ef4444", cursor: "pointer", padding: 0 }}>
+                                  ✕
+                                </button>
+                              </label>
                               <input
-                                type="number" className="no-spinner" min="0"
-                                value={item.discount ?? ""}
-                                onChange={e => updateItem(i, "discount", e.target.value)}
-                                placeholder="0"
+                                value={item.custom?.[c.key] ?? ""}
+                                onChange={e => updateCustom(i, c.key, e.target.value)}
+                                placeholder={c.label}
                                 style={{ ...inp, fontSize: "0.82rem", minWidth: 0 }}
                               />
-                              <select
-                                value={item.discountType || "percent"}
-                                onChange={e => updateItem(i, "discountType", e.target.value)}
-                                style={{ ...inp, fontSize: "0.82rem", padding: "8px 2px", width: 52, flexShrink: 0, cursor: "pointer" }}
-                              >
-                                <option value="percent">%</option>
-                                <option value="amount">₹</option>
-                              </select>
                             </div>
-                          </div>
+                          ))}
                           <div className="col-6">
                             <label style={{ fontSize: "0.72rem", fontWeight: 600, color: "#64748b", display: "block", marginBottom: 4 }}>Amount</label>
                             <div className="fw-semibold" style={{ fontSize: "0.85rem", color: "#0f172a", padding: "8px 0" }}>
@@ -2019,16 +2290,49 @@ stockFor={p => availableStock(p.id, i)}
                 ) : (
                   // ── Table layout for items on desktop ────────────────────
                   <div className="rounded-3 overflow-hidden" style={{ border: "1px solid #e2e8f0" }}>
-                    <div className="px-3 py-2" style={{ display: "grid", gridTemplateColumns: ITEM_GRID, gap: 6, backgroundColor: "#0f172a" }}>
-                      {["Sl.", "Description of Services", "Qty", "Rate (₹)", "Discount", "Amount (₹)", ""].map((h, i) => (
-                        <div key={i} style={{ color: "#94a3b8", fontSize: "0.72rem", fontWeight: 700, letterSpacing: "0.05em" }}>
-                          {h}
+                    <div className="px-3 py-2" style={{ display: "grid", gridTemplateColumns: itemGrid(showHsn, showDiscount, customCols.length), gap: 6, backgroundColor: "#0f172a", alignItems: "center" }}>
+                      {[
+                        { label: "Sl." },
+                        { label: "Description of Services" },
+                        { label: "Qty" },
+                        { label: "Rate (₹)" },
+                        showHsn && { label: "HSN / SAC", remove: "hsn" },
+                        showDiscount && { label: "Discount", remove: "discount" },
+                        ...customCols.map(c => ({ label: c.label, removeCustom: c.key })),
+                        { label: "Amount (₹)" },
+                      ].filter(Boolean).map((h) => (
+                        <div key={h.label} style={{ color: "#94a3b8", fontSize: "0.72rem", fontWeight: 700, letterSpacing: "0.05em", display: "flex", alignItems: "center", gap: 4 }}>
+                          {h.label}
+                          {(h.remove || h.removeCustom) && (
+                            <button
+                              type="button"
+                              title={`Remove ${h.label} column`}
+                              onClick={() => (h.removeCustom ? removeCustomColumn(h.removeCustom) : removeColumn(h.remove))}
+                              style={{ border: "none", background: "transparent", color: "#f87171", cursor: "pointer", padding: 0, lineHeight: 1, fontSize: "0.75rem" }}
+                            >
+                              ✕
+                            </button>
+                          )}
                         </div>
                       ))}
+                      <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                        <AddColumnButton
+                          available={availableCols}
+                          onAdd={addColumn}
+                          onCustom={addCustomColumn}
+                          buttonStyle={{
+                            width: 20, height: 20, borderRadius: 6, border: "none", padding: 0,
+                            background: "#1F6F5C", color: "#fff", cursor: "pointer",
+                            display: "flex", alignItems: "center", justifyContent: "center",
+                          }}
+                        >
+                          <FaPlus size={9} />
+                        </AddColumnButton>
+                      </div>
                     </div>
 
                     {form.items.map((item, i) => (
-                      <div key={i} className="px-3 py-2" style={{ display: "grid", gridTemplateColumns: ITEM_GRID, gap: 6, alignItems: "center", borderTop: "1px solid #f1f5f9" }}>
+                      <div key={i} className="px-3 py-2" style={{ display: "grid", gridTemplateColumns: itemGrid(showHsn, showDiscount, customCols.length), gap: 6, alignItems: "center", borderTop: "1px solid #f1f5f9" }}>
                         <div style={{ fontSize: "0.82rem", color: "#94a3b8" }}>{item.sl}</div>
 
                         <div>
@@ -2040,12 +2344,6 @@ stockFor={p => availableStock(p.id, i)}
                             onPick={v => pickProduct(i, v)}
                             onAddNew={() => setQuickAddRow(i)}
                             style={{ ...inp, fontSize: "0.82rem" }}
-                          />
-                          <input
-                            value={item.hsnCode ?? ""}
-                            onChange={e => updateItem(i, "hsnCode", e.target.value.replace(/\D/g, "").slice(0, 8))}
-                            placeholder="HSN / SAC code"
-                            style={{ ...inp, fontSize: "0.72rem", padding: "4px 8px", marginTop: 4 }}
                           />
                         </div>
 
@@ -2060,23 +2358,44 @@ stockFor={p => availableStock(p.id, i)}
 
                         <input type="number" className="no-spinner" value={item.rate} onChange={e => updateItem(i, "rate", e.target.value)} placeholder="0" style={{ ...inp, fontSize: "0.82rem", padding: "8px 6px", minWidth: 0 }} />
 
-                        <div className="d-flex gap-1">
+                        {showHsn && (
                           <input
-                            type="number" className="no-spinner" min="0"
-                            value={item.discount ?? ""}
-                            onChange={e => updateItem(i, "discount", e.target.value)}
-                            placeholder="0"
-                            style={{ ...inp, fontSize: "0.82rem", padding: "8px 6px", minWidth: 0 }}
+                            value={item.hsnCode ?? ""}
+                            onChange={e => updateItem(i, "hsnCode", e.target.value.replace(/\D/g, "").slice(0, 8))}
+                            placeholder="HSN / SAC"
+                            style={{ ...inp, fontSize: "0.78rem", padding: "8px 6px", minWidth: 0 }}
                           />
-                          <select
-                            value={item.discountType || "percent"}
-                            onChange={e => updateItem(i, "discountType", e.target.value)}
-                            style={{ ...inp, fontSize: "0.78rem", padding: "8px 2px", width: 48, flexShrink: 0, cursor: "pointer" }}
-                          >
-                            <option value="percent">%</option>
-                            <option value="amount">₹</option>
-                          </select>
-                        </div>
+                        )}
+
+                        {showDiscount && (
+                          <div className="d-flex gap-1">
+                            <input
+                              type="number" className="no-spinner" min="0"
+                              value={item.discount ?? ""}
+                              onChange={e => updateItem(i, "discount", e.target.value)}
+                              placeholder="0"
+                              style={{ ...inp, fontSize: "0.82rem", padding: "8px 6px", minWidth: 0 }}
+                            />
+                            <select
+                              value={item.discountType || "percent"}
+                              onChange={e => updateItem(i, "discountType", e.target.value)}
+                              style={{ ...inp, fontSize: "0.78rem", padding: "8px 2px", width: 48, flexShrink: 0, cursor: "pointer" }}
+                            >
+                              <option value="percent">%</option>
+                              <option value="amount">₹</option>
+                            </select>
+                          </div>
+                        )}
+
+                        {customCols.map(c => (
+                          <input
+                            key={c.key}
+                            value={item.custom?.[c.key] ?? ""}
+                            onChange={e => updateCustom(i, c.key, e.target.value)}
+                            placeholder={c.label}
+                            style={{ ...inp, fontSize: "0.78rem", padding: "8px 6px", minWidth: 0 }}
+                          />
+                        ))}
 
                         <div className="fw-semibold" style={{ fontSize: "0.82rem", color: "#0f172a" }}>
                           ₹{Number(item.amount).toLocaleString()}
@@ -2094,30 +2413,47 @@ stockFor={p => availableStock(p.id, i)}
                   </div>
                 )}
 
-                <button onClick={addItem}
-                  className="d-flex align-items-center gap-2 border-0 rounded-3 px-3 py-2 mt-2"
-                  style={{ backgroundColor: "#f1f5f9", color: "#475569", fontSize: "0.82rem", cursor: "pointer" }}>
-                  <FaPlus size={10} /> Add Item
-                </button>
+                <div className="d-flex gap-2 flex-wrap mt-2">
+                  <button onClick={addItem}
+                    className="d-flex align-items-center gap-2 border-0 rounded-3 px-3 py-2"
+                    style={{ backgroundColor: "#f1f5f9", color: "#475569", fontSize: "0.82rem", cursor: "pointer" }}>
+                    <FaPlus size={10} /> Add Item
+                  </button>
+                  {isMobile && (
+                    <AddColumnButton
+                      available={availableCols}
+                      onAdd={addColumn}
+                      onCustom={addCustomColumn}
+                      buttonStyle={{
+                        display: "flex", alignItems: "center", gap: 8, border: "none", borderRadius: 12,
+                        padding: "8px 16px", backgroundColor: "#E6F1EC", color: "#1F6F5C",
+                        fontSize: "0.82rem", fontWeight: 600, cursor: "pointer",
+                      }}
+                    >
+                      <FaPlus size={10} /> Add Field
+                    </AddColumnButton>
+                  )}
+                </div>
               </div>
 
               {/* Totals */}
               <div className="d-flex justify-content-end mb-3">
                 <div style={{ minWidth: isMobile ? "100%" : "280px", width: isMobile ? "100%" : "auto" }}>
-                  {[
-                 { label: "Sub Total", value: `₹${(form.gstType === "GST Included" ? total : subtotal).toLocaleString()}` },
-...(form.gstType === "With GST" ? [{
-  label: `GST @ ${gstPercent}%`,
-  value: `₹${tax.toLocaleString()}`
-}] : []),
-                    { label: "Total Invoice Value", value: `₹${total.toLocaleString()}`, bold: true },
-                    { label: "Amount Paid", value: `₹${Number(form.amountPaid || 0).toLocaleString()}` },
-                  ].map(({ label, value, bold }) => (
-                    <div key={label} className="d-flex justify-content-between py-1" style={{ borderBottom: "1px solid #f1f5f9" }}>
-                      <span style={{ fontSize: "0.85rem", color: bold ? "#0f172a" : "#64748b", fontWeight: bold ? 700 : 400 }}>{label}</span>
-                      <span style={{ fontSize: "0.85rem", color: "#0f172a", fontWeight: bold ? 700 : 600 }}>{value}</span>
-                    </div>
-                  ))}
+                  {(() => {
+                    const rows = [
+                      { label: "Sub Total", value: `₹${(form.gstType === "GST Included" ? total : subtotal).toLocaleString()}` },
+                      // GST — one line per component (CGST/SGST or IGST)
+                      ...formGstRows.map(r => ({ label: r.label, value: `₹${Number(r.amount || 0).toLocaleString()}` })),
+                      { label: "Total Invoice Value", value: `₹${total.toLocaleString()}`, bold: true },
+                      { label: "Amount Paid", value: `₹${Number(form.amountPaid || 0).toLocaleString()}` },
+                    ];
+                    return rows.map(({ label, value, bold }) => (
+                      <div key={label} className="d-flex justify-content-between py-1" style={{ borderBottom: "1px solid #f1f5f9" }}>
+                        <span style={{ fontSize: "0.85rem", color: bold ? "#0f172a" : "#64748b", fontWeight: bold ? 700 : 400 }}>{label}</span>
+                        <span style={{ fontSize: "0.85rem", color: "#0f172a", fontWeight: bold ? 700 : 600 }}>{value}</span>
+                      </div>
+                    ));
+                  })()}
                   <div className="d-flex justify-content-between py-2 px-3 rounded-3 mt-1" style={{ backgroundColor: "#0f172a" }}>
                     <span className="fw-bold" style={{ color: "#fff", fontSize: "0.9rem" }}>Amount Due</span>
                     <span className="fw-bold" style={{ color: "#34d399", fontSize: "1.1rem" }}>₹{due.toLocaleString()}</span>
@@ -2194,7 +2530,7 @@ stockFor={p => availableStock(p.id, i)}
               {/* ══ Mobile: Preview appended inline, right after the form content ══ */}
               {isMobile && showPreview && (
                 <div style={{ marginTop: 24 }}>
-                  <InvoicePreview form={form} isMobile={true} onClose={() => setShowPreview(false)} />              </div>
+                  <InvoicePreview form={form} isMobile={true} onClose={() => setShowPreview(false)} showHsn={showHsn} />              </div>
               )}
 
             </div>
@@ -2202,7 +2538,7 @@ stockFor={p => availableStock(p.id, i)}
         </div>
 
         {/* ══ RIGHT: Preview — sticky sidebar on desktop only ══ */}
-        {showPreview && !isMobile && <InvoicePreview form={form} isMobile={false} />}    </div>
+        {showPreview && !isMobile && <InvoicePreview form={form} isMobile={false} showHsn={showHsn} />}    </div>
 
       {quickAddRow !== null && (
         <ProductForm

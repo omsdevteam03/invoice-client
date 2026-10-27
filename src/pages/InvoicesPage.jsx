@@ -9,6 +9,7 @@ import axiosInstance from "../api/axiosInstance";
 import { useAuth } from "../context/AuthContext";
 import { getCostItems } from "../components/quotations/quotationLayoutUtils";
 import { validateForEwayBill, GSTIN_REGEX, VEHICLE_REGEX } from "../components/invoices/EwayBillChecklist";
+import { invoiceHasGoods } from "../components/invoices/invoiceLang";
 
 const API = `${import.meta.env.VITE_API_URL}/invoices`;
 const SETTINGS_API = `${import.meta.env.VITE_API_URL}/settings/company`;
@@ -194,6 +195,103 @@ function EwayBillModal({ invoice, onCancel, onSubmit }) {
             style={{ background: "linear-gradient(135deg,#10b981,#059669)", color: "#fff", borderRadius: 8, padding: "10px", fontSize: "0.85rem" }}
           >
             Generate
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CancelEwbModal({ invoice, onClose, onConfirm }) {
+  const [reason, setReason] = useState("3");
+  if (!invoice) return null;
+
+  // Cancel is allowed only within 24 hours of generating the e-way bill
+  const generatedAt = invoice.ewayBillDate ? new Date(invoice.ewayBillDate) : null;
+  const deadline = generatedAt ? new Date(generatedAt.getTime() + 24 * 60 * 60 * 1000) : null;
+  const expired = deadline ? Date.now() > deadline.getTime() : false;
+  const fmt = (d) => d.toLocaleString("en-IN", {
+    day: "2-digit", month: "2-digit", year: "numeric",
+    hour: "2-digit", minute: "2-digit", hour12: true,
+  });
+
+  return (
+    <div
+      className="d-flex align-items-center justify-content-center"
+      style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.5)", zIndex: 1000, padding: 16 }}
+      onClick={onClose}
+    >
+      <div
+        className="bg-white"
+        style={{ borderRadius: 14, padding: 24, width: "90%", maxWidth: 380, boxShadow: "0 12px 32px rgba(0,0,0,0.2)" }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div
+          className="d-flex align-items-center justify-content-center mx-auto mb-3"
+          style={{ width: 48, height: 48, borderRadius: "50%", background: "#fef2f2", color: "#ef4444", fontSize: 20, fontWeight: 700 }}
+        >
+          !
+        </div>
+        <div className="text-center fw-bold mb-1" style={{ fontSize: "1rem", color: "#0f172a" }}>
+          Cancel E-Way Bill?
+        </div>
+        <div className="text-center mb-2" style={{ fontSize: "0.85rem", color: "#64748b" }}>
+          E-Way Bill <strong>{invoice.ewayBillNo}</strong> will be cancelled. This cannot be undone.
+        </div>
+
+        {deadline && (
+          <div
+            className="mb-3"
+            style={{
+              fontSize: "0.78rem", fontWeight: 600, borderRadius: 8, padding: "8px 10px",
+              backgroundColor: expired ? "#fef2f2" : "#fffbeb",
+              color: expired ? "#b91c1c" : "#b45309",
+              border: `1px solid ${expired ? "#fecaca" : "#fde68a"}`,
+            }}
+          >
+            {expired
+              ? `Cancel time is over. It was allowed only until ${fmt(deadline)} (24 hours after generating).`
+              : `You can cancel only until ${fmt(deadline)} (within 24 hours of generating).`}
+          </div>
+        )}
+
+        <label style={{ display: "block", fontSize: "0.78rem", fontWeight: 600, color: "#334155", marginBottom: 6 }}>
+          Reason
+        </label>
+        <select
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+          style={{
+            width: "100%", border: "1.5px solid #e2e8f0", borderRadius: 10, padding: "9px 12px",
+            fontSize: "0.85rem", color: "#0f172a", outline: "none", cursor: "pointer",
+          }}
+        >
+          <option value="1">Duplicate</option>
+          <option value="2">Order cancelled</option>
+          <option value="3">Data entry mistake</option>
+          <option value="4">Others</option>
+        </select>
+
+        <div className="d-flex gap-2 mt-3">
+          <button
+            onClick={onClose}
+            className="flex-fill fw-semibold border-0"
+            style={{ background: "#f1f5f9", color: "#334155", borderRadius: 8, padding: "10px", fontSize: "0.85rem" }}
+          >
+            Keep it
+          </button>
+          <button
+            onClick={() => onConfirm(invoice, reason)}
+            disabled={expired}
+            title={expired ? "24 hours are over, cancel is not allowed" : ""}
+            className="flex-fill fw-semibold border-0"
+            style={{
+              background: "linear-gradient(135deg,#f87171,#ef4444)", color: "#fff", borderRadius: 8,
+              padding: "10px", fontSize: "0.85rem",
+              opacity: expired ? 0.45 : 1, cursor: expired ? "not-allowed" : "pointer",
+            }}
+          >
+            Cancel E-Way Bill
           </button>
         </div>
       </div>
@@ -712,6 +810,10 @@ export default function InvoicesPage() {
   // Step 1: validate, then open the popup
   const handleGenerateEWB = (invoice) => {
     if (invoice.ewayBillNo) return;
+    if (!invoiceHasGoods(invoice)) {
+      alert("E-Way Bill is not applicable for service-only invoices.\n\nAdd at least one goods item to generate it.");
+      return;
+    }
     const errors = validateForEwayBill(invoice);
     if (errors.length > 0) {
       alert("Fix these before generating the E-Way Bill:\n\n• " + errors.join("\n• "));
@@ -783,10 +885,12 @@ export default function InvoicesPage() {
     }
   };
 
-  const handleCancelEwb = async (invoice) => {
-    if (!window.confirm(`Cancel E-Way Bill ${invoice.ewayBillNo}? This cannot be undone.`)) return;
-    const reason = prompt("Reason: 1 = Duplicate, 2 = Order cancelled, 3 = Data entry mistake, 4 = Others", "3");
-    if (!["1", "2", "3", "4"].includes(reason)) return;
+  // Step 1: just open the modal
+  const handleCancelEwb = (invoice) => setCancelTarget(invoice);
+
+  // Step 2: called by the modal's red button
+  const submitCancelEwb = async (invoice, reason) => {
+    setCancelTarget(null);
     try {
       setToast({ message: "Cancelling E-Way Bill..." });
       await axiosInstance.post("/ewaybill/cancel", { invoiceId: invoice.id, reasonCode: Number(reason) });
@@ -799,8 +903,8 @@ export default function InvoicesPage() {
       setToast({ message: "E-Way Bill cancelled" });
       setTimeout(() => setToast(null), 2500);
     } catch (error) {
-      setToast(null);
-      alert("Cancel failed:\n\n" + (error.response?.data?.error || error.message));
+      setToast({ message: "Cancel failed: " + (error.response?.data?.error || error.message) });
+      setTimeout(() => setToast(null), 4000);
     }
   };
 
@@ -922,6 +1026,7 @@ export default function InvoicesPage() {
   // modal is closed
   const [convertTarget, setConvertTarget] = useState(null);
 const [ewbTarget, setEwbTarget] = useState(null);
+  const [cancelTarget, setCancelTarget] = useState(null);
   const handleBack = () => { setDraftInvoice(null); navigate("/invoices"); };
 
   // Back button on the invoice view page only
@@ -1029,6 +1134,13 @@ const [ewbTarget, setEwbTarget] = useState(null);
           invoice={ewbTarget}
           onCancel={() => setEwbTarget(null)}
           onSubmit={submitGenerateEWB}
+        />
+
+        <CancelEwbModal
+          key={cancelTarget?.id || "closed-cancel"}
+          invoice={cancelTarget}
+          onClose={() => setCancelTarget(null)}
+          onConfirm={submitCancelEwb}
         />
 
         <ConvertToFinalModal

@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
-import { FaArrowLeft, FaPrint, FaEdit, FaFileInvoiceDollar, FaClipboardList } from "react-icons/fa";
-import { INVOICE_LABELS, INVOICE_FONT, InvoiceLangToggle, useTamilDescriptions, unitLabel, numberToWordsTamil } from "./invoiceLang";
+import { FaArrowLeft, FaPrint, FaEdit, FaFileInvoiceDollar, FaClipboardList, FaTruck, FaBan } from "react-icons/fa";
+import { INVOICE_LABELS, INVOICE_FONT, InvoiceLangToggle, useTamilDescriptions, unitLabel, numberToWordsTamil, splitGst, gstRows, invoiceHasGoods } from "./invoiceLang";
 import EwayBillChecklist, { isEwayBillReady } from "./EwayBillChecklist";
 
 function logoStyle(shape, size) {
@@ -76,8 +76,9 @@ export default function InvoiceDocument({ invoice, onBack, onEdit, onConvertToFi
     tax = 0;
     total = subtotal;
   }
-  const amountPaid = Number(invoice.amountPaid || 0);
-  const due = total - amountPaid;
+ const gst = splitGst(tax, gstPercent, invoice.companyGSTIN, invoice.buyerGSTIN);
+const amountPaid = Number(invoice.amountPaid || 0);
+const due = total - amountPaid;
   const words = lang === "ta"
     ? `${L.wordsPrefix} ${numberToWordsTamil(total)} ${L.wordsSuffix}`
     : `${L.wordsPrefix} ${numberToWords(total)} ${L.wordsSuffix}`;
@@ -86,6 +87,13 @@ export default function InvoiceDocument({ invoice, onBack, onEdit, onConvertToFi
   // E-Way Bill: button works only when every checklist item is ticked
   const ewbReady = isEwayBillReady(invoice);
   const ewbBlocked = !invoice.ewayBillNo && !ewbReady;
+  // E-Way Bill is only for goods: hide it when every item is a service
+  const ewbNotApplicable = !invoiceHasGoods(invoice);
+
+  // HSN / SAC column shows only when at least one item has a code
+  const showHsn = invoice.items.some((it) => String(it.hsnCode || "").trim());
+  const customCols = invoice.customColumns || [];
+  const cols = (showHsn ? 6 : 5) + customCols.length; // number of table columns
 
   const formatDate = (d) => {
     if (!d) return "—";
@@ -101,6 +109,17 @@ export default function InvoiceDocument({ invoice, onBack, onEdit, onConvertToFi
     <td style={{ border: "1px solid #000", padding: cellPad, fontSize: cellFontSize, lineHeight: 1.3, verticalAlign: "top", ...style }}>
       {content}
     </td>
+  );
+  const customTd = (key, content, extra = {}) => (
+    <td key={key} style={{ border: "1px solid #000", padding: cellPad, fontSize: cellFontSize, lineHeight: 1.3, verticalAlign: "top", ...extra }}>
+      {content}
+    </td>
+  );
+  const hsnBlank = (
+    <>
+      {showHsn && mobileCell("", { border: "1px solid #000" })}
+      {customCols.map(c => customTd(c.key, ""))}
+    </>
   );
 
   const fmtDT = (iso) => iso
@@ -139,6 +158,10 @@ export default function InvoiceDocument({ invoice, onBack, onEdit, onConvertToFi
     </div>
   );
 
+  // On mobile show only the icon; on desktop show icon + text
+  const lbl = (text) => (isMobile ? null : text);
+  const iconPad = isMobile ? { padding: "7px 10px" } : {};
+
   return (
     <div style={{ display: "flex", gap: 16, alignItems: "flex-start", flexWrap: "wrap" }}>
     <div style={{ flex: "1 1 640px", maxWidth: 860, minWidth: 0 }}>
@@ -172,115 +195,106 @@ export default function InvoiceDocument({ invoice, onBack, onEdit, onConvertToFi
       `}</style>
 
       {/* Top Bar */}
-       <div className="d-flex justify-content-between align-items-center mb-2 no-print"
-        style={{
-          flexWrap: "wrap", gap: 6,
-          backgroundColor: "#fff", padding: "4px 0",
-        }}>
+      <div className="d-flex justify-content-between align-items-center mb-2 no-print"
+        style={{ flexWrap: "wrap", gap: 6, backgroundColor: "#fff", padding: "4px 0" }}>
         <div className="d-flex gap-2" style={{ flexWrap: "wrap" }}>
-          <button onClick={onBack}
+          <button onClick={onBack} title="Back"
             className="d-flex align-items-center gap-1 border-0 rounded-2 fw-semibold px-2 py-1"
-            style={{ backgroundColor: "#f1f5f9", color: "#475569", cursor: "pointer", fontSize: "0.74rem" }}
+            style={{ backgroundColor: "#f1f5f9", color: "#475569", cursor: "pointer", fontSize: "0.74rem", ...iconPad }}
             onMouseEnter={e => e.currentTarget.style.backgroundColor = "#e2e8f0"}
             onMouseLeave={e => e.currentTarget.style.backgroundColor = "#f1f5f9"}
           >
-            <FaArrowLeft size={12} /> Back
+            <FaArrowLeft size={isMobile ? 14 : 12} /> {lbl("Back")}
           </button>
 
           {invoice.ewayBillNo && (
             <>
-              <button onClick={() => onUpdateEwbVehicle && onUpdateEwbVehicle(invoice)}
-                className="border-0 rounded-2 fw-semibold px-2 py-1"
-                style={{ backgroundColor: "#fef3c7", color: "#b45309", fontSize: "0.74rem", cursor: "pointer" }}>
-                Update Vehicle
+              <button onClick={() => onUpdateEwbVehicle && onUpdateEwbVehicle(invoice)} title="Update Vehicle"
+                className="d-flex align-items-center gap-1 border-0 rounded-2 fw-semibold px-2 py-1"
+                style={{ backgroundColor: "#fef3c7", color: "#b45309", fontSize: "0.74rem", cursor: "pointer", ...iconPad }}>
+                <FaTruck size={isMobile ? 14 : 12} /> {lbl("Update Vehicle")}
               </button>
-              <button onClick={() => onCancelEwb && onCancelEwb(invoice)}
-                className="border-0 rounded-2 fw-semibold px-2 py-1"
-                style={{ backgroundColor: "#fef2f2", color: "#ef4444", fontSize: "0.74rem", cursor: "pointer" }}>
-                Cancel E-Way Bill
+              <button onClick={() => onCancelEwb && onCancelEwb(invoice)} title="Cancel E-Way Bill"
+                className="d-flex align-items-center gap-1 border-0 rounded-2 fw-semibold px-2 py-1"
+                style={{ backgroundColor: "#fef2f2", color: "#ef4444", fontSize: "0.74rem", cursor: "pointer", ...iconPad }}>
+                <FaBan size={isMobile ? 14 : 12} /> {lbl("Cancel E-Way Bill")}
               </button>
             </>
           )}
         </div>
 
         <div className="d-flex gap-2" style={{ flexWrap: "wrap" }}>
-          <InvoiceLangToggle lang={lang} onChange={setLang} />
+          <InvoiceLangToggle lang={lang} onChange={setLang} compact={isMobile} />
 
           {isProforma && invoice.status !== "Converted" && (
-            <button onClick={() => onConvertToFinal && onConvertToFinal(invoice)}
+            <button onClick={() => onConvertToFinal && onConvertToFinal(invoice)} title="Convert to Invoice"
               className="d-flex align-items-center gap-1 border-0 rounded-2 fw-semibold px-2 py-1"
-              style={{ backgroundColor: "#ede9fe", color: "#7c3aed", cursor: "pointer", fontSize: "0.74rem" }}
+              style={{ backgroundColor: "#ede9fe", color: "#7c3aed", cursor: "pointer", fontSize: "0.74rem", ...iconPad }}
               onMouseEnter={e => { e.currentTarget.style.backgroundColor = "#7c3aed"; e.currentTarget.style.color = "#fff"; }}
               onMouseLeave={e => { e.currentTarget.style.backgroundColor = "#ede9fe"; e.currentTarget.style.color = "#7c3aed"; }}
             >
-              <FaFileInvoiceDollar size={12} /> Convert to Invoice
+              <FaFileInvoiceDollar size={isMobile ? 14 : 12} /> {lbl("Convert to Invoice")}
             </button>
           )}
 
           {/* Checklist show/hide toggle */}
-          {!isProforma && !invoice.ewayBillNo && (
+          {!isProforma && !invoice.ewayBillNo && !ewbNotApplicable && (
             <button
               onClick={() => setShowEwbPanel(v => !v)}
               title={showEwbPanel ? "Hide E-Way Bill checklist" : "Show E-Way Bill checklist"}
               className="d-flex align-items-center gap-1 border-0 rounded-2 fw-semibold px-2 py-1"
               style={{
                 backgroundColor: showEwbPanel ? "#e2e8f0" : "#f1f5f9",
-                color: "#475569", cursor: "pointer", fontSize: "0.74rem",
+                color: "#475569", cursor: "pointer", fontSize: "0.74rem", ...iconPad,
               }}
             >
-              <span style={{
-                width: 7, height: 7, borderRadius: "50%",
-                backgroundColor: ewbReady ? "#10b981" : "#f59e0b",
-              }} />
-              <FaClipboardList size={12} /> Checklist
+              <span style={{ width: 7, height: 7, borderRadius: "50%", backgroundColor: ewbReady ? "#10b981" : "#f59e0b" }} />
+              <FaClipboardList size={isMobile ? 14 : 12} /> {lbl("Checklist")}
             </button>
           )}
 
-          {/* Generate E-Way Bill button — disabled until the checklist is fully ticked */}
-          {!isProforma && (
+          {/* Generate E-Way Bill: hidden once the bill exists */}
+          {!isProforma && !invoice.ewayBillNo && !ewbNotApplicable && (
             <button
               onClick={() => onGenerateEWB && onGenerateEWB(invoice)}
               disabled={ewbBlocked}
-              title={ewbBlocked ? "Open the Checklist and complete it first" : ""}
+              title={ewbBlocked ? "Open the Checklist and complete it first" : "Generate E-Way Bill"}
               className="d-flex align-items-center gap-1 border-0 rounded-2 fw-semibold px-2 py-1"
               style={{
-                backgroundColor: invoice.ewayBillNo ? "#ecfdf5" : "#fef3c7",
-                color: invoice.ewayBillNo ? "#059669" : "#b45309",
+                backgroundColor: "#fef3c7", color: "#b45309",
                 cursor: ewbBlocked ? "not-allowed" : "pointer",
                 opacity: ewbBlocked ? 0.5 : 1,
-                fontSize: "0.74rem",
-                border: invoice.ewayBillNo ? "1px solid #a7f3d0" : "1px solid #fcd34d"
+                fontSize: "0.74rem", border: "1px solid #fcd34d", ...iconPad,
               }}
               onMouseEnter={e => {
                 if (e.currentTarget.disabled) return;
-                e.currentTarget.style.backgroundColor = invoice.ewayBillNo ? "#059669" : "#b45309";
+                e.currentTarget.style.backgroundColor = "#b45309";
                 e.currentTarget.style.color = "#fff";
               }}
               onMouseLeave={e => {
                 if (e.currentTarget.disabled) return;
-                e.currentTarget.style.backgroundColor = invoice.ewayBillNo ? "#ecfdf5" : "#fef3c7";
-                e.currentTarget.style.color = invoice.ewayBillNo ? "#059669" : "#b45309";
+                e.currentTarget.style.backgroundColor = "#fef3c7";
+                e.currentTarget.style.color = "#b45309";
               }}
             >
-              <FaFileInvoiceDollar size={12} />
-              {invoice.ewayBillNo ? `EWB: ${invoice.ewayBillNo}` : "Generate E-Way Bill"}
+              <FaFileInvoiceDollar size={isMobile ? 14 : 12} /> {lbl("Generate E-Way Bill")}
             </button>
           )}
 
-          <button onClick={() => onEdit && onEdit(invoice)}
+          <button onClick={() => onEdit && onEdit(invoice)} title="Edit"
             className="no-print d-flex align-items-center gap-1 border-0 rounded-2 fw-semibold px-2 py-1"
-            style={{ backgroundColor: "#eff6ff", color: "#2563eb", cursor: "pointer", fontSize: "0.74rem" }}
+            style={{ backgroundColor: "#eff6ff", color: "#2563eb", cursor: "pointer", fontSize: "0.74rem", ...iconPad }}
             onMouseEnter={e => { e.currentTarget.style.backgroundColor = "#2563eb"; e.currentTarget.style.color = "#fff"; }}
             onMouseLeave={e => { e.currentTarget.style.backgroundColor = "#eff6ff"; e.currentTarget.style.color = "#2563eb"; }}
           >
-            <FaEdit size={12} /> Edit
+            <FaEdit size={isMobile ? 14 : 12} /> {lbl("Edit")}
           </button>
 
-          <button onClick={() => window.print()}
+          <button onClick={() => window.print()} title="Print / PDF"
             className="d-flex align-items-center gap-1 border-0 rounded-2 fw-semibold px-3 py-1"
-            style={{ background: "linear-gradient(135deg,#10b981,#059669)", color: "#fff", cursor: "pointer", fontSize: "0.74rem" }}
+            style={{ background: "linear-gradient(135deg,#10b981,#059669)", color: "#fff", cursor: "pointer", fontSize: "0.74rem", ...(isMobile ? { padding: "7px 10px" } : {}) }}
           >
-            <FaPrint size={12} /> Print / PDF
+            <FaPrint size={isMobile ? 14 : 12} /> {lbl("Print / PDF")}
           </button>
         </div>
       </div>
@@ -347,12 +361,13 @@ export default function InvoiceDocument({ invoice, onBack, onEdit, onConvertToFi
         }}>
           {isMobile && (
             <colgroup>
-              <col style={{ width: "7%" }} />
-              <col style={{ width: "30%" }} />
-              <col style={{ width: "13%" }} />
-              <col style={{ width: "12%" }} />
-              <col style={{ width: "19%" }} />
-              <col style={{ width: "19%" }} />
+              <col style={{ width: showHsn ? "7%" : "8%" }} />
+              <col style={{ width: showHsn ? "30%" : "42%" }} />
+              {showHsn && <col style={{ width: "13%" }} />}
+              {customCols.map(c => <col key={c.key} style={{ width: "13%" }} />)}
+              <col style={{ width: showHsn ? "12%" : "15%" }} />
+              <col style={{ width: showHsn ? "19%" : "17%" }} />
+              <col style={{ width: showHsn ? "19%" : "18%" }} />
             </colgroup>
           )}
           <tbody>
@@ -374,7 +389,7 @@ export default function InvoiceDocument({ invoice, onBack, onEdit, onConvertToFi
                   </div>
                 </div>
               </td>
-              <td colSpan={3} style={{ border: "1px solid #000", padding: isMobile ? "4px 8px" : "5px 12px", verticalAlign: "top" }}>
+              <td colSpan={cols - 3} style={{ border: "1px solid #000", padding: isMobile ? "4px 8px" : "5px 12px", verticalAlign: "top" }}>
                 <div style={{ fontSize: isMobile ? "0.64rem" : "0.78rem", lineHeight: 1.3, whiteSpace: isMobile ? "normal" : "nowrap", marginBottom: 1 }}>
                   <span style={{ color: "#64748b" }}>{L.invoiceNo}: </span>
                   <span style={{ fontWeight: 700, color: "#0f172a" }}>{invoice.invoiceNo}</span>
@@ -388,7 +403,7 @@ export default function InvoiceDocument({ invoice, onBack, onEdit, onConvertToFi
 
                  {/* From / To boxes */}
             <tr>
-              <td colSpan={6} style={{ border: "1px solid #000", padding: 0 }}>
+              <td colSpan={cols} style={{ border: "1px solid #000", padding: 0 }}>
                 <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 0 }}>
                   {partyBox(lang === "ta" ? L.to.replace(/:$/, "") : "To", (
                     <>
@@ -412,12 +427,11 @@ export default function InvoiceDocument({ invoice, onBack, onEdit, onConvertToFi
               </td>
             </tr>
 
-             
-
             <tr style={{ backgroundColor: "#f1f5f9" }}>
               {mobileCell(L.sl, { fontWeight: 700, textAlign: "center", width: "6%", whiteSpace: "nowrap" })}
               {mobileCell(L.description, { fontWeight: 700, width: "38%" })}
-              {mobileCell("HSN / SAC", { fontWeight: 700, textAlign: "center", width: "12%", whiteSpace: isMobile ? "normal" : "nowrap" })}
+              {showHsn && mobileCell("HSN / SAC", { fontWeight: 700, textAlign: "center", width: "12%", whiteSpace: isMobile ? "normal" : "nowrap" })}
+              {customCols.map(c => customTd(c.key, c.label, { fontWeight: 700, textAlign: "center" }))}
               {mobileCell(L.qty, { fontWeight: 700, textAlign: "center", width: "12%" })}
               {mobileCell(L.rate, { fontWeight: 700, textAlign: "right", width: "16%", whiteSpace: isMobile ? "normal" : "nowrap" })}
               {mobileCell(L.amount, { fontWeight: 700, textAlign: "right", width: "16%", whiteSpace: isMobile ? "normal" : "nowrap" })}
@@ -437,7 +451,8 @@ export default function InvoiceDocument({ invoice, onBack, onEdit, onConvertToFi
                     )}
                   </>
                 )}
-                {mobileCell(item.hsnCode || "—", { textAlign: "center" })}
+                {showHsn && mobileCell(item.hsnCode || "—", { textAlign: "center" })}
+                {customCols.map(c => customTd(c.key, item.custom?.[c.key] || "—", { textAlign: "center" }))}
                 {mobileCell(`${item.qty}${item.unit ? " " + unitLabel(item.unit, lang) : ""}`, { textAlign: "center", whiteSpace: "nowrap" })}
                 {mobileCell(formatAmount(item.rate), { textAlign: "right" })}
                 {mobileCell(formatAmount(item.amount), { textAlign: "right" })}
@@ -448,29 +463,29 @@ export default function InvoiceDocument({ invoice, onBack, onEdit, onConvertToFi
             <tr>
               {mobileCell("", { border: "1px solid #000" })}
               {mobileCell(<strong>{L.subTotal}</strong>, { border: "1px solid #000" })}
-              {mobileCell("", { border: "1px solid #000" })}
+              {hsnBlank}
               {mobileCell("", { border: "1px solid #000" })}
               {mobileCell("", { border: "1px solid #000" })}
               {mobileCell(<strong>{formatAmount(invoice.gstType === "GST Included" ? total : subtotal)}</strong>, { border: "1px solid #000", textAlign: "right" })}
             </tr>
 
             {/* GST */}
-            {invoice.gstType !== "No GST" && (
-              <tr>
-                {mobileCell("", { border: "1px solid #000" })}
-                {mobileCell(<strong>{`${L.gst} @ ${gstPercent}%${invoice.gstType === "GST Included" ? ` (${L.included})` : ""}`}</strong>, { border: "1px solid #000" })}
-                {mobileCell("", { border: "1px solid #000" })}
-                {mobileCell("", { border: "1px solid #000" })}
-                {mobileCell("", { border: "1px solid #000" })}
-                {mobileCell(<strong>{formatAmount(tax)}</strong>, { border: "1px solid #000", textAlign: "right" })}
-              </tr>
-            )}
+        {invoice.gstType !== "No GST" && gstRows(gst).map((r) => (
+  <tr key={r.label}>
+    {mobileCell("", { border: "1px solid #000" })}
+    {mobileCell(<strong>{`${r.label}${invoice.gstType === "GST Included" ? ` (${L.included})` : ""}`}</strong>, { border: "1px solid #000" })}
+    {hsnBlank}
+    {mobileCell("", { border: "1px solid #000" })}
+    {mobileCell("", { border: "1px solid #000" })}
+    {mobileCell(<strong>{formatAmount(r.value)}</strong>, { border: "1px solid #000", textAlign: "right" })}
+  </tr>
+))}
 
             {/* Total Invoice Value */}
             <tr>
               {mobileCell("", { border: "1px solid #000" })}
               {mobileCell(<strong>{L.total}</strong>, { border: "1px solid #000" })}
-              {mobileCell("", { border: "1px solid #000" })}
+              {hsnBlank}
               {mobileCell("", { border: "1px solid #000" })}
               {mobileCell("", { border: "1px solid #000" })}
               {mobileCell(<strong>{formatAmount(total)}</strong>, { border: "1px solid #000", textAlign: "right" })}
@@ -480,7 +495,7 @@ export default function InvoiceDocument({ invoice, onBack, onEdit, onConvertToFi
             <tr>
               {mobileCell("", { border: "1px solid #000" })}
               {mobileCell(L.paid, { border: "1px solid #000" })}
-              {mobileCell("", { border: "1px solid #000" })}
+              {hsnBlank}
               {mobileCell("", { border: "1px solid #000" })}
               {mobileCell("", { border: "1px solid #000" })}
               {mobileCell(formatAmount(amountPaid), { border: "1px solid #000", textAlign: "right" })}
@@ -490,7 +505,7 @@ export default function InvoiceDocument({ invoice, onBack, onEdit, onConvertToFi
             <tr style={{ backgroundColor: "#ecfdf5" }}>
               {mobileCell("", { border: "1px solid #000" })}
               {mobileCell(<strong>{L.due}</strong>, { border: "1px solid #000" })}
-              {mobileCell("", { border: "1px solid #000" })}
+              {hsnBlank}
               {mobileCell("", { border: "1px solid #000" })}
               {mobileCell("", { border: "1px solid #000" })}
               {mobileCell(<strong>{formatAmount(due)}</strong>, { border: "1px solid #000", textAlign: "right", color: "#059669" })}
@@ -498,7 +513,7 @@ export default function InvoiceDocument({ invoice, onBack, onEdit, onConvertToFi
 
             {/* Amount in Words */}
             <tr>
-              <td colSpan={invoice.dueDate ? 4 : 6} style={{ border: "1px solid #000", padding: isMobile ? "3px 8px" : "4px 12px" }}>
+              <td colSpan={invoice.dueDate ? cols - 2 : cols} style={{ border: "1px solid #000", padding: isMobile ? "3px 8px" : "4px 12px" }}>
                 <div style={{ fontSize: isMobile ? "0.6rem" : "0.7rem", lineHeight: 1.3, color: "#64748b" }}>{L.inWords}</div>
                 <div style={{ fontWeight: 700, fontSize: isMobile ? "0.64rem" : "0.76rem", lineHeight: 1.3, color: "#0f172a" }}>{words}</div>
               </td>
@@ -523,7 +538,7 @@ export default function InvoiceDocument({ invoice, onBack, onEdit, onConvertToFi
                   </div>
                 )}
               </td>
-              <td colSpan={3} style={{ border: "1px solid #000", padding: isMobile ? "3px 8px" : "4px 12px", textAlign: "right", verticalAlign: "bottom" }}>
+              <td colSpan={cols - 3} style={{ border: "1px solid #000", padding: isMobile ? "3px 8px" : "4px 12px", textAlign: "right", verticalAlign: "bottom" }}>
                 <div style={{ fontSize: isMobile ? "0.64rem" : "0.76rem", lineHeight: 1.3, color: "#334155" }}>{L.forCompany(invoice.companyName)}</div>
                 <div style={{ margin: "2px 0", minHeight: 36, display: "flex", justifyContent: "flex-end" }}>
                   {invoice.signature
@@ -554,7 +569,7 @@ export default function InvoiceDocument({ invoice, onBack, onEdit, onConvertToFi
     </div>
 
     {/* E-Way Bill checklist — right side, hidden for Proforma and when printing */}
-    {!isProforma && showEwbPanel && <EwayBillChecklist invoice={invoice} />}
+    {!isProforma && !ewbNotApplicable && showEwbPanel && <EwayBillChecklist invoice={invoice} />}
     </div>
   );
 }

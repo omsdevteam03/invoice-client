@@ -480,8 +480,7 @@ export default function CustomerDetail({ customer: c, onBack, onEdit, quotations
           <div className="d-flex align-items-center gap-3 flex-wrap p-4">
             <Avatar name={c.name} size={56} />
             <div style={{ flex: 1, minWidth: 160 }}>
-              <h5 className="fw-bold mb-0" style={{ color: "#0f172a", fontSize: "1.05rem" }}>{c.name}</h5>
-              {c.company && (
+<h5 className="fw-bold mb-0" style={{ color: "#0f172a", fontSize: "1.05rem" }}>{[c.title, c.name].filter(Boolean).join(" ")}</h5>              {c.company && (
                 <div className="d-flex align-items-center gap-1" style={{ color: "#64748b", fontSize: "0.8rem" }}>
                   <FaBuilding size={10} /> {c.company}
                 </div>

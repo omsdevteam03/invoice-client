@@ -21,6 +21,7 @@ const phoneTypes = ["Mobile", "Work", "Home", "Other"];
 const emailTypes = ["Personal", "Work", "Other"];
 const addressTypes = ["Home", "Office", "Other"];
 const customerTypeOptions = ["Business", "Individual", "Government", "Other"];
+const nameTitles = ["Mr.", "Mrs.", "Ms.", "Miss", "Dr."];
 
 // Each known tag gets its own color + icon so the suggestion pills don't
 // all look like the same flat gray chip. Unknown/custom tags fall back
@@ -343,6 +344,7 @@ function CountryCodeSelect({ value, onChange, width = 104 }) {
 }
 
 const EMPTY_FORM = {
+  title: "",
   fullName: "",
   company: "",
   emails: [{ id: nextId(), type: "Personal", value: "" }],
@@ -374,6 +376,7 @@ const toPhoneRows = (list, single) => {
 function buildFormFromCustomer(c) {
   if (!c) return EMPTY_FORM;
   return {
+    title: c.title ?? "",
     fullName: c.name ?? "",
     company: c.company ?? "",
     emails: c.emails?.length
@@ -477,7 +480,7 @@ function CustomerPreview({ form, customerId }) {
   const filledNotes = form.notes.filter(n => n.text.trim());
 
   const rows = [
-    { label: "Full Name", value: form.fullName },
+    { label: "Full Name", value: [form.title, form.fullName].filter(Boolean).join(" ") },
     { label: "Company", value: form.company },
     ...(filledEmails.length
       ? filledEmails.map(e => ({ label: `Email (${e.type})`, value: e.value }))
@@ -749,6 +752,7 @@ export default function CustomerForm({ customer, allCustomers = [], onSave, onBa
     const saved = {
       id: customer?.id ?? generateId(allCustomers),
       isNew: !isEdit,
+      title: form.title,
       name: form.fullName.trim(),
       company: form.company.trim(),
       email: filledEmails[0]?.value ?? "",
@@ -906,12 +910,19 @@ export default function CustomerForm({ customer, allCustomers = [], onSave, onBa
             <SectionRow icon={<FaUser size={12} />} title="Basic Information" first>
               <div className="row g-3">
                 <div className="col-12 col-md-6">
-                  <Field label="Full Name" required>
-                    <input type="text" name="fullName" value={form.fullName} onChange={handleChange}
-                      placeholder="e.g. Arjun Mehta"
-                      style={{ ...styles.input, ...(errors.fullName ? styles.inputError : {}) }} autoComplete="off" />
-                    {errors.fullName && <div style={styles.errorMsg}>{errors.fullName}</div>}
-                  </Field>
+                <Field label="Full Name" required>
+  <div className="d-flex align-items-center gap-2">
+    <select name="title" value={form.title} onChange={handleChange}
+      style={{ ...styles.select, width: 90, flexShrink: 0 }}>
+      <option value="">Title</option>
+      {nameTitles.map(t => <option key={t} value={t}>{t}</option>)}
+    </select>
+    <input type="text" name="fullName" value={form.fullName} onChange={handleChange}
+      placeholder="e.g. Arjun Mehta"
+      style={{ ...styles.input, ...(errors.fullName ? styles.inputError : {}) }} autoComplete="off" />
+  </div>
+  {errors.fullName && <div style={styles.errorMsg}>{errors.fullName}</div>}
+</Field>
                 </div>
                 <div className="col-12 col-md-6">
                   <Field label="Company">
