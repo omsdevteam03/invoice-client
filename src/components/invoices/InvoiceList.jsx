@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext"; // adjust path
+import { invoiceTotals } from "./invoiceLang";
 import {
   FaFileInvoiceDollar,
   FaCheckCircle,
@@ -215,10 +216,7 @@ Created by {mine ? "you" : (rec.createdByName || "Unknown")}{rec.createdVia === 
 };
 
 function calcTotals(invoice) {
-  const subtotal = invoice.items.reduce((a, b) => a + b.amount, 0);
-  const gstPercent = Number(invoice.gstPercent || 18);
-  const tax = invoice.gstType === "With GST" ? Math.round(subtotal * (gstPercent / 100)) : 0;
-  const total = invoice.gstType === "With GST" ? subtotal + tax : subtotal;
+  const { total } = invoiceTotals(invoice);
   const due = invoice.status === "Paid" ? 0 : total - (invoice.amountPaid || 0);
   return { total, due };
 }

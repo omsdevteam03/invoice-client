@@ -9,7 +9,7 @@ import axiosInstance from "../api/axiosInstance";
 import { useAuth } from "../context/AuthContext";
 import { getCostItems } from "../components/quotations/quotationLayoutUtils";
 import { validateForEwayBill, GSTIN_REGEX, VEHICLE_REGEX } from "../components/invoices/EwayBillChecklist";
-import { invoiceHasGoods } from "../components/invoices/invoiceLang";
+import { invoiceHasGoods, invoiceTotals } from "../components/invoices/invoiceLang";
 
 const API = `${import.meta.env.VITE_API_URL}/invoices`;
 const SETTINGS_API = `${import.meta.env.VITE_API_URL}/settings/company`;
@@ -22,6 +22,7 @@ const PRODUCTS_API = `${import.meta.env.VITE_API_URL}/products`;
 // Reduces stock for every item that came from the Products list (has a productId).
 // Services are skipped. Call only for NEW Final invoices.
 const deductStock = async (invoice) => {
+  const note = `Sold via invoice ${invoice.invoiceNo}`;
   const needed = {};
   (invoice.items || []).forEach((it) => {
     if (it.productId) needed[it.productId] = (needed[it.productId] || 0) + (Number(it.qty) || 1);
@@ -622,6 +623,7 @@ export default function InvoicesPage() {
           rate,
           discount: Number(it.discount) || 0,
           discountType: it.discountType || "percent",
+          ...(it.gstPercent !== undefined && { gstPercent: Number(it.gstPercent) || 0 }),
           amount: Number(it.amount) || 0, // already the final amount after discount
         };
       })
@@ -694,7 +696,7 @@ export default function InvoicesPage() {
       const saved = await res.json();
       if (!isProformaRecord(updated)) {
         const oldItems = isNew || isProformaRecord(old) ? [] : old.items || [];
-        await adjustStock(oldItems, updated.items);
+        await adjustStock(oldItems, updated.items, isNew ? `Sold via invoice ${updated.invoiceNo}` : `Invoice ${updated.invoiceNo} edited`);
       }
 
       setInvoices(prev => {
@@ -719,7 +721,7 @@ export default function InvoicesPage() {
       const inv = invoices.find(i => i.id === id);
       const res = await fetch(`${API}/${id}`, { method: 'DELETE' });
       if (!res.ok) throw new Error(`Delete failed with status ${res.status}`);
-      if (inv && !isProformaRecord(inv)) await adjustStock(inv.items || [], []);
+      if (inv && !isProformaRecord(inv)) await adjustStock(inv.items || [], [], `Invoice ${inv.invoiceNo} deleted (stock returned)`);
       setInvoices(prev => prev.filter(i => i.id !== id));
     } catch (err) {
       console.error('Delete failed:', err);
@@ -729,12 +731,7 @@ export default function InvoicesPage() {
   // Totals used only for deciding whether a payment fully settles the
   // invoice, or a status change should reset amountPaid — kept local/simple
   // here; InvoiceList has its own copy for display purposes.
-  const calcInvoiceTotal = (invoice) => {
-    const subtotal = (invoice.items || []).reduce((a, b) => a + b.amount, 0);
-    const gstPercent = Number(invoice.gstPercent || 18);
-    const tax = invoice.gstType === "With GST" ? Math.round(subtotal * (gstPercent / 100)) : 0;
-    return invoice.gstType === "With GST" ? subtotal + tax : subtotal;
-  };
+  const calcInvoiceTotal = (invoice) => invoiceTotals(invoice).total;
 
   // Update just the status (from the dropdown in the table), save to DB.
   // Also resyncs amountPaid so it never contradicts the manually-chosen
@@ -995,7 +992,7 @@ export default function InvoicesPage() {
   // adjustStock([], items)  -> deduct (new invoice)
   // adjustStock(items, [])  -> give back (invoice deleted)
   // adjustStock(old, new)   -> only the difference (invoice edited)
-  const adjustStock = async (oldItems = [], newItems = []) => {
+  const adjustStock = async (oldItems = [], newItems = [], note = "Invoice stock update") => {
     const delta = {}; // positive = stock goes down, negative = stock goes up
     newItems.forEach((it) => {
       if (it.productId) delta[it.productId] = (delta[it.productId] || 0) + (Number(it.qty) || 1);
@@ -1014,7 +1011,7 @@ export default function InvoicesPage() {
         await fetch(PRODUCTS_API, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ ...p, stock_qty: next }),
+          body: JSON.stringify({ ...p, stock_qty: next, stock_note: note }),
         });
       }));
     } catch (err) {

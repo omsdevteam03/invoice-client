@@ -398,6 +398,11 @@ function ConfirmEditApprovedModal({ show, onCancel, onConfirm, accent = "#F97316
   );
 }
 
+// true when the company text is empty or just repeats the contact name
+const sameAsName = (company, name) =>
+  !String(company || "").trim() ||
+  String(company || "").trim().toLowerCase() === String(name || "").trim().toLowerCase();
+
 export default function QuotationDetail({
   quotation, companyInfo, docSettings, customers = [], products = [], isNew, editMode, isNewTemplate,
   onBack, onEdit, onSave, onSend, onCancelEdit,
@@ -405,6 +410,12 @@ export default function QuotationDetail({
   const [form, setForm] = useState(() => normalizeFormQuotation(quotation));
   const [showApprovedEditConfirm, setShowApprovedEditConfirm] = useState(false);
   const [isSending, setIsSending] = useState(false);
+  const [notice, setNotice] = useState(null); // { icon, title, message, onOk? }
+  const closeNotice = () => {
+    const cb = notice?.onOk;
+    setNotice(null);
+    if (cb) setTimeout(cb, 100); // let the modal disappear first (needed for print)
+  };
 
   const draftKeyRef = useRef(
     !isNew && quotation.id ? quotation.id : quotation._draftId || `draft_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`
@@ -552,7 +563,7 @@ export default function QuotationDetail({
     setForm((prev) => ({
       ...prev,
       customerId: cust.id,
-      company: capitalizeWords(cust.company || ""),
+      company: sameAsName(cust.company, cust.name) ? "" : capitalizeWords(cust.company),
       name: capitalizeWords(cust.name || ""),
       phone: cust.phone || "",
       email: cust.email || "",
@@ -657,14 +668,16 @@ export default function QuotationDetail({
     removeDraft(draftKeyRef.current);
 
     if (wasApproved) {
-      window.alert(
-        "Quotation updated. Since this quotation was previously approved, its status has been changed to Sent and requires approval again."
-      );
+      setNotice({
+        icon: "✅",
+        title: "Quotation updated",
+        message: "Since this quotation was previously approved, its status has been changed to Sent and requires approval again.",
+      });
     }
   };
   const handleSendClick = async () => {
     const stockMsg = stockProblem();
-    if (stockMsg) { window.alert(stockMsg); return; }
+    if (stockMsg) { setNotice({ icon: "⚠️", title: "Not enough stock", message: stockMsg }); return; }
     setIsSending(true);
     try {
       const { _draftId, _isNewQuotation, ...cleanForm } = form;
@@ -800,7 +813,7 @@ export default function QuotationDetail({
                 <>
                   <CustomerSelectField
                     customers={customers}
-                    value={form.company}
+                    value={sameAsName(form.company, form.name) ? "" : form.company}
                     onSelect={handleCustomerSelect}
                     onManualChange={handleCustomerManualChange}
                     placeholder="Select or search customer"
@@ -824,7 +837,7 @@ export default function QuotationDetail({
               ) : (
                 <>
                   {form.name && <div style={{ fontWeight: 600, color: T.navy }}>{[form.salutation, form.name].filter(Boolean).join(" ")}</div>}
-                  {form.company && <div style={{ fontWeight: 600, color: T.navy }}>{form.company}</div>}
+                  {!sameAsName(form.company, form.name) && <div style={{ fontWeight: 600, color: T.navy }}>{form.company}</div>}
                   {form.clientAddress && <div><span style={{ fontWeight: 600, color: T.navy }}>Address:</span> {form.clientAddress}</div>}
                   {form.phone && <div><span style={{ fontWeight: 600, color: T.navy }}>Mob:</span> {form.phone}</div>}
                   {form.email && <div><span style={{ fontWeight: 600, color: T.navy }}>Email:</span> {form.email}</div>}
@@ -1503,10 +1516,14 @@ export default function QuotationDetail({
             onClick={() => {
               const seenKey = "qt_print_tip_seen";
               if (!localStorage.getItem(seenKey)) {
-                window.alert(
-                  "For a clean PDF: in the print dialog, click 'More settings' and turn OFF 'Headers and footers'.\n\nThis removes the URL, date, and page numbers the browser normally adds."
-                );
                 try { localStorage.setItem(seenKey, "1"); } catch (err) { console.error("Failed to save print tip flag:", err); }
+                setNotice({
+                  icon: "🖨️",
+                  title: "For a clean PDF",
+                  message: "In the print dialog, click 'More settings' and turn OFF 'Headers and footers'.\n\nThis removes the URL, date, and page numbers the browser normally adds.",
+                  onOk: () => window.print(),
+                });
+                return;
               }
               window.print();
             }}
@@ -1618,6 +1635,8 @@ export default function QuotationDetail({
 
       {editMode && showPreview && previewPanel}
 
+      <NoticeModal notice={notice} onClose={closeNotice} accent={accent} />
+
       <ConfirmEditApprovedModal
         show={showApprovedEditConfirm}
         onCancel={() => setShowApprovedEditConfirm(false)}
@@ -1626,6 +1645,49 @@ export default function QuotationDetail({
     </div>
   );
 }
+
+function NoticeModal({ notice, onClose, accent = "#F97316" }) {
+  if (!notice) return null;
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: "fixed", top: 0, left: 0, width: "100%", height: "100%",
+        backgroundColor: "rgba(15,23,42,0.5)", zIndex: 9999,
+        display: "flex", alignItems: "center", justifyContent: "center", padding: 16,
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          backgroundColor: "#fff", borderRadius: 16, boxShadow: "0 20px 60px rgba(0,0,0,0.3)",
+          maxWidth: 420, width: "90%", padding: 32, textAlign: "center",
+        }}
+      >
+        <div style={{
+          width: 60, height: 60, borderRadius: "50%", background: `${accent}18`,
+          display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 16px",
+          fontSize: 26, color: accent,
+        }}>
+          {notice.icon || "ℹ️"}
+        </div>
+        <h5 style={{ color: "#0f172a", fontWeight: 700, marginBottom: 10 }}>{notice.title}</h5>
+        <p style={{ color: "#64748b", fontSize: 14, marginBottom: 22, whiteSpace: "pre-line" }}>{notice.message}</p>
+        <button
+          autoFocus
+          onClick={onClose}
+          style={{
+            border: "none", fontWeight: 600, padding: "10px 32px",
+            backgroundColor: accent, color: "#fff", borderRadius: 10, cursor: "pointer", fontSize: 14,
+          }}
+        >
+          OK
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function EditableSectionTable({ section, onChange, accent }) {
   const columns = section.columns && section.columns.length ? section.columns : ["Column 1", "Column 2"];
   const rows = (section.rows && section.rows.length ? section.rows : [columns.map(() => "")])

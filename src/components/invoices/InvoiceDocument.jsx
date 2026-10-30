@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { FaArrowLeft, FaPrint, FaEdit, FaFileInvoiceDollar, FaClipboardList, FaTruck, FaBan } from "react-icons/fa";
-import { INVOICE_LABELS, INVOICE_FONT, InvoiceLangToggle, useTamilDescriptions, unitLabel, numberToWordsTamil, splitGst, gstRows, invoiceHasGoods } from "./invoiceLang";
+import { INVOICE_LABELS, INVOICE_FONT, InvoiceLangToggle, useTamilDescriptions, unitLabel, numberToWordsTamil, splitGst, gstRows, gstDisplayRows, invoiceHasGoods, invoiceTotals } from "./invoiceLang";
 import EwayBillChecklist, { isEwayBillReady } from "./EwayBillChecklist";
 
 function logoStyle(shape, size) {
@@ -60,23 +60,8 @@ export default function InvoiceDocument({ invoice, onBack, onEdit, onConvertToFi
   const [showEwbPanel, setShowEwbPanel] = useState(false); // checklist hidden by default
   const L = INVOICE_LABELS[lang];
   const tDesc = useTamilDescriptions(invoice.items, lang);
-  const rawSum = invoice.items.reduce((a, b) => a + Number(b.amount), 0);
-  const gstPercent = Number(invoice.gstPercent || 18);
-  let subtotal, tax, total;
-  if (invoice.gstType === "With GST") {
-    subtotal = rawSum;
-    tax = Math.round(subtotal * (gstPercent / 100));
-    total = subtotal + tax;
-  } else if (invoice.gstType === "GST Included") {
-    total = rawSum;
-    tax = Math.round(rawSum - (rawSum / (1 + gstPercent / 100)));
-    subtotal = total - tax;
-  } else {
-    subtotal = rawSum;
-    tax = 0;
-    total = subtotal;
-  }
- const gst = splitGst(tax, gstPercent, invoice.companyGSTIN, invoice.buyerGSTIN);
+  const { subtotal, tax, total, rate: gstRate } = invoiceTotals(invoice);
+  const gst = splitGst(tax, gstRate, invoice.companyGSTIN, invoice.buyerGSTIN);
 const amountPaid = Number(invoice.amountPaid || 0);
 const due = total - amountPaid;
   const words = lang === "ta"
@@ -470,7 +455,7 @@ const due = total - amountPaid;
             </tr>
 
             {/* GST */}
-        {invoice.gstType !== "No GST" && gstRows(gst).map((r) => (
+        {invoice.gstType !== "No GST" && gstDisplayRows(gst, Boolean(invoice.ewayBillNo), L.gst).map((r) => (
   <tr key={r.label}>
     {mobileCell("", { border: "1px solid #000" })}
     {mobileCell(<strong>{`${r.label}${invoice.gstType === "GST Included" ? ` (${L.included})` : ""}`}</strong>, { border: "1px solid #000" })}

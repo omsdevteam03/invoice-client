@@ -52,27 +52,46 @@ export function getGstMode(quotation = {}) {
   return quotation.includeGst === true ? "with" : "without";
 }
 
+// GST % of one row. Rows picked from a product carry their own gstPercent
+// (0 = no GST). Custom rows have none, so they use the document's GST %.
+export function itemGstPercent(it, docPercent) {
+  const v = it?.gstPercent;
+  return v === undefined || v === null || v === "" ? docPercent : Number(v) || 0;
+}
+
 export function computeCostTotals(quotation, defaultGstPercent = 18) {
   const items = getCostItems(quotation);
   const subtotal = items.reduce((sum, it) => sum + (Number(it.amount) || 0), 0);
   const gstPercent = Number(quotation.gstPercent ?? defaultGstPercent) || 0;
   const gstMode = getGstMode(quotation);
-  const rate = gstPercent / 100;
 
-  let taxableAmount, gstAmount, total;
+  // work out GST row by row, at each row's own rate
+  let gstRaw = 0;
+  const gstRates = [];
+  items.forEach((it) => {
+    const amt = Number(it.amount) || 0;
+    const r = itemGstPercent(it, gstPercent);
+    if (gstMode === "without" || r <= 0) return;
+    if (!gstRates.includes(r)) gstRates.push(r);
+    if (gstMode === "with") gstRaw += (amt * r) / 100;
+    else gstRaw += amt - amt / (1 + r / 100); // inclusive
+  });
+  const gstAmount = Math.round(gstRaw);
+
+  let taxableAmount, total;
   if (gstMode === "with") {
-    taxableAmount = subtotal; gstAmount = Math.round(subtotal * rate); total = subtotal + gstAmount;
+    taxableAmount = subtotal; total = subtotal + gstAmount;
   } else if (gstMode === "inclusive") {
-    total = subtotal; taxableAmount = Math.round(subtotal / (1 + rate)); gstAmount = subtotal - taxableAmount;
+    total = subtotal; taxableAmount = subtotal - gstAmount;
   } else {
-    taxableAmount = subtotal; gstAmount = 0; total = subtotal;
+    taxableAmount = subtotal; total = subtotal;
   }
   const includeGst = gstMode === "with";
-  return { items, subtotal, gstPercent, gstMode, includeGst, taxableAmount, gstAmount, total };
+  return { items, subtotal, gstPercent, gstRates, gstMode, includeGst, taxableAmount, gstAmount, total };
 }
 
 export function getCostLines(quotation, defaultGstPercent = 18) {
-  const { items, gstPercent, gstMode, gstAmount, total } = computeCostTotals(quotation, defaultGstPercent);
+  const { items, gstPercent, gstRates, gstMode, gstAmount, total } = computeCostTotals(quotation, defaultGstPercent);
   if (items.length === 0) return { lines: [], rows: [], grandLine: null };
 
   const lines = items.map(it => {
@@ -88,9 +107,10 @@ export function getCostLines(quotation, defaultGstPercent = 18) {
     value: formatINR(it.amount),
   }));
 
-  if (gstMode === "with") {
-    lines.push(`GST (${gstPercent}%): ${formatINR(gstAmount)}`);
-    rows.push({ label: `GST (${gstPercent}%)`, qty: "", value: formatINR(gstAmount) });
+  if (gstMode === "with" && gstAmount > 0) {
+    const gstLabel = gstRates.length === 1 ? `GST (${gstRates[0]}%)` : "GST";
+    lines.push(`${gstLabel}: ${formatINR(gstAmount)}`);
+    rows.push({ label: gstLabel, qty: "", value: formatINR(gstAmount) });
   }
   return { lines, rows, grandLine: `Total Project Cost: ${formatINR(total)}` };
 }

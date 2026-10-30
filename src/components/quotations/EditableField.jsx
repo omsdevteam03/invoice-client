@@ -3,7 +3,7 @@ import { useState, useEffect, useRef } from "react";
 import DOMPurify from "dompurify";
 import { createPortal } from "react-dom";
 import axiosInstance from "../../api/axiosInstance";
-import { htmlToPlainText } from "./quotationLayoutUtils";
+import { htmlToPlainText, computeCostTotals } from "./quotationLayoutUtils";
 import ProductForm from "../products/ProductForm";
 
 const base = {
@@ -322,11 +322,22 @@ export function CostItemsTable({ items = [], onChange, gstMode = "with", gstPerc
       return { ...next, amount: lineAmount(next) };
     }));
 
-  const pickProduct = (id, p) =>
+  const pickProduct = (id, p) => {
     updateRow(id, {
       name: p.name, rate: Number(p.sale_rate) || 0, productId: p.id,
-      qty: 1, discount: 0, discountType: "percent",
+      qty: 1,
+      discount: Number(p.discount) || 0,
+      discountType: p.discount_type === "Amount" ? "amount" : "percent",
+      // this row's own GST: the product's rate, or 0 if the product has no GST
+      gstPercent: p.gst_type && p.gst_type !== "Without GST" ? (Number(p.gst_percent) || 0) : 0,
     });
+    // bring the product's GST into the quotation's GST Type / GST %
+    const pct = Number(p.gst_percent) || 0;
+    if (onGstChange && p.gst_type && p.gst_type !== "Without GST" && pct > 0) {
+      onGstChange("gstMode", p.gst_type === "GST Included" ? "inclusive" : "with");
+      onGstChange("gstPercent", pct);
+    }
+  };
   const removeItem = (id) => onChange(items.filter(it => it.id !== id));
 
 
@@ -382,7 +393,7 @@ export function CostItemsTable({ items = [], onChange, gstMode = "with", gstPerc
           <div>
             <label style={{ display: "block", fontSize: 10, opacity: 0.7, marginBottom: 3 }}>GST %</label>
             <select value={gstPercent ?? defaultGstPercent} onChange={(e) => onGstChange("gstPercent", Number(e.target.value))} style={{ fontSize: 12, padding: "3px 6px" }}>
-              {[0, 5, 12, 18, 28].map(v => <option key={v} value={v}>{v}%</option>)}
+              {[0, 1, 3, 5, 12, 18, 28].map(v => <option key={v} value={v}>{v}%</option>)}
             </select>
           </div>
         )}
@@ -505,18 +516,9 @@ export function CostItemsTable({ items = [], onChange, gstMode = "with", gstPerc
 
       {/* Live total — updates automatically as items/GST change, no button needed */}
       {items.length > 0 && (() => {
-        const subtotal = items.reduce((sum, it) => sum + (Number(it.amount) || 0), 0);
-        const pct = Number(gstPercent ?? defaultGstPercent) || 0;
-        const rate = pct / 100;
-
-        let taxableAmount, gstAmount, total;
-        if (gstMode === "with") {
-          taxableAmount = subtotal; gstAmount = Math.round(subtotal * rate); total = subtotal + gstAmount;
-        } else if (gstMode === "inclusive") {
-          total = subtotal; taxableAmount = Math.round(subtotal / (1 + rate)); gstAmount = subtotal - taxableAmount;
-        } else {
-          taxableAmount = subtotal; gstAmount = 0; total = subtotal;
-        }
+        const { subtotal, taxableAmount, gstAmount, total, gstRates } =
+          computeCostTotals({ costItems: items, gstMode, gstPercent }, defaultGstPercent);
+        const pct = gstRates.length === 1 ? gstRates[0] : (Number(gstPercent ?? defaultGstPercent) || 0);
 
         const fmt = (n) => `₹${Number(n).toLocaleString("en-IN")}`;
         return (
@@ -526,7 +528,7 @@ export function CostItemsTable({ items = [], onChange, gstMode = "with", gstPerc
             </div>
             {gstMode === "with" && (
               <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, padding: "3px 0" }}>
-                <span>GST ({pct}%)</span><span>{fmt(gstAmount)}</span>
+                <span>{gstRates.length > 1 ? "GST (mixed rates)" : `GST (${pct}%)`}</span><span>{fmt(gstAmount)}</span>
               </div>
             )}
             {gstMode === "inclusive" && (
@@ -749,7 +751,14 @@ function ItemNameField({ value, rowId, items = [], onTextChange, onPick }) {
                 >
                   <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
                     <span style={{ fontWeight: 600, fontSize: 13 }}>{p.name}</span>
-                    <span style={{ fontWeight: 600, fontSize: 13 }}>₹{Number(p.sale_rate || 0).toLocaleString("en-IN")}</span>
+                    <span style={{ fontWeight: 600, fontSize: 13 }}>
+                      ₹{Number(p.sale_rate || 0).toLocaleString("en-IN")}
+                      {Number(p.discount) > 0 && (
+                        <span style={{ marginLeft: 6, fontSize: 10.5, fontWeight: 700, color: "#dc2626", background: "#fef2f2", borderRadius: 999, padding: "1px 7px" }}>
+                          {p.discount_type === "Amount" ? `₹${Number(p.discount).toLocaleString("en-IN")} off` : `${p.discount}% off`}
+                        </span>
+                      )}
+                    </span>
                   </div>
                   <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 3, fontSize: 11 }}>
                     <span style={{

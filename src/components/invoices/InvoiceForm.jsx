@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { FaArrowLeft, FaSave, FaPlus, FaTrash, FaEye, FaEyeSlash, FaTimes, FaChevronDown, FaSearch } from "react-icons/fa";
-import { INVOICE_LABELS, INVOICE_FONT, InvoiceLangToggle, useTamilDescriptions, translateToTamil, unitLabel, numberToWordsTamil, splitGst, gstRows } from "./invoiceLang";
-import axiosInstance from "../../api/axiosInstance"; // same helper CompanySettings uses
+import { INVOICE_LABELS, INVOICE_FONT, InvoiceLangToggle, useTamilDescriptions, translateToTamil, unitLabel, numberToWordsTamil, splitGst, gstRows, gstDisplayRows, invoiceTotals } from "./invoiceLang";import axiosInstance from "../../api/axiosInstance"; // same helper CompanySettings uses
 import ProductForm from "../products/ProductForm";
 
 function logoStyle(shape, size) {
@@ -331,24 +330,9 @@ function InvoicePreview({ form, isMobile, onClose, showHsn = true }) {
   const previewLang = form.invoiceLang === "ta" ? "ta" : "en";
   const L = INVOICE_LABELS[previewLang];
   const tDesc = useTamilDescriptions(form.items, previewLang);
-  const rawSum = form.items.reduce((a, b) => a + Number(b.amount || 0), 0);
-  const gstPercent = Number(form.gstPercent || 18);
-  let subtotal, tax, total;
-  if (form.gstType === "With GST") {
-    subtotal = rawSum;
-    tax = Math.round(subtotal * (gstPercent / 100));
-    total = subtotal + tax;
-  } else if (form.gstType === "GST Included") {
-    total = rawSum;
-    tax = Math.round(rawSum - (rawSum / (1 + gstPercent / 100)));
-    subtotal = total - tax;
-  } else {
-    subtotal = rawSum;
-    tax = 0;
-    total = subtotal;
-  }
-  const gst = splitGst(tax, gstPercent, form.companyGSTIN, form.buyerGSTIN);
-  const gstComponentRows = form.gstType !== "No GST" ? gstRows(gst, gstPercent, form.gstType, L) : [];
+  const { subtotal, tax, total, rate: gstRate } = invoiceTotals(form);
+  const gst = splitGst(tax, gstRate, form.companyGSTIN, form.buyerGSTIN);
+  const gstComponentRows = form.gstType !== "No GST" ? gstDisplayRows(gst, Boolean(form.ewayBillNo), L.gst) : [];
 
   const amountPaid = Number(form.amountPaid || 0);
   const due = total - amountPaid;
@@ -524,7 +508,7 @@ function InvoicePreview({ form, isMobile, onClose, showHsn = true }) {
               {gstComponentRows.map((row, i) => (
                 <tr key={`gst-${i}`}>
                   {cell("")}{cell(<strong>{row.label}</strong>)}{hsnBlank}{cell("")}{cell("")}
-                  {cell(<strong>{formatAmount(row.amount)}</strong>, { textAlign: "right" })}
+                  {cell(<strong>{formatAmount(row.value)}</strong>, { textAlign: "right" })}
                 </tr>
               ))}
 
@@ -942,6 +926,11 @@ function ProductSelect({ products = [], value, onPick, style }) {
                     <span style={{ fontWeight: 700, fontSize: "0.85rem", color: "#0f172a" }}>{p.name}</span>
                     <span style={{ fontWeight: 700, fontSize: "0.85rem", color: "#0f172a", whiteSpace: "nowrap" }}>
                       ₹{rate.toLocaleString("en-IN")}
+                      {Number(p.discount) > 0 && (
+                        <span style={{ marginLeft: 6, fontSize: "0.68rem", fontWeight: 700, color: "#dc2626", background: "#fef2f2", borderRadius: 999, padding: "1px 7px" }}>
+                          {p.discount_type === "Amount" ? `₹${Number(p.discount).toLocaleString("en-IN")} off` : `${p.discount}% off`}
+                        </span>
+                      )}
                     </span>
                   </div>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 4 }}>
@@ -1182,9 +1171,17 @@ const OPTIONAL_COLS = [
 
 // Desktop items grid: Sl | Description | Qty+Unit | Rate | [HSN] | [Discount] | Amount | +/delete
 const itemGrid = (showHsn, showDiscount, customCount = 0) =>
-  ["22px", "minmax(130px,1fr)", "110px", "84px", showHsn && "96px", showDiscount && "108px", ...Array(customCount).fill("96px"), "84px", "20px"]
+  ["22px", "minmax(140px,2fr)", "112px", "minmax(64px,1fr)", showHsn && "minmax(72px,1fr)", showDiscount && "minmax(104px,1fr)", ...Array(customCount).fill("minmax(80px,1fr)"), "minmax(72px,1fr)", "20px"]
     .filter(Boolean)
     .join(" ");
+
+// narrowest width the rows can have before the table scrolls sideways
+const itemMinWidth = (showHsn, showDiscount, customCount = 0) => {
+  const cols = 6 + (showHsn ? 1 : 0) + (showDiscount ? 1 : 0) + customCount;
+  return 22 + 140 + 112 + 64 + 72 + 20
+    + (showHsn ? 72 : 0) + (showDiscount ? 104 : 0) + customCount * 80
+    + (cols - 1) * 6 + 32;
+};
 
 // "+" button that lists the columns not added yet
 function AddColumnButton({ available, onAdd, onCustom, buttonStyle, children }) {
@@ -1523,24 +1520,38 @@ useEffect(() => {
   const pickProduct = (i, productId, productObj) => {
   const items = [...form.items];
   if (!productId) {
-    items[i] = { ...items[i], productId: undefined, itemType: undefined };   // custom item
+    items[i] = { ...items[i], productId: undefined, itemType: undefined, gstPercent: undefined };   // custom item
   } else {
     const p = productObj || products.find(x => String(x.id) === String(productId));
     if (!p) return;
     const rate = Number(p.sale_rate ?? 0);
+    const discount = Number(p.discount) || 0;
+    const discountType = p.discount_type === "Amount" ? "amount" : "percent";
     items[i] = {
       ...items[i],
       productId: p.id,
       itemType: p.type === "Service" ? "Service" : "Product",
-      hsnCode: p.hsn_code || p.hsnCode || "",
+      hsnCode: p.hsn_code || p.hsnCode || p.hsn || "",
       description: p.name,
       descriptionTa: undefined,
       unit: p.unit || items[i].unit || "Nos",
       rate,
-      amount: calcAmount({ ...items[i], qty: items[i].qty || 1, rate }),
+      discount,
+      discountType,
+      // this row's own GST: the product's rate, or 0 if the product has no GST
+      gstPercent: p.gst_type && p.gst_type !== "Without GST" ? (Number(p.gst_percent) || 0) : 0,
+      amount: calcAmount({ ...items[i], qty: items[i].qty || 1, rate, discount, discountType }),
     };
   }
-  setForm(prev => ({ ...prev, items }));
+  // bring the product's GST into the invoice's GST Type / GST %
+  const picked = productId ? (productObj || products.find(x => String(x.id) === String(productId))) : null;
+  const pct = Number(picked?.gst_percent) || 0;
+  const applyGst = picked && picked.gst_type && picked.gst_type !== "Without GST" && pct > 0;
+  setForm(prev => ({
+    ...prev,
+    items,
+    ...(applyGst && { gstType: picked.gst_type, gstPercent: pct }),
+  }));
 };
   // Typing by hand: keeps the product link only while the text still equals the product name
   const typeDescription = (i, value) => {
@@ -1552,6 +1563,7 @@ useEffect(() => {
       descriptionTa: undefined,
       productId: linked && linked.name === value ? items[i].productId : undefined,
       itemType: linked && linked.name === value ? items[i].itemType : undefined,
+      gstPercent: linked && linked.name === value ? items[i].gstPercent : undefined,
     };
     setForm(prev => ({ ...prev, items }));
   };
@@ -1643,27 +1655,12 @@ useEffect(() => {
     }));
   };
 
-  const rawSum = form.items.reduce((a, b) => a + Number(b.amount), 0);
-  const gstPercent = Number(form.gstPercent || 18);
-  let subtotal, tax, total;
-  if (form.gstType === "With GST") {
-    subtotal = rawSum;
-    tax = Math.round(subtotal * (gstPercent / 100));
-    total = subtotal + tax;
-  } else if (form.gstType === "GST Included") {
-    total = rawSum;
-    tax = Math.round(rawSum - (rawSum / (1 + gstPercent / 100)));
-    subtotal = total - tax;
-  } else {
-    subtotal = rawSum;
-    tax = 0;
-    total = subtotal;
-  }
+  const { subtotal, tax, total, rate: gstRate } = invoiceTotals(form);
 const due = total - Number(form.amountPaid || 0);
 
 // GST split (CGST+SGST for intra-state, IGST for inter-state) for the Totals block
-const formGst = splitGst(tax, gstPercent, form.companyGSTIN, form.buyerGSTIN);
-const formGstRows = form.gstType !== "No GST" ? gstRows(formGst, gstPercent, form.gstType, INVOICE_LABELS[form.invoiceLang === "ta" ? "ta" : "en"]) : [];
+const formGst = splitGst(tax, gstRate, form.companyGSTIN, form.buyerGSTIN);
+const formGstRows = form.gstType !== "No GST" ? gstDisplayRows(formGst, Boolean(form.ewayBillNo)) : [];
 
 // Keep Amount Paid in sync with the chosen status (same rule as InvoicesPage)
 const handleStatusSelect = (newStatus) => {
@@ -1694,22 +1691,7 @@ const handleSave = async () => {
         return;
       }
     }
-    const rawSum = form.items.reduce((a, b) => a + Number(b.amount), 0);
-    const gstPercent = Number(form.gstPercent || 18);
-    let subtotal, tax, total;
-    if (form.gstType === "With GST") {
-      subtotal = rawSum;
-      tax = Math.round(subtotal * (gstPercent / 100));
-      total = subtotal + tax;
-    } else if (form.gstType === "GST Included") {
-      total = rawSum;
-      tax = Math.round(rawSum - (rawSum / (1 + gstPercent / 100)));
-      subtotal = total - tax;
-    } else {
-      subtotal = rawSum;
-      tax = 0;
-      total = subtotal;
-    }
+    const { total } = invoiceTotals(form);
     const amountDue = total - Number(form.amountPaid || 0);
 
 
@@ -2289,8 +2271,8 @@ stockFor={p => availableStock(p.id, i)}
                   </div>
                 ) : (
                   // ── Table layout for items on desktop ────────────────────
-                  <div className="rounded-3 overflow-hidden" style={{ border: "1px solid #e2e8f0" }}>
-                    <div className="px-3 py-2" style={{ display: "grid", gridTemplateColumns: itemGrid(showHsn, showDiscount, customCols.length), gap: 6, backgroundColor: "#0f172a", alignItems: "center" }}>
+                  <div className="rounded-3" style={{ border: "1px solid #e2e8f0", overflowX: "auto", overflowY: "hidden" }}>
+                    <div className="px-3 py-2" style={{ display: "grid", gridTemplateColumns: itemGrid(showHsn, showDiscount, customCols.length), minWidth: itemMinWidth(showHsn, showDiscount, customCols.length), gap: 6, backgroundColor: "#0f172a", alignItems: "center" }}>
                       {[
                         { label: "Sl." },
                         { label: "Description of Services" },
@@ -2332,7 +2314,7 @@ stockFor={p => availableStock(p.id, i)}
                     </div>
 
                     {form.items.map((item, i) => (
-                      <div key={i} className="px-3 py-2" style={{ display: "grid", gridTemplateColumns: itemGrid(showHsn, showDiscount, customCols.length), gap: 6, alignItems: "center", borderTop: "1px solid #f1f5f9" }}>
+                      <div key={i} className="px-3 py-2" style={{ display: "grid", gridTemplateColumns: itemGrid(showHsn, showDiscount, customCols.length), minWidth: itemMinWidth(showHsn, showDiscount, customCols.length), gap: 6, alignItems: "center", borderTop: "1px solid #f1f5f9" }}>
                         <div style={{ fontSize: "0.82rem", color: "#94a3b8" }}>{item.sl}</div>
 
                         <div>
@@ -2443,7 +2425,7 @@ stockFor={p => availableStock(p.id, i)}
                     const rows = [
                       { label: "Sub Total", value: `₹${(form.gstType === "GST Included" ? total : subtotal).toLocaleString()}` },
                       // GST — one line per component (CGST/SGST or IGST)
-                      ...formGstRows.map(r => ({ label: r.label, value: `₹${Number(r.amount || 0).toLocaleString()}` })),
+                      ...formGstRows.map(r => ({ label: r.label, value: `₹${Number(r.value || 0).toLocaleString()}` })),
                       { label: "Total Invoice Value", value: `₹${total.toLocaleString()}`, bold: true },
                       { label: "Amount Paid", value: `₹${Number(form.amountPaid || 0).toLocaleString()}` },
                     ];

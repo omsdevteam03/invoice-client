@@ -151,7 +151,7 @@ useEffect(() => {
 
   return (
     <div style={{ ...styles.page, ...(isMobile ? styles.pageMobile : {}) }}>
-      <div style={styles.headerRow}>
+      <div style={{ ...styles.headerRow, ...(isMobile ? { padding: "0 8px" } : {}) }}>
         {editingName ? (
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <input
@@ -230,7 +230,7 @@ useEffect(() => {
             />
           )
         )}
-        <div style={styles.chatArea}>
+        <div style={{ ...styles.chatArea, ...(isMobile ? styles.chatAreaMobile : {}) }}>
           <AIChatBox
             key={activeChatId || "new"}
             chatId={activeChatId}
@@ -263,6 +263,41 @@ const styles = {
     fontSize: 22,
     fontWeight: 700,
     margin: 0,
+  },
+  nameEditBtn: {
+    border: "none",
+    background: "transparent",
+    padding: 4,
+    cursor: "pointer",
+    fontSize: 16,
+    lineHeight: 1,
+    outline: "none",
+  },
+    nameInput: {
+    border: "1px solid #cbd5e1",
+    borderRadius: 8,
+    padding: "6px 10px",
+    fontSize: 16,
+    outline: "none",
+    width: 140,
+  },
+  nameSaveBtn: {
+    border: "none",
+    background: "#1f7a63",
+    color: "#fff",
+    borderRadius: 8,
+    padding: "6px 12px",
+    fontSize: 13,
+    fontWeight: 600,
+    cursor: "pointer",
+  },
+  nameLinkBtn: {
+    border: "none",
+    background: "transparent",
+    color: "#64748b",
+    fontSize: 13,
+    cursor: "pointer",
+    padding: "6px 4px",
   },
   subtitle: {
     fontSize: 14,
@@ -297,8 +332,9 @@ const styles = {
 
   // ── mobile ──
   // 150px ≈ top header + floating bottom nav. Adjust if your layout differs.
-  pageMobile: { padding: 12, gap: 10, height: "calc(100dvh - 150px)" },
-  bodyMobile: { position: "relative", minHeight: 0 },
+  pageMobile: { padding: "6px 4px", gap: 8, height: "calc(100dvh - 135px)" },
+  bodyMobile: { position: "relative", minHeight: 0, border: "none", borderRadius: 16 },
+  chatAreaMobile: { minHeight: 0 },
   chatsBtn: {
     marginLeft: "auto",
     border: "1px solid #ddd",

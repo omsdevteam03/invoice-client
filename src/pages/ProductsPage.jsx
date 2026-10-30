@@ -62,6 +62,9 @@ export default function ProductsPage() {
     }
   };
 
+  const handleStockChanged = (id, stock_qty) =>
+    setProducts(prev => prev.map(p => (p.id === id ? { ...p, stock_qty } : p)));
+
   const handleDelete = async (id) => {
     try {
       await fetch(`${API}/${id}`, { method: "DELETE" });
@@ -93,6 +96,7 @@ export default function ProductsPage() {
         onNew={handleNew}
         onEdit={handleEdit}
         onDelete={handleDelete}
+        onStockChanged={handleStockChanged}
       />
 
       {showForm && (

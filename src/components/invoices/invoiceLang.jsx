@@ -245,14 +245,56 @@ export function splitGst(tax, gstPercent, sellerGSTIN, buyerGSTIN) {
   return { interState, rate: gstPercent, cgst, sgst, igst: 0 };
 }
 
-// Rows to display (1 row for IGST, 2 rows for CGST + SGST)
+// Rows to display (1 row for IGST, 2 rows for CGST + SGST).
+// s.rate is null when rows have mixed GST rates, so no "@ %" is shown.
 export function gstRows(s) {
+  const full = s.rate == null ? "" : ` @ ${s.rate}%`;
+  const half = s.rate == null ? "" : ` @ ${s.rate / 2}%`;
   return s.interState
-    ? [{ label: `IGST @ ${s.rate}%`, value: s.igst }]
+    ? [{ label: `IGST${full}`, value: s.igst }]
     : [
-        { label: `CGST @ ${s.rate / 2}%`, value: s.cgst },
-        { label: `SGST @ ${s.rate / 2}%`, value: s.sgst },
+        { label: `CGST${half}`, value: s.cgst },
+        { label: `SGST${half}`, value: s.sgst },
       ];
+}
+// Normal invoice: ONE line "GST @ 18%".
+// After an e-way bill exists (split = true): CGST + SGST, or IGST.
+export function gstDisplayRows(s, split, label = "GST") {
+  if (split) return gstRows(s);
+  const amount = s.interState ? s.igst : Math.round((s.cgst + s.sgst) * 100) / 100;
+  const rate = s.rate == null ? "" : ` @ ${s.rate}%`;
+  return [{ label: `${label}${rate}`, value: amount }];
+}
+
+// GST % of one row. Rows picked from a product carry their own gstPercent
+// (0 = no GST). Custom rows have none, so they use the invoice's GST %.
+export function rowGstPercent(it, docPercent) {
+  const v = it?.gstPercent;
+  return v === undefined || v === null || v === "" ? docPercent : Number(v) || 0;
+}
+
+// One place for all invoice totals (GST worked out row by row)
+export function invoiceTotals(invoice) {
+  const items = invoice.items || [];
+  const docPercent = Number(invoice.gstPercent || 18);
+  const type = invoice.gstType;
+  const rawSum = items.reduce((a, b) => a + (Number(b.amount) || 0), 0);
+  const rates = [];
+  let gstRaw = 0;
+  if (type === "With GST" || type === "GST Included") {
+    items.forEach((it) => {
+      const amt = Number(it.amount) || 0;
+      const r = rowGstPercent(it, docPercent);
+      if (r <= 0) return;
+      if (!rates.includes(r)) rates.push(r);
+      gstRaw += type === "With GST" ? (amt * r) / 100 : amt - amt / (1 + r / 100);
+    });
+  }
+  const tax = Math.round(gstRaw);
+  const total = type === "With GST" ? rawSum + tax : rawSum;
+  const subtotal = type === "GST Included" ? rawSum - tax : rawSum;
+  const rate = rates.length === 1 ? rates[0] : rates.length === 0 ? docPercent : null;
+  return { rawSum, subtotal, tax, total, rate, rates };
 }
 
 // E-Way Bill is only for goods. SAC codes for services start with "99".

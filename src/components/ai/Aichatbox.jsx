@@ -695,7 +695,7 @@ function handleKeyDown(e) {
   const mSend = isMobile ? { width: 38, height: 38, marginLeft: "auto" } : {};
 
   return (
-    <div style={styles.wrapper} onPaste={handlePaste}>
+    <div style={{ ...styles.wrapper, ...(isMobile ? { borderRadius: 0 } : {}) }} onPaste={handlePaste}>
       <div
         style={{ ...styles.messages, ...(isMobile ? { padding: 10, minHeight: 0 } : {}) }}
         ref={scrollRef}
@@ -743,6 +743,7 @@ function handleKeyDown(e) {
                   style={{
                     ...styles.msg,
                     ...(isUser ? styles.msgUser : styles.msgBot),
+                    ...(isMobile ? { fontSize: 15, padding: "12px 14px" } : {}),
                     maxWidth: "100%",
                     minWidth: 0,
                     wordBreak: "break-word",
@@ -791,7 +792,7 @@ function handleKeyDown(e) {
     </button>
   </div>
 ) : (
-                <div style={styles.botFooter}>
+                <div style={{ ...styles.botFooter, ...(isMobile ? { marginLeft: 4 } : {}) }}>
                   <button style={styles.circleBtn} onClick={() => handleCopy(m)} title="Copy">
                     {copiedId === m.id ? "✓" : <CopyIcon />}
                   </button>
@@ -964,7 +965,7 @@ function handleKeyDown(e) {
             style={{
               ...styles.input,
               ...(isMobile
-                ? { order: -1, flex: "1 1 100%", minWidth: 0, padding: "7px 14px", fontSize: 13 }
+                ? { order: -1, flex: "1 1 100%", minWidth: 0, padding: "10px 14px", fontSize: 16 }
                 : {}),
             }}
             value={input}

@@ -1,13 +1,11 @@
 import { useState } from "react";
 import { FaMoneyBillWave, FaTimes, FaHistory } from "react-icons/fa";
+import { invoiceTotals } from "./invoiceLang";
 
 // Same total/due calculation used in InvoiceList — kept local here so this
 // modal doesn't depend on InvoiceList's internals.
 function calcTotals(invoice) {
-  const subtotal = (invoice.items || []).reduce((a, b) => a + b.amount, 0);
-  const gstPercent = Number(invoice.gstPercent || 18);
-  const tax = invoice.gstType === "With GST" ? Math.round(subtotal * (gstPercent / 100)) : 0;
-  const total = invoice.gstType === "With GST" ? subtotal + tax : subtotal;
+  const { total } = invoiceTotals(invoice);
   const due = invoice.status === "Paid" ? 0 : total - (invoice.amountPaid || 0);
   return { total, due };
 }
